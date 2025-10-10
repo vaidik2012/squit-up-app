@@ -47,7 +47,7 @@
     <!-- Firebase and Application Logic -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInWithCustomToken, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInWithCustomToken, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, signInWithEmailAndPassword, updateProfile, updatePassword } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, onSnapshot, collection, query, addDoc, serverTimestamp, getDoc, setDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Global Firebase instances
@@ -62,7 +62,6 @@
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         
         // --- Custom Configuration (Provided by user - CRITICAL) ---
-        // This key has been updated based on the user's latest input.
         const customFirebaseConfig = {
             apiKey: "AIzaSyB1zvVHaBrbzX5iA9fBVNGa_3sY1-WCSpY", 
             authDomain: "squit-up-auth.firebaseapp.com",
@@ -89,14 +88,11 @@
                 try {
                     return await apiCall();
                 } catch (error) {
-                    // Check if it's the specific API key error code
                     if (error.code && error.code.includes('api-key-not-valid') && i < maxRetries - 1) {
-                         // Only retry on API key error or general network issues
                         await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, i)));
-                        // Do not log retry as an error in the console
                         continue; 
                     }
-                    throw error; // Re-throw if it's the last attempt or a different error
+                    throw error; 
                 }
             }
         }
@@ -136,9 +132,9 @@
                         
                         <form id="email-password-form" class="space-y-4">
                             <input 
-                                type="email" 
+                                type="text" 
                                 id="email-input" 
-                                placeholder="Email"
+                                placeholder="Email or @user_id"
                                 required 
                                 class="w-full bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-red-500 focus:border-red-500"
                             >
@@ -177,6 +173,110 @@
         }
 
         /**
+         * Renders the Profile Setup screen for new Google users.
+         */
+        function renderProfileSetup(errorMessage = '') {
+            const user = auth.currentUser;
+            const container = document.getElementById('app-container');
+            container.innerHTML = `
+                <div class="h-full flex items-center justify-center bg-gray-900">
+                    <div class="text-center p-8 bg-gray-800 rounded-2xl shadow-2xl max-w-sm w-full border border-gray-700">
+                        <h1 class="text-2xl font-extrabold text-white mb-2">Welcome to FURY!</h1>
+                        <p class="text-gray-400 mb-8">
+                            Complete your profile to unlock manual login and set your chat identity.
+                        </p>
+                        
+                        <p class="text-sm text-gray-400 mb-4 p-2 bg-gray-700 rounded-lg">
+                            Your login email: <strong class="text-red-400">${user?.email || 'N/A'}</strong>
+                        </p>
+                        
+                        <form id="profile-setup-form" class="space-y-4">
+                            <!-- @user_id Input (Display Name) -->
+                            <input 
+                                type="text" 
+                                id="user-id-input" 
+                                placeholder="@user_id (e.g., @GamerTag)"
+                                required 
+                                pattern="^@[a-zA-Z0-9_]{3,15}$"
+                                title="Must start with @ and contain 3-15 letters, numbers, or underscores."
+                                class="w-full bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                            >
+                            <!-- Password Input -->
+                            <input 
+                                type="password" 
+                                id="new-password-input" 
+                                placeholder="Set Password (min 6 chars)"
+                                required 
+                                minlength="6"
+                                class="w-full bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                            >
+                            <button id="setup-btn" type="submit" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-xl transition duration-200 shadow-lg shadow-red-600/30">
+                                Complete Setup
+                            </button>
+                        </form>
+                        
+                        ${errorMessage ? `<p id="error-message" class="text-sm text-red-400 mt-4 font-semibold p-2 bg-gray-900 rounded-lg">${errorMessage}</p>` : ''}
+                    </div>
+                </div>
+            `;
+            // Attach event listener after rendering
+            document.getElementById('profile-setup-form').addEventListener('submit', handleProfileSetup);
+        }
+
+        /**
+         * Handles the profile setup: sets display name and password.
+         */
+        async function handleProfileSetup(e) {
+            e.preventDefault();
+            const user = auth.currentUser;
+            if (!user) {
+                renderSignIn("Session expired. Please sign in again.");
+                return;
+            }
+
+            const userIdInput = document.getElementById('user-id-input').value.trim();
+            const newPassword = document.getElementById('new-password-input').value;
+
+            if (newPassword.length < 6) {
+                return renderProfileSetup('Password must be at least 6 characters long.');
+            }
+
+            if (!userIdInput.match(/^@[a-zA-Z0-9_]{3,15}$/)) {
+                return renderProfileSetup('Invalid @user_id format. Must start with @ and contain 3-15 letters, numbers, or underscores.');
+            }
+
+            renderLoading("Setting up profile...");
+
+            try {
+                // 1. Update the user's display name in Firebase Auth
+                await updateProfile(user, { displayName: userIdInput });
+
+                // 2. Set the password for this account (allows non-Google login later)
+                await updatePassword(user, newPassword);
+
+                // 3. Update the Firestore profile to mark setup as complete and use the new display name
+                const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'user_profiles', user.uid);
+                await setDoc(userDocRef, {
+                    displayName: userIdInput,
+                    isSetupComplete: true,
+                    lastActive: serverTimestamp(),
+                }, { merge: true });
+
+                // Success: The onSnapshot listener will catch the change and render the chat UI.
+            } catch (error) {
+                console.error("Profile Setup failed:", error);
+                let message = 'Profile setup failed. Please try again.';
+                if (error.code === 'auth/weak-password') {
+                    message = 'Password is too weak. Choose a stronger one.';
+                } else if (error.code === 'auth/requires-recent-login') {
+                    // This can happen if user was logged in too long before setup
+                    message = 'Please log out and log back in before completing setup.';
+                }
+                renderProfileSetup(message);
+            }
+        }
+        
+        /**
          * Parses Firebase errors for user-friendly display.
          */
         function getAuthErrorMessage(errorCode) {
@@ -191,8 +291,10 @@
                 case 'auth/unauthorized-domain':
                     return 'Error: Unauthorized domain. Check your Firebase Auth settings.';
                 case 'auth/api-key-not-valid':
-                    // Specific message for the persistent error
-                    return 'Configuration Error: Invalid Firebase API Key. Please regenerate your API key in Google Cloud Console.';
+                    return 'Configuration Error: Invalid Firebase API Key.';
+                case 'auth/email-already-in-use':
+                    // Note: This is rare here as we use the Google email, but good for completeness
+                    return 'Email is already registered. Try logging in manually.';
                 default:
                     return `Authentication failed: ${errorCode}. Check console.`;
             }
@@ -200,20 +302,26 @@
 
         /**
          * Email/Password Sign-In handler.
+         * The user must enter the full email (which is hidden/implied during the Google flow, but is the auth key).
          */
         async function handleEmailPasswordSignIn(e) {
             e.preventDefault();
-            const email = document.getElementById('email-input').value;
+            // User input can be an email or their @user_id. We treat it as email here.
+            const input = document.getElementById('email-input').value; 
             const password = document.getElementById('password-input').value;
             
+            // NOTE: For simplicity, we assume the user must input the email here, 
+            // as Firebase Auth requires an email string for `signInWithEmailAndPassword`.
+            // In a real app, we'd look up the email based on the @user_id first.
+            const email = input.includes('@') ? input : input + '@furychat.com'; // Placeholder domain lookup
+
             if (!email || !password) {
                  return renderSignIn('Please enter both email and password.');
             }
 
-            renderLoading("Logging in with email...");
+            renderLoading("Logging in...");
 
             try {
-                // IMPORTANT: This only works if Email/Password sign-in method is enabled in your Firebase project.
                 await signInWithEmailAndPassword(auth, email, password);
                 // AuthStateChanged listener will handle the rest (rendering chat UI)
 
@@ -233,30 +341,18 @@
             
             try {
                 const provider = new GoogleAuthProvider();
-                
-                // Use exponential backoff for the sign-in popup call
                 const result = await fetchWithExponentialBackoff(async () => {
                     return await signInWithPopup(auth, provider);
                 });
 
-                // IMPORTANT FIX: Add a short delay (500ms) on successful sign-in 
                 if (result.user) {
-                    renderLoading("Login successful, loading chat...");
+                    renderLoading("Login successful, loading profile...");
                     await new Promise(resolve => setTimeout(resolve, 500)); 
                 }
             } catch (error) {
                 console.error("Google Sign-In failed:", error);
                 
                 let userFriendlyMessage = getAuthErrorMessage(error.code);
-
-                if (error.code === 'auth/unauthorized-domain') {
-                    userFriendlyMessage = 'Google Sign-In failed: Unauthorized domain. Check your Firebase Auth settings.';
-                } else if (error.message.includes('apiKey') || error.code === 'auth/api-key-not-valid') {
-                    // Use the specific, actionable message for this persistent error
-                    userFriendlyMessage = getAuthErrorMessage('auth/api-key-not-valid');
-                }
-                
-                // Re-render the sign-in screen with a specific error message
                 renderSignIn(userFriendlyMessage); 
             }
         }
@@ -268,7 +364,8 @@
             try {
                 if (userId) {
                     const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'user_profiles', userId);
-                    await setDoc(userDocRef, { onlineStatus: 'offline' }, { merge: true });
+                    // Do not wait for this update to complete to ensure fast sign-out
+                    setDoc(userDocRef, { onlineStatus: 'offline' }, { merge: true }).catch(e => console.error("Error setting offline status:", e));
                 }
                 await signOut(auth);
             } catch (error) {
@@ -277,68 +374,61 @@
         }
 
         /**
-         * Checks if the user's profile document exists (in the public collection) and creates/updates it.
-         * This function also sets up the real-time listener for the current user's profile data.
-         * @param {string} uid The current user ID.
+         * Checks if the user's profile document exists and sets up the real-time listener.
          */
         async function ensureUserProfileExistsNew(uid) {
-            // Path to the public collection where all user profiles are stored for global access/counting
             const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'user_profiles', uid);
             const user = auth.currentUser;
             
-            // Determine a display name based on provider
-            let display = user?.displayName;
-            if (!display) {
-                // For Email/Password users, use the start of the email as a placeholder display name
-                const emailPart = user?.email ? user.email.split('@')[0] : `user_${uid.substring(0, 8)}`;
-                display = emailPart;
-            }
+            const defaultDisplay = user?.email ? user.email.split('@')[0] : `user_${uid.substring(0, 8)}`;
 
             try {
                 const docSnap = await getDoc(userDocRef);
                 
                 if (!docSnap.exists()) {
-                    // Create the profile document
+                    // Create the initial profile document
                     await setDoc(userDocRef, {
                         userId: uid,
-                        displayName: display,
+                        displayName: user.displayName || defaultDisplay,
                         email: user?.email || '',
                         onlineStatus: 'online', 
+                        isSetupComplete: false, // NEW: Mark setup as incomplete
                         lastActive: serverTimestamp(),
                         createdAt: serverTimestamp(),
                     });
                 } else {
-                    // Update existing profile with online status and last active time
+                    // Update existing profile (especially the status)
                     await setDoc(userDocRef, {
                         onlineStatus: 'online',
                         lastActive: serverTimestamp(),
                     }, { merge: true });
                 }
             } catch (error) {
-                // IMPORTANT FIX: If the setDoc/getDoc fails (e.g., due to security rules), 
-                // we still want to log the error but proceed to setup the listener 
-                // so the user isn't stuck on the loading screen.
                 console.error("Error creating/updating user profile document (Public Path):", error.message);
+                // Non-fatal error, we proceed with the listener
             }
             
             // Set up listener for the current user's profile
             onSnapshot(userDocRef, (docSnap) => {
                 if (docSnap.exists()) {
                     currentUserProfile = docSnap.data();
-                    // FIX: Ensure userId is set before calling renderChatUI 
-                    // (it should be, but this makes it safer)
-                    if (userId) {
+
+                    // CRITICAL LOGIC: Check if profile setup is complete
+                    if (currentUserProfile.isSetupComplete === true) {
+                        // Profile complete, go to chat dashboard
                         renderChatUI(); 
+                    } else if (userId && auth.currentUser.providerData.some(p => p.providerId === GoogleAuthProvider.PROVIDER_ID)) {
+                        // User is logged in via Google and profile setup is incomplete -> Go to setup screen
+                        renderProfileSetup();
+                    } else {
+                        // Fallback for non-Google users that are not complete (shouldn't happen with email/password)
+                         renderChatUI(); 
                     }
                 } else if (isAuthReady) {
-                    // IMPORTANT FIX: If the profile is missing AND we are authenticated, 
-                    // we can't load the chat, so we show a clear error and suggest action.
                     console.warn("User profile missing for logged-in user. Firestore rules may prevent reading.");
-                    renderLoading("Profile loading failed (Rule Error?). Please try refreshing or signing out.");
+                    renderLoading("Profile loading failed. Please try refreshing or signing out.");
                 }
             }, (error) => {
-                // IMPORTANT FIX: Catch listener errors (often security rule violations) 
-                // and display a clear message instead of silently failing.
                 console.error("Error listening to user's public profile (Likely Rules Issue):", error.message);
                 renderLoading("FATAL: Failed to load profile data. Check Firestore Security Rules.");
             });
@@ -350,7 +440,6 @@
          * Listens to ALL user profiles (in the public collection) to get the total count and list of active users.
          */
         function startUserCountListener() {
-            // Path to the public user profiles collection
             const publicProfilesRef = collection(db, 'artifacts', appId, 'public', 'data', 'user_profiles');
             
             onSnapshot(publicProfilesRef, (snapshot) => {
@@ -358,15 +447,13 @@
                 snapshot.forEach(doc => {
                     const profile = doc.data();
                     
-                    // Filter for users explicitly marked as 'online'
                     if (profile.onlineStatus === 'online') {
                         onlineUsers.push(profile);
                     }
                 });
 
-                totalUserCount = snapshot.size; // Total documents = total registered users
+                totalUserCount = snapshot.size; 
                 
-                // Update the UI with the new count and list
                 updateSidebarUserCount(totalUserCount);
                 renderOnlineUsersList(onlineUsers);
 
@@ -377,7 +464,6 @@
         
         /**
          * Renders the total user count in the sidebar.
-         * @param {number} count - The total number of registered users.
          */
         function updateSidebarUserCount(count) {
             const countElement = document.getElementById('user-count');
@@ -388,7 +474,6 @@
         
         /**
          * Renders the list of online users in the sidebar.
-         * @param {Array<Object>} users - Array of online user profiles.
          */
         function renderOnlineUsersList(users) {
             const listContainer = document.getElementById('users-list');
@@ -425,7 +510,6 @@
         function startChatListeners() {
             if (!userId || !isAuthReady) return;
 
-            // 1. Listen for Global Chat messages
             const globalChatRef = doc(db, 'artifacts', appId, 'public', 'data', 'chats', 'global_fury_chat');
             const messagesRef = collection(globalChatRef, 'messages');
             
@@ -438,7 +522,6 @@
                     timestamp: doc.data().timestamp?.toDate() || new Date()
                 }));
 
-                // Sort in memory (newer messages at higher index)
                 msgs.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
                 renderMessages(msgs);
             }, (error) => {
@@ -448,7 +531,6 @@
         
         /**
          * Renders all messages into the chat body.
-         * @param {Array<Object>} messages - Array of message objects.
          */
         function renderMessages(messages) {
             const container = document.getElementById('messages-container');
@@ -474,7 +556,6 @@
 
             messages.forEach(message => {
                 const isCurrentUser = message.senderId === userId;
-                // Use the display name stored in the message document
                 const senderDisplay = message.displayName || message.senderId.substring(0, 8); 
 
                 const bubbleClass = isCurrentUser
@@ -517,7 +598,7 @@
                 
                 await addDoc(messagesCollectionRef, {
                     senderId: userId,
-                    displayName: currentUserProfile.displayName, // Include display name for easy message rendering
+                    displayName: currentUserProfile.displayName, 
                     text: text.trim(),
                     timestamp: serverTimestamp(),
                     type: 'text',
@@ -533,8 +614,7 @@
          * Renders the main chat UI after successful login and profile load.
          */
         function renderChatUI() {
-            // Use display name from profile if available, otherwise fallback
-            const userDisplayId = currentUserProfile?.displayName || `user_${userId.substring(0, 8)}`;
+            const userDisplayId = currentUserProfile?.displayName || `@user_${userId.substring(0, 8)}`;
             const onlineStatus = currentUserProfile?.onlineStatus || 'offline';
             const statusColor = onlineStatus === 'online' ? 'bg-green-500' : 'bg-gray-500';
 
@@ -579,7 +659,7 @@
                             <div class="flex-shrink-0 w-3 h-3 rounded-full mr-3 ${statusColor} border-2 border-gray-700"></div>
                             <div class="flex flex-col overflow-hidden">
                                 <span class="text-sm font-semibold whitespace-nowrap overflow-hidden text-ellipsis">${userDisplayId}</span>
-                                <span class="text-xs text-gray-400 capitalize">${onlineStatus} (ID: ${userId.substring(0, 8)})</span>
+                                <span class="text-xs text-gray-400 capitalize">${onlineStatus} (Email: ${auth.currentUser.email || 'N/A'})</span>
                             </div>
                         </div>
                     </div>
@@ -638,7 +718,6 @@
         function initializeAppAndAuth() {
             if (!firebaseConfig.apiKey) {
                 console.error("Firebase config is missing.");
-                // This check is now less likely to trigger but remains for safety
                 return renderLoading("Error: Firebase configuration missing.");
             }
 
@@ -656,16 +735,13 @@
 
             // Set up Authentication Listener
             onAuthStateChanged(auth, async (user) => {
-                isAuthReady = true; // Mark Auth listener as ready after the initial check completes
+                isAuthReady = true; 
 
                 if (user) {
                     userId = user.uid;
                     
-                    // 1. Ensure/update the user profile in the public collection
+                    // Proceed to check/set up user profile
                     await ensureUserProfileExistsNew(userId); 
-                    
-                    // 2. The profile listener (inside ensureUserProfileExistsNew) will call renderChatUI() 
-                    // once currentUserProfile is fetched/updated.
 
                 } else {
                     // User is null (not signed in), show the Sign-in screen.
