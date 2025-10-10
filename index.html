@@ -162,24 +162,26 @@
         import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app-check.js";
         
         // --- GLOBAL VARIABLES (Canvas Environment) ---
-        // NOTE: These variables are ONLY available when running inside the Canvas environment.
-        // If you are deploying to GitHub Pages, you MUST hardcode the Firebase Config below.
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-fury-app';
         
-        // **!!! ATTENTION !!!**
-        // For local development or GitHub Pages deployment, replace 'null' with your actual Firebase config object:
-        /*
+        // **!!! ATTENTION: HARDCODED CONFIGURATION FROM USER'S FIREBASE PROJECT !!!**
+        // This configuration is mandatory for the app to work on GitHub Pages.
         const hardcodedFirebaseConfig = {
-            apiKey: "YOUR_API_KEY_HERE", 
-            authDomain: "YOUR_PROJECT.firebaseapp.com",
-            projectId: "YOUR_PROJECT_ID",
-            storageBucket: "YOUR_PROJECT.appspot.com",
-            messagingSenderId: "...",
-            appId: "1:..."
+            apiKey: "AIzaSyCKq-A_J_1N8Y7d6GqiJMA0H2II3aIIgeOPI", 
+            authDomain: "squit-up-auth.firebaseapp.com",
+            projectId: "squit-up-auth",
+            storageBucket: "squit-up-auth.appspot.com",
+            messagingSenderId: "585918888443",
+            appId: "1:585918888443:web:c5a3b9e424cd4f163d800e",
+            // measurementId is optional and not strictly needed for auth/firestore
         };
-        const firebaseConfig = hardcodedFirebaseConfig;
-        */
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        // -------------------------------------------------------------------
+        
+        // Priority: 1. Canvas Config, 2. Hardcoded Config
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? 
+            JSON.parse(__firebase_config) : 
+            hardcodedFirebaseConfig;
+
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
         let auth;
@@ -188,6 +190,7 @@
         let userName = 'Anonymous';
         let userAvatar = 'https://placehold.co/40x40/ff5e3a/ffffff?text=U'; // Fiery default
         let isFirebaseReady = false;
+        let isUserAuthenticated = false; // Flag to track if user signed in via Google (not anonymously)
 
         // --- UI UTILITY FUNCTIONS ---
         function setView(isLoggedIn) {
@@ -274,7 +277,11 @@
          * @param {string} text - The message content.
          */
         async function sendMessage(text) {
-            if (!userId || !text.trim() || !isFirebaseReady) return;
+            // Only allow sending messages if the user is explicitly authenticated (not anonymous)
+            if (!userId || !text.trim() || !isFirebaseReady || !isUserAuthenticated) {
+                showAuthError("You must be signed in with Google to send messages. Please sign out and sign back in.");
+                return;
+            }
 
             try {
                 // Add the new message document to the 'messages' collection
@@ -290,6 +297,7 @@
                 scrollToBottom();
             } catch (error) {
                 console.error("Error writing new message to Firestore: ", error);
+                showAuthError("Failed to send message. Check Firebase Security Rules or console for details.");
             }
         }
 
@@ -341,21 +349,34 @@
                 showAuthError("Firebase not initialized. Check console for config errors.");
                 return;
             }
+            // If the user is already signed in anonymously from the initial load, we sign them out first 
+            // to ensure Google sign-in takes precedence and updates the user object.
+            if (auth.currentUser && auth.currentUser.isAnonymous) {
+                await signOut(auth);
+            }
+
             hideAuthError();
             try {
                 const provider = new GoogleAuthProvider();
-                // Ensure authDomain is set in firebaseConfig for redirect to work properly
-                // The provider will automatically use the configured authDomain
                 await signInWithPopup(auth, provider);
             } catch (error) {
                 let errorMessage = error.message;
-                if (error.code === 'auth/api-key-not-valid-please-pass-a-valid-api-key') {
-                    errorMessage = "Auth Error: The Firebase API key is invalid or missing. Please ensure you have hardcoded your config inside index.html for non-Canvas deployments.";
+                if (error.code === 'auth/api-key-not-valid') {
+                    errorMessage = "Auth Error: The Firebase API key is invalid or missing. Please ensure your config is correct.";
                 } else if (error.code === 'auth/unauthorized-domain') {
-                    errorMessage = "Auth Error: Unauthorized domain. You must add 'vaidik2012.github.io' to your Firebase project's Authorized Domains.";
+                    // This error is highly likely when deploying to GitHub Pages without configuration
+                    errorMessage = "Auth Error: Unauthorized domain. You MUST add your GitHub Pages domain (e.g., https://vaidik2012.github.io) to your Firebase project's Authorized Domains list.";
+                } else if (error.code === 'auth/popup-closed-by-user') {
+                    // Ignore if user just closes the popup
+                    return;
                 }
                 showAuthError(errorMessage);
                 console.error("Google Sign-In Error:", error.code, error.message);
+                
+                // Re-authenticate anonymously if sign-in failed and we were running externally
+                if (!initialAuthToken) {
+                     await signInAnonymously(auth).catch(e => console.error("Failed to restore anonymous session:", e));
+                }
             }
         }
 
@@ -363,6 +384,10 @@
         async function handleSignOut() {
             try {
                 await signOut(auth);
+                // After signing out, if running externally, immediately sign back in anonymously
+                if (!initialAuthToken) {
+                    await signInAnonymously(auth);
+                }
             } catch (error) {
                 console.error("Sign Out Error:", error);
             }
@@ -370,16 +395,15 @@
 
         // Main Initialization Logic
         window.onload = async () => {
-            // Check for Firebase Config
-            if (!firebaseConfig || !firebaseConfig.apiKey) {
-                const message = "Firebase API Key is missing. If running on GitHub Pages, you MUST hardcode the Firebase config into the script block. See the ATTENTION comment in the code.";
+            // Check if we are using the placeholder config (although I replaced it, this check remains)
+            if (firebaseConfig.apiKey === "YOUR_API_KEY_HERE") {
+                const message = "Firebase API Key is using a placeholder. The sign-in button will NOT work until you replace it with your real Firebase Configuration.";
                 showAuthError(message);
-                // Disable sign-in button if config is missing
                 document.getElementById('google-signin-btn').disabled = true;
                 document.getElementById('google-signin-btn').classList.add('opacity-50', 'cursor-not-allowed');
                 return;
             }
-            
+
             hideAuthError();
             isFirebaseReady = true;
 
@@ -391,32 +415,31 @@
             auth = getAuth(app);
             db = getFirestore(app);
 
-            // 2. Initial Authentication (Canvas Specific for initial load)
+            // 2. Initial Authentication (Handle both Canvas and External Deploy)
             try {
                 if (initialAuthToken) {
                     await signInWithCustomToken(auth, initialAuthToken);
                     console.log("Signed in with custom token (Canvas).");
                 } else {
-                    // Fallback to anonymous sign-in if no custom token is provided (standard for external deploy)
+                    // This signs in anonymous users when running externally, allowing read access
                     await signInAnonymously(auth);
                     console.log("Signed in anonymously (External Deploy).");
                 }
             } catch (error) {
                 console.error("Initial Authentication Error:", error);
-                const errorMessage = error.message.includes('auth/api-key-not-valid')
-                    ? "Initial Auth Error: Invalid API Key. Please provide the correct Firebase config."
-                    : `Initial Auth Failed: ${error.message}`;
+                const errorMessage = `Initial Auth Failed: ${error.message}`;
                 showAuthError(errorMessage);
             }
             
             // 3. Set up Auth Listener
             onAuthStateChanged(auth, (user) => {
                 if (user) {
+                    // Check if the user is authenticated via a provider (like Google) or is anonymous
+                    isUserAuthenticated = !user.isAnonymous;
+                    
                     // Update global user variables
                     userId = user.uid;
-                    // Use a default name if displayName or email is not available (e.g., for anonymous users)
                     userName = user.displayName || user.email || 'FURY User';
-                    // If the user has a long email/ID, truncate the displayed name for better UI
                     const displayUserName = userName.split('@')[0];
 
                     userAvatar = user.photoURL || `https://placehold.co/40x40/ff5e3a/ffffff?text=${displayUserName.charAt(0)}`;
@@ -433,6 +456,7 @@
                 } else {
                     // Clear user variables and hide chat
                     userId = null;
+                    isUserAuthenticated = false;
                     setView(false);
                     hideAuthError();
                 }
@@ -453,4 +477,3 @@
     </script>
 
 </body>
-</html>
