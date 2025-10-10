@@ -62,15 +62,14 @@
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         
         // --- Custom Configuration (Provided by user - CRITICAL) ---
-        // This configuration is based on the screenshot you provided. 
-        // ENSURE these values match your live Firebase Console settings EXACTLY.
+        // This configuration has been updated using the details from your Firebase project's setup guide.
         const customFirebaseConfig = {
-            apiKey: "AIzaSyCkp-J_21Nb7dqs33iMA90Zl13elfGesCPI", // VERIFY THIS API KEY
+            apiKey: "AIzaSyCkp-J_21Nb7dqs33iMA90Zl13elfGesCPI", 
             authDomain: "squit-up-auth.firebaseapp.com",
             projectId: "squit-up-auth",
             storageBucket: "squit-up-auth.firebasestorage.app",
-            messagingSenderId: "503910898443",
-            appId: "1:503910898443:web:c5a56eb24cd4f183d8600e",
+            messagingSenderId: "586918898443",
+            appId: "1:586918898443:web:c5a56eb24cd4f183d8600e",
             measurementId: "G-K4LHFHSNJC"
         };
         // -------------------------------------------------------------------------------
@@ -171,10 +170,10 @@
                     return 'Sign-in window was closed. Please try again.';
                 case 'auth/unauthorized-domain':
                     return 'Error: Unauthorized domain. Check your Firebase Auth settings.';
-                case 'auth/network-request-failed':
-                    return 'Network error. Check your connection or VPN.';
+                case 'auth/api-key-not-valid':
+                    return 'Configuration Error: Invalid Firebase API Key. Please check your customFirebaseConfig.';
                 default:
-                    return `Authentication failed: ${errorCode}. Check console for details.`;
+                    return `Authentication failed: ${errorCode}. Check console.`;
             }
         }
 
@@ -193,11 +192,13 @@
             renderLoading("Logging in with email...");
 
             try {
+                // IMPORTANT: This only works if Email/Password sign-in method is enabled in your Firebase project.
                 await signInWithEmailAndPassword(auth, email, password);
                 // AuthStateChanged listener will handle the rest (rendering chat UI)
 
             } catch (error) {
                 console.error("Email/Password Sign-In failed:", error);
+                
                 const userFriendlyMessage = getAuthErrorMessage(error.code);
                 renderSignIn(userFriendlyMessage); 
             }
@@ -210,12 +211,11 @@
             renderLoading("Opening Google Sign-In...");
             try {
                 const provider = new GoogleAuthProvider();
-                
-                // Using signInWithPopup is generally preferred for web apps, 
-                // but if the domain is not authorized, it will fail instantly.
                 const result = await signInWithPopup(auth, provider);
                 
-                // Add a short delay (500ms) on successful sign-in 
+                // IMPORTANT FIX: Add a short delay (500ms) on successful sign-in 
+                // to prevent a race condition where the pop-up closes too fast 
+                // for the main window's onAuthStateChanged listener to update.
                 if (result.user) {
                     renderLoading("Login successful, loading chat...");
                     await new Promise(resolve => setTimeout(resolve, 500)); 
@@ -225,11 +225,10 @@
                 
                 let userFriendlyMessage = getAuthErrorMessage(error.code);
 
-                // Handle the specific unauthorized domain error clearly
                 if (error.code === 'auth/unauthorized-domain') {
-                    userFriendlyMessage = 'Google Sign-In failed: **Unauthorized domain.** Please ensure your hosted domain (e.g., vaidik2012.github.io) is listed in Firebase Authentication settings.';
-                } else if (error.message && error.message.includes('apiKey')) {
-                    userFriendlyMessage = 'Configuration Error: Invalid or missing API Key. Please verify your customFirebaseConfig.';
+                    userFriendlyMessage = 'Google Sign-In failed: Unauthorized domain. Check your Firebase Auth settings.';
+                } else if (error.message.includes('apiKey') || error.code === 'auth/api-key-not-valid') {
+                    userFriendlyMessage = 'Configuration Error: Invalid API Key. Please verify your customFirebaseConfig.';
                 }
                 
                 // Re-render the sign-in screen with a specific error message
@@ -244,14 +243,11 @@
             try {
                 if (userId) {
                     const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'user_profiles', userId);
-                    // Use setDoc with merge to only update the onlineStatus
                     await setDoc(userDocRef, { onlineStatus: 'offline' }, { merge: true });
                 }
                 await signOut(auth);
             } catch (error) {
                 console.error("Error during sign out:", error);
-                // Even if sign out fails, we attempt to clear the UI
-                renderSignIn("Sign out error. Please try clearing your browser cache.");
             }
         }
 
@@ -261,36 +257,20 @@
          * @param {string} uid The current user ID.
          */
         async function ensureUserProfileExistsNew(uid) {
+            // Path to the public collection where all user profiles are stored for global access/counting
             const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'user_profiles', uid);
-            const user = auth.currentUser;
-
-            // Determine a display name based on provider
-            let display = user?.displayName;
-            if (!display) {
-                // For Email/Password or non-display name users
-                const emailPart = user?.email ? user.email.split('@')[0] : `user_${uid.substring(0, 8)}`;
-                display = emailPart;
-            }
-            
-            // Set up listener first so we catch immediate changes
-            onSnapshot(userDocRef, (docSnap) => {
-                if (docSnap.exists()) {
-                    currentUserProfile = docSnap.data();
-                    renderChatUI(); // Re-render to update the user info bar and load chat
-                } else if (isAuthReady) {
-                    // This case means the user signed in, but profile creation might be slow or failed.
-                    // We wait for the profile update below.
-                    console.warn("User profile not yet created, waiting...");
-                }
-            }, (error) => {
-                console.error("Error listening to user's public profile:", error.message);
-                renderLoading("Error loading profile. Check Firestore security rules or network.");
-            });
-
-            // Now, ensure the document is created/updated (Non-blocking update attempt)
             try {
                 const docSnap = await getDoc(userDocRef);
+                const user = auth.currentUser;
                 
+                // Determine a display name based on provider
+                let display = user?.displayName;
+                if (!display) {
+                    // For Email/Password users, use the start of the email as a placeholder display name
+                    const emailPart = user?.email ? user.email.split('@')[0] : `user_${uid.substring(0, 8)}`;
+                    display = emailPart;
+                }
+
                 if (!docSnap.exists()) {
                     // Create the profile document
                     await setDoc(userDocRef, {
@@ -306,14 +286,25 @@
                     await setDoc(userDocRef, {
                         onlineStatus: 'online',
                         lastActive: serverTimestamp(),
-                        // Only update displayName if it was null before and is now available (e.g., after Google sign-in)
-                        displayName: docSnap.data().displayName || display, 
                     }, { merge: true });
                 }
             } catch (error) {
                 console.error("Error ensuring user profile document (Public Path):", error.message);
-                // Don't halt the app, let the onSnapshot handle continuous updates
             }
+            
+            // Set up listener for the current user's profile
+            onSnapshot(userDocRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    currentUserProfile = docSnap.data();
+                    renderChatUI(); // Re-render to update the user info bar and load chat
+                } else if (isAuthReady) {
+                    console.warn("User profile missing for logged-in user.");
+                    renderLoading("Profile data missing. Please sign out and sign in again.");
+                }
+            }, (error) => {
+                console.error("Error listening to user's public profile:", error.message);
+                renderLoading("Error loading profile. Check permissions.");
+            });
         }
 
         // --- USER COUNTING LOGIC ---
@@ -382,7 +373,7 @@
                 listItem.className = "flex items-center p-2 rounded-lg hover:bg-gray-700 transition duration-150 cursor-pointer";
                 listItem.innerHTML = `
                     <div class="flex-shrink-0 w-2 h-2 rounded-full mr-2 ${statusColor}"></div>
-                    <span class="text-sm text-gray-300 font-medium whitespace-nowrap overflow-hidden text-ellipsis">${user.displayName}</span>
+                    <span class="text-sm text-gray-300 font-medium">${user.displayName}</span>
                 `;
                 listContainer.appendChild(listItem);
             });
@@ -401,7 +392,6 @@
             const globalChatRef = doc(db, 'artifacts', appId, 'public', 'data', 'chats', 'global_fury_chat');
             const messagesRef = collection(globalChatRef, 'messages');
             
-            // Note: Since Firestore queries need indexes, we are reading all data and sorting locally.
             const q = query(messagesRef);
 
             onSnapshot(q, (snapshot) => {
@@ -427,8 +417,6 @@
             const container = document.getElementById('messages-container');
             if (!container) return;
             
-            const shouldScroll = container.scrollHeight - container.clientHeight <= container.scrollTop + 50;
-
             container.innerHTML = ''; 
             
             if (messages.length === 0) {
@@ -438,7 +426,7 @@
                     </div>
                 `;
                 container.style.display = 'flex';
-                container.style.flexDirection = 'column';
+                container.style.flexDirection = 'column-reverse';
                 container.style.justifyContent = 'center';
                 return;
             } else {
@@ -453,7 +441,7 @@
                 const senderDisplay = message.displayName || message.senderId.substring(0, 8); 
 
                 const bubbleClass = isCurrentUser
-                    ? 'bg-indigo-600 text-white self-end rounded-bl-xl rounded-t-xl'
+                    ? 'bg-indigo-500 text-white self-end rounded-bl-xl rounded-t-xl'
                     : 'bg-gray-700 text-gray-200 self-start rounded-br-xl rounded-t-xl';
                 
                 const timestampDisplay = message.timestamp instanceof Date 
@@ -466,7 +454,7 @@
                     <div class="text-xs text-gray-400 mb-1 px-3">
                         ${isCurrentUser ? 'You' : senderDisplay}
                     </div>
-                    <div class="p-3 shadow-md ${bubbleClass} break-words">
+                    <div class="p-3 shadow-md ${bubbleClass}">
                         ${message.text}
                         <span class="ml-4 text-xs opacity-70 block text-right mt-1">${timestampDisplay}</span>
                     </div>
@@ -476,10 +464,8 @@
             
             container.appendChild(fragment);
 
-            // Auto-scroll to the bottom only if the user was already near the bottom
-            if (shouldScroll) {
-                container.scrollTop = container.scrollHeight;
-            }
+            // Auto-scroll to the bottom
+            container.scrollTop = container.scrollHeight;
         }
 
         /**
@@ -510,14 +496,9 @@
          * Renders the main chat UI after successful login and profile load.
          */
         function renderChatUI() {
-            // Check if profile is loaded before rendering the chat UI
-            if (!currentUserProfile) {
-                return renderLoading("Profile data is still loading...");
-            }
-
             // Use display name from profile if available, otherwise fallback
-            const userDisplayId = currentUserProfile.displayName || `user_${userId.substring(0, 8)}`;
-            const onlineStatus = currentUserProfile.onlineStatus || 'offline';
+            const userDisplayId = currentUserProfile?.displayName || `user_${userId.substring(0, 8)}`;
+            const onlineStatus = currentUserProfile?.onlineStatus || 'offline';
             const statusColor = onlineStatus === 'online' ? 'bg-green-500' : 'bg-gray-500';
 
             const container = document.getElementById('app-container');
@@ -540,7 +521,7 @@
                                 <h2 class="text-xs font-semibold uppercase text-gray-400 mb-2">Global Channels</h2>
                                 <ul class="space-y-1">
                                     <li>
-                                        <button class="w-full text-left p-2 rounded-lg transition duration-150 bg-indigo-600 text-white shadow-md">
+                                        <button class="w-full text-left p-2 rounded-lg transition duration-150 bg-indigo-600 text-white">
                                             #global-fury-chat
                                         </button>
                                     </li>
@@ -549,3 +530,129 @@
 
                             <!-- User Count and List -->
                             <div class="flex-grow flex flex-col overflow-hidden">
+                                <h2 id="user-count" class="text-xs font-semibold uppercase text-gray-400 mb-2">Registered Users (0)</h2>
+                                <ul id="users-list" class="space-y-1 overflow-y-auto">
+                                    <!-- Online users will be rendered here -->
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- User Info Bar -->
+                        <div class="p-4 bg-gray-700 border-t border-gray-700 flex items-center">
+                            <div class="flex-shrink-0 w-3 h-3 rounded-full mr-3 ${statusColor} border-2 border-gray-700"></div>
+                            <div class="flex flex-col overflow-hidden">
+                                <span class="text-sm font-semibold whitespace-nowrap overflow-hidden text-ellipsis">${userDisplayId}</span>
+                                <span class="text-xs text-gray-400 capitalize">${onlineStatus} (ID: ${userId.substring(0, 8)})</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Chat Area (Right) -->
+                    <div class="flex-grow flex flex-col">
+                        <!-- Header -->
+                        <header class="p-4 border-b border-gray-700 bg-gray-800 flex items-center">
+                            <h2 class="text-xl font-bold"># global-fury-chat</h2>
+                        </header>
+
+                        <!-- Messages Body -->
+                        <div id="messages-container" class="flex-grow p-4 overflow-y-auto" style="display: block;">
+                            <!-- Messages will be rendered here by renderMessages -->
+                        </div>
+
+                        <!-- Input Area -->
+                        <form id="chat-form" class="p-4 border-t border-gray-700 bg-gray-800">
+                            <div class="flex items-center space-x-3">
+                                <input
+                                    type="text"
+                                    id="message-input"
+                                    placeholder="Message #global-fury-chat"
+                                    class="flex-grow bg-gray-700 text-white p-3 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none transition duration-150"
+                                >
+                                <button
+                                    type="submit"
+                                    class="bg-indigo-600 hover:bg-indigo-700 text-white p-3 rounded-xl transition duration-150 shadow-lg disabled:opacity-50"
+                                >
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+            
+            // Setup Event Listeners
+            document.getElementById('signout-btn').addEventListener('click', handleSignOut);
+            document.getElementById('chat-form').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const input = document.getElementById('message-input');
+                sendMessage(input.value);
+            });
+
+            // Start all listeners
+            startChatListeners();
+            startUserCountListener();
+        }
+        
+        // --- Initialization ---
+
+        /**
+         * Initializes Firebase and sets up the main authentication listener.
+         */
+        function initializeAppAndAuth() {
+            if (!firebaseConfig.apiKey) {
+                console.error("Firebase config is missing.");
+                return renderLoading("Error: Firebase configuration missing.");
+            }
+
+            try {
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                setLogLevel('debug'); 
+            } catch (e) {
+                console.error("Failed to initialize Firebase:", e);
+                return renderLoading("Error initializing Firebase. Check your configuration values.");
+            }
+
+            renderLoading("Authenticating...");
+
+            // Set up Authentication Listener
+            onAuthStateChanged(auth, async (user) => {
+                isAuthReady = true; // Mark Auth listener as ready after the initial check completes
+
+                if (user) {
+                    userId = user.uid;
+                    
+                    // 1. Ensure/update the user profile in the public collection
+                    await ensureUserProfileExistsNew(userId); 
+                    
+                    // 2. The profile listener (inside ensureUserProfileExistsNew) will call renderChatUI() 
+                    // once currentUserProfile is fetched/updated.
+
+                } else {
+                    // User is null (not signed in), show the Sign-in screen.
+                    userId = null;
+                    currentUserProfile = null;
+                    renderSignIn();
+                }
+            });
+
+            // If a custom token exists from the environment, try to use it first
+            async function initialSignIn() {
+                 if (initialAuthToken) {
+                     try {
+                         await signInWithCustomToken(auth, initialAuthToken);
+                     } catch (e) {
+                         console.error("Custom token sign-in failed. User must sign in manually.", e);
+                     }
+                 }
+            }
+
+            initialSignIn();
+        }
+
+        // Start the whole application on window load
+        window.onload = initializeAppAndAuth;
+    </script>
+</body>
+</html>
