@@ -626,6 +626,15 @@
             // Google signup
             googleSignupBtn.addEventListener('click', async () => {
                 try {
+                    // Configure Google provider with additional settings
+                    window.googleProvider.setCustomParameters({
+                        prompt: 'select_account'
+                    });
+                    
+                    // Add scopes
+                    window.googleProvider.addScope('profile');
+                    window.googleProvider.addScope('email');
+                    
                     const result = await window.signInWithPopup(window.firebaseAuth, window.googleProvider);
                     const user = result.user;
                     
@@ -651,7 +660,22 @@
                     }
                 } catch (error) {
                     console.error('Google sign-in error:', error);
-                    alert('Failed to sign in with Google. Please try again.');
+                    console.error('Error code:', error.code);
+                    console.error('Error message:', error.message);
+                    
+                    let errorMessage = 'Failed to sign in with Google. Please try again.';
+                    
+                    if (error.code === 'auth/popup-blocked') {
+                        errorMessage = 'Popup was blocked by your browser. Please allow popups for this site and try again.';
+                    } else if (error.code === 'auth/popup-closed-by-user') {
+                        errorMessage = 'Sign-in was cancelled. Please try again.';
+                    } else if (error.code === 'auth/network-request-failed') {
+                        errorMessage = 'Network error. Please check your internet connection and try again.';
+                    } else if (error.code === 'auth/unauthorized-domain') {
+                        errorMessage = 'This domain is not authorized for Google sign-in. Please contact support.';
+                    }
+                    
+                    alert(errorMessage);
                 }
             });
 
@@ -1551,5 +1575,5 @@
             }
         });
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'98c69dfd674033a2',t:'MTc2MDEwNDU0NS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'98c6a44f94af2e8f',t:'MTc2MDEwNDgwNC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
