@@ -62,7 +62,8 @@
         // --- GLOBAL VARIABLES SETUP ---
         const APP_ID_FALLBACK = 'default-app-id'; 
         const FIREBASE_CONFIG_PLACEHOLDER = {
-            apiKey: "AIzaSyC0-YOUR_API_KEY", // <--- REPLACE THIS WITH YOUR REAL API KEY
+            // !! IMPORTANT: REPLACE THESE WITH YOUR ACTUAL FIREBASE CONFIG KEYS !!
+            apiKey: "AIzaSyC0-YOUR_API_KEY", 
             authDomain: "squit-up-auth.firebaseapp.com",
             projectId: "squit-up-auth",
             storageBucket: "squit-up-auth.appspot.com",
@@ -132,7 +133,8 @@
             } catch (error) {
                 console.error("Firebase initialization failed:", error);
                 if (error.code === 'auth/unauthorized-domain') {
-                    renderAuthScreen(`Sign-In domain is not authorized. Check your Firebase settings: ${error.message}`);
+                    // This error should now be fixed since the user updated the domain!
+                    renderAuthScreen(`Sign-In domain is not authorized. Please double-check your Firebase settings. ${error.message}`);
                 } else {
                     renderAuthScreen(`Initialization Error: ${error.message}`);
                 }
@@ -567,7 +569,7 @@
         function renderChatList() {
             let friendListHtml = '';
             if (friendsList.length === 0) {
-                friendListHtml = `<p class="text-xs text-gray-500 italic">No friends yet. Send a request!</p>`;
+                friendListHtml = `<p class="text-xs text-gray-500 italic px-4">No friends yet. Send a request!</p>`;
             } else {
                 friendListHtml = friendsList.map(friendId => {
                     const displayId = friendId.substring(0, 8) + '...';
