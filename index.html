@@ -262,15 +262,18 @@
                     lastActive: serverTimestamp(),
                 }, { merge: true });
 
-                // Success: The onSnapshot listener will catch the change and render the chat UI.
+                // Success: Manually update profile state and render chat UI to ensure immediate transition
+                currentUserProfile = { ...currentUserProfile, displayName: userIdInput, isSetupComplete: true };
+                renderChatUI(); 
             } catch (error) {
                 console.error("Profile Setup failed:", error);
                 let message = 'Profile setup failed. Please try again.';
                 if (error.code === 'auth/weak-password') {
                     message = 'Password is too weak. Choose a stronger one.';
                 } else if (error.code === 'auth/requires-recent-login') {
-                    // This can happen if user was logged in too long before setup
                     message = 'Please log out and log back in before completing setup.';
+                } else if (error.code === 'auth/credential-too-old') {
+                    message = 'Please log out and log back in before completing setup (credential too old).';
                 }
                 renderProfileSetup(message);
             }
@@ -289,11 +292,10 @@
                 case 'auth/popup-closed-by-user':
                     return 'Sign-in window was closed. Please try again.';
                 case 'auth/unauthorized-domain':
-                    return 'Error: Unauthorized domain. Check your Firebase Auth settings.';
+                    return 'Error: Unauthorized domain. Check your Firebase settings.';
                 case 'auth/api-key-not-valid':
                     return 'Configuration Error: Invalid Firebase API Key.';
                 case 'auth/email-already-in-use':
-                    // Note: This is rare here as we use the Google email, but good for completeness
                     return 'Email is already registered. Try logging in manually.';
                 default:
                     return `Authentication failed: ${errorCode}. Check console.`;
@@ -302,18 +304,14 @@
 
         /**
          * Email/Password Sign-In handler.
-         * The user must enter the full email (which is hidden/implied during the Google flow, but is the auth key).
          */
         async function handleEmailPasswordSignIn(e) {
             e.preventDefault();
-            // User input can be an email or their @user_id. We treat it as email here.
             const input = document.getElementById('email-input').value; 
             const password = document.getElementById('password-input').value;
             
-            // NOTE: For simplicity, we assume the user must input the email here, 
-            // as Firebase Auth requires an email string for `signInWithEmailAndPassword`.
-            // In a real app, we'd look up the email based on the @user_id first.
-            const email = input.includes('@') ? input : input + '@furychat.com'; // Placeholder domain lookup
+            // Simplified logic: Assume input is email if it contains '@', otherwise append a placeholder domain.
+            const email = input.includes('@') ? input : input + '@furychat.com'; 
 
             if (!email || !password) {
                  return renderSignIn('Please enter both email and password.');
@@ -341,14 +339,10 @@
             
             try {
                 const provider = new GoogleAuthProvider();
-                const result = await fetchWithExponentialBackoff(async () => {
+                await fetchWithExponentialBackoff(async () => {
                     return await signInWithPopup(auth, provider);
                 });
-
-                if (result.user) {
-                    renderLoading("Login successful, loading profile...");
-                    await new Promise(resolve => setTimeout(resolve, 500)); 
-                }
+                // AuthStateChanged listener will be triggered upon success
             } catch (error) {
                 console.error("Google Sign-In failed:", error);
                 
@@ -374,30 +368,36 @@
         }
 
         /**
-         * Checks if the user's profile document exists and sets up the real-time listener.
+         * CRITICAL: Ensures the profile exists and determines whether to render Setup or Chat UI immediately.
          */
-        async function ensureUserProfileExistsNew(uid) {
+        async function initializeUserProfileAndRenderUI(uid) {
+            renderLoading("Loading profile data...");
             const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'user_profiles', uid);
             const user = auth.currentUser;
-            
             const defaultDisplay = user?.email ? user.email.split('@')[0] : `user_${uid.substring(0, 8)}`;
+            let isSetupComplete = false;
 
             try {
                 const docSnap = await getDoc(userDocRef);
                 
                 if (!docSnap.exists()) {
-                    // Create the initial profile document
+                    // Profile does not exist, create it with setup incomplete
                     await setDoc(userDocRef, {
                         userId: uid,
                         displayName: user.displayName || defaultDisplay,
                         email: user?.email || '',
                         onlineStatus: 'online', 
-                        isSetupComplete: false, // NEW: Mark setup as incomplete
+                        isSetupComplete: false, 
                         lastActive: serverTimestamp(),
                         createdAt: serverTimestamp(),
                     });
+                    currentUserProfile = { displayName: user.displayName || defaultDisplay, isSetupComplete: false, onlineStatus: 'online' };
+
                 } else {
-                    // Update existing profile (especially the status)
+                    // Profile exists, update status and check setup state
+                    currentUserProfile = docSnap.data();
+                    isSetupComplete = currentUserProfile.isSetupComplete === true;
+                    
                     await setDoc(userDocRef, {
                         onlineStatus: 'online',
                         lastActive: serverTimestamp(),
@@ -405,34 +405,37 @@
                 }
             } catch (error) {
                 console.error("Error creating/updating user profile document (Public Path):", error.message);
-                // Non-fatal error, we proceed with the listener
+                // Set to incomplete as a fallback if Firestore operation fails
+                currentUserProfile = currentUserProfile || { displayName: defaultDisplay, isSetupComplete: false, onlineStatus: 'online' };
             }
             
-            // Set up listener for the current user's profile
+            // --- IMMEDIATE RENDERING LOGIC (The Fix) ---
+            if (currentUserProfile.isSetupComplete === true) {
+                renderChatUI(); 
+            } else if (user && user.providerData.some(p => p.providerId === GoogleAuthProvider.PROVIDER_ID)) {
+                // Only prompt setup for Google users who are incomplete
+                renderProfileSetup();
+            } else {
+                // If the user signed in with email/password (and somehow profile is incomplete), go straight to chat.
+                // NOTE: Real-world app would enforce completeness, but for robustness here, we render chat.
+                 renderChatUI(); 
+            }
+            
+            // Start the real-time listener for subsequent updates (e.g., status changes by other users)
             onSnapshot(userDocRef, (docSnap) => {
                 if (docSnap.exists()) {
                     currentUserProfile = docSnap.data();
-
-                    // CRITICAL LOGIC: Check if profile setup is complete
-                    if (currentUserProfile.isSetupComplete === true) {
-                        // Profile complete, go to chat dashboard
-                        renderChatUI(); 
-                    } else if (userId && auth.currentUser.providerData.some(p => p.providerId === GoogleAuthProvider.PROVIDER_ID)) {
-                        // User is logged in via Google and profile setup is incomplete -> Go to setup screen
-                        renderProfileSetup();
-                    } else {
-                        // Fallback for non-Google users that are not complete (shouldn't happen with email/password)
-                         renderChatUI(); 
+                    // We only re-render the chat if the profile became complete OR if status changed
+                    if (document.getElementById('messages-container')) {
+                         // Only update UI elements if we are already in the chat view
+                         updateSidebarUserCount(totalUserCount);
                     }
-                } else if (isAuthReady) {
-                    console.warn("User profile missing for logged-in user. Firestore rules may prevent reading.");
-                    renderLoading("Profile loading failed. Please try refreshing or signing out.");
                 }
             }, (error) => {
-                console.error("Error listening to user's public profile (Likely Rules Issue):", error.message);
-                renderLoading("FATAL: Failed to load profile data. Check Firestore Security Rules.");
+                console.error("Error listening to user's public profile:", error.message);
             });
         }
+
 
         // --- USER COUNTING LOGIC ---
 
@@ -440,6 +443,7 @@
          * Listens to ALL user profiles (in the public collection) to get the total count and list of active users.
          */
         function startUserCountListener() {
+            if (!db) return; // Ensure DB is initialized
             const publicProfilesRef = collection(db, 'artifacts', appId, 'public', 'data', 'user_profiles');
             
             onSnapshot(publicProfilesRef, (snapshot) => {
@@ -508,7 +512,7 @@
          * Listens to the global chat for messages and updates the UI.
          */
         function startChatListeners() {
-            if (!userId || !isAuthReady) return;
+            if (!userId || !isAuthReady || !db) return;
 
             const globalChatRef = doc(db, 'artifacts', appId, 'public', 'data', 'chats', 'global_fury_chat');
             const messagesRef = collection(globalChatRef, 'messages');
@@ -536,6 +540,9 @@
             const container = document.getElementById('messages-container');
             if (!container) return;
             
+            // Check if user is near the bottom before clearing content
+            const shouldScroll = container.scrollHeight - container.clientHeight <= container.scrollTop + 1;
+
             container.innerHTML = ''; 
             
             if (messages.length === 0) {
@@ -582,15 +589,17 @@
             
             container.appendChild(fragment);
 
-            // Auto-scroll to the bottom
-            container.scrollTop = container.scrollHeight;
+            // Auto-scroll to the bottom if the user was already near the bottom
+            if (shouldScroll) {
+               container.scrollTop = container.scrollHeight;
+            }
         }
 
         /**
          * Sends a message to the global chat room.
          */
         async function sendMessage(text) {
-            if (!userId || !text.trim() || !isAuthReady || !currentUserProfile) return;
+            if (!userId || !text.trim() || !isAuthReady || !currentUserProfile || !db) return;
 
             try {
                 const globalChatRef = doc(db, 'artifacts', appId, 'public', 'data', 'chats', 'global_fury_chat');
@@ -739,10 +748,8 @@
 
                 if (user) {
                     userId = user.uid;
-                    
-                    // Proceed to check/set up user profile
-                    await ensureUserProfileExistsNew(userId); 
-
+                    // FIX: This function now handles loading the profile and rendering the correct UI immediately.
+                    await initializeUserProfileAndRenderUI(userId); 
                 } else {
                     // User is null (not signed in), show the Sign-in screen.
                     userId = null;
