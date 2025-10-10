@@ -59,7 +59,7 @@
     <!-- Firebase and Application Logic -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInWithCustomToken, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, updateProfile, updatePassword } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInWithCustomToken, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, updateProfile, updatePassword, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, onSnapshot, collection, query, addDoc, serverTimestamp, getDoc, setDoc, setLogLevel, where, deleteDoc, runTransaction } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Global Firebase instances
@@ -80,6 +80,7 @@
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         
         // --- Custom Configuration (Provided by user - CRITICAL) ---
+        // NOTE: Replace these with the actual values if you want to connect to your own Firebase project.
         const customFirebaseConfig = {
             apiKey: "AIzaSyB1zvVHaBrbzX5iA9fBVNGa_3sY1-WCSpY", 
             authDomain: "squit-up-auth.firebaseapp.com",
@@ -125,23 +126,6 @@
             }
         }
 
-        /**
-         * Generic function to retry an async function with exponential backoff.
-         */
-        async function fetchWithExponentialBackoff(apiCall, maxRetries = 3, delay = 1000) {
-            for (let i = 0; i < maxRetries; i++) {
-                try {
-                    return await apiCall();
-                } catch (error) {
-                    if (error.code && error.code.includes('api-key-not-valid') && i < maxRetries - 1) {
-                        await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, i)));
-                        continue;
-                    }
-                    throw error;
-                }
-            }
-        }
-
         /** Renders the loading spinner. */
         function renderLoading(message = "Connecting...") {
             const container = document.getElementById('app-container');
@@ -157,7 +141,6 @@
         
         /** Renders the Sign-In screen. */
         function renderSignIn(errorMessage = '') {
-            // ... (Sign In HTML content remains the same as previous step, for brevity it's omitted here) ...
             const container = document.getElementById('app-container');
             container.innerHTML = `
                 <div class="h-full flex items-center justify-center bg-gray-900">
@@ -174,9 +157,9 @@
                         
                         <form id="email-password-form" class="space-y-4">
                             <input 
-                                type="text" 
+                                type="email" 
                                 id="email-input" 
-                                placeholder="Email or @user_id"
+                                placeholder="Email address"
                                 required 
                                 class="w-full bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-red-500 focus:border-red-500"
                             >
@@ -213,6 +196,69 @@
             document.getElementById('email-password-form').addEventListener('submit', handleEmailPasswordSignIn);
         }
 
+        // --- NEW/UPDATED LOGIN HANDLERS ---
+
+        /** Handles manual email/password sign-in. */
+        async function handleEmailPasswordSignIn(e) {
+            e.preventDefault();
+            const email = document.getElementById('email-input').value.trim();
+            const password = document.getElementById('password-input').value;
+            const errorElement = document.getElementById('error-message');
+            if (errorElement) errorElement.textContent = ''; // Clear previous errors
+
+            if (!email || !password) {
+                return renderSignIn('Please enter both email and password.');
+            }
+            
+            renderLoading("Logging in...");
+            
+            try {
+                // Use Firebase's dedicated sign-in function
+                await signInWithEmailAndPassword(auth, email, password);
+                
+                // Success: onAuthStateChanged listener will automatically detect login
+                // and call initializeUserProfileAndRenderUI, which then renders the dashboard.
+            } catch (error) {
+                console.error("Manual Login failed:", error);
+                
+                let errorMessage = 'Login failed. Please try again.';
+
+                // Provide specific error feedback based on Firebase error codes
+                switch (error.code) {
+                    case 'auth/invalid-credential':
+                    case 'auth/wrong-password':
+                    case 'auth/user-not-found':
+                        errorMessage = 'Invalid email or password. Please check your credentials.';
+                        break;
+                    case 'auth/invalid-email':
+                        errorMessage = 'Invalid email format. Please check your email address.';
+                        break;
+                    case 'auth/too-many-requests':
+                        errorMessage = 'Too many failed login attempts. Please try again later.';
+                        break;
+                    default:
+                        // General fail case for other errors
+                        errorMessage = 'An unknown error occurred during login. Please check the console.';
+                        break;
+                }
+
+                // Re-render sign-in with the specific error message
+                renderSignIn(errorMessage);
+            }
+        }
+        
+        /** Handles Google Sign-In. */
+        async function signInWithGoogle() {
+            const provider = new GoogleAuthProvider();
+            try {
+                await signInWithPopup(auth, provider);
+                // Success is handled by onAuthStateChanged listener
+            } catch (error) {
+                console.error("Google Sign-In failed:", error);
+                renderSignIn("Google sign-in failed. Please try again.");
+            }
+        }
+        
         /** Renders the Profile Setup screen. */
         function renderProfileSetup(errorMessage = '') {
             const user = auth.currentUser;
@@ -273,7 +319,7 @@
         /** Signs out the current user and sets their status to 'offline'. */
         async function handleSignOut() {
             try {
-                if (userId) {
+                if (userId && db) {
                     const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'user_profiles', userId);
                     setDoc(userDocRef, { onlineStatus: 'offline' }, { merge: true }).catch(e => console.error("Error setting offline status:", e));
                 }
@@ -347,6 +393,7 @@
             const container = document.getElementById('messages-container');
             if (!container) return;
             
+            // Check if the user was already scrolled to the bottom
             const shouldScroll = container.scrollHeight - container.clientHeight <= container.scrollTop + 1;
 
             container.innerHTML = ''; 
@@ -401,19 +448,16 @@
 
             try {
                 let collectionRef;
-                let chatTitle;
 
                 if (currentView.type === 'global' || currentView.type === 'server') {
                     // Global/Server messages
                     const chatDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'chats', currentView.id);
                     collectionRef = collection(chatDocRef, 'messages');
-                    chatTitle = currentView.displayName;
                 } else if (currentView.type === 'dm') {
                     // DM messages
                     const dmId = currentView.id; 
                     const dmDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'dms', dmId);
                     collectionRef = collection(dmDocRef, 'messages');
-                    chatTitle = `DM with ${currentView.displayName}`;
                 } else {
                     return; // Should not happen
                 }
@@ -484,7 +528,7 @@
                  listItem.className = 'my-1';
                  listItem.innerHTML = `
                      <button data-id="${dm.dmId}" data-type="dm" data-name="${dm.displayName}"
-                         class="w-full flex items-center p-2 rounded-lg transition duration-150 ${isActive ? 'bg-gray-700' : 'hover:bg-gray-700/50'}">
+                         class="dm-switch-btn w-full flex items-center p-2 rounded-lg transition duration-150 ${isActive ? 'bg-gray-700' : 'hover:bg-gray-700/50'}">
                          <div class="relative flex-shrink-0 mr-3">
                              <span class="inline-block w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-sm font-bold text-white">${dm.displayName.charAt(1).toUpperCase()}</span>
                              <span class="absolute right-0 bottom-0 block w-3 h-3 rounded-full ring-2 ring-gray-900 ${statusColor}"></span>
@@ -494,6 +538,11 @@
                  `;
                  dmListContainer.appendChild(listItem);
              });
+             
+             // Attach listeners to the newly rendered DM buttons
+             document.querySelectorAll('.dm-switch-btn').forEach(button => {
+                 button.addEventListener('click', handleViewChange);
+             });
         }
 
         /** Listener for Direct Messages and Friend System. */
@@ -502,9 +551,6 @@
 
             // 1. Listen for current user's friends list
             const friendsRef = collection(db, 'artifacts', appId, 'public', 'data', 'friends', userId, 'list');
-            
-            // NOTE: Firestore queries often require indexes if using 'where' and 'orderBy'. 
-            // We fetch the friend list (which is small) and then fetch friend details.
             
             onSnapshot(friendsRef, async (snapshot) => {
                 const friendIds = snapshot.docs.map(doc => doc.id);
@@ -578,7 +624,7 @@
                         <div class="w-10 border-t border-gray-700"></div>
 
                         <!-- Global Chat Icon -->
-                        <button data-id="global_fury_chat" data-type="global" data-name="Global FURY Chat" class="server-switch-btn w-12 h-12 flex items-center justify-center rounded-3xl bg-red-600 text-white font-bold transition duration-200 hover:rounded-2xl shadow-xl hover:shadow-red-600/30">
+                        <button data-id="global_fury_chat" data-type="global" data-name="Global FURY Chat" class="server-switch-btn w-12 h-12 flex items-center justify-center rounded-3xl ${currentView.type === 'global' ? 'bg-red-600 rounded-2xl' : 'bg-gray-800 hover:bg-gray-700 hover:rounded-2xl'} text-white font-bold transition duration-200 shadow-xl hover:shadow-red-600/30">
                             F
                         </button>
                     </div>
@@ -678,13 +724,18 @@
             if (header) header.textContent = `# ${name}`;
             if (input) input.placeholder = `Message # ${name}`;
 
-            // Re-render DM list to highlight active chat
+            // Re-render sidebars to highlight active chat
+            document.querySelectorAll('.server-switch-btn').forEach(btn => {
+                const isGlobalActive = type === 'global' && btn.getAttribute('data-type') === 'global';
+                btn.className = `server-switch-btn w-12 h-12 flex items-center justify-center transition duration-200 shadow-xl ${isGlobalActive ? 'bg-red-600 rounded-2xl hover:shadow-red-600/30' : 'bg-gray-800 rounded-3xl hover:bg-gray-700 hover:rounded-2xl'}`;
+            });
             renderDMsList(); 
+
             // Restart chat listener for the new view
             setupChatListener(); 
         }
 
-        /** Renders the Friend/DM management modal. */
+        /** Renders the Friend/DM management modal. (omitted for brevity, unchanged) */
         function renderFriendModal() {
             const container = document.getElementById('modal-container');
             container.innerHTML = `
@@ -796,7 +847,7 @@
             updateFriendRequestButton(); // Ensure the indicator is correct
         }
         
-        /** Sends a friend request. */
+        /** Sends a friend request. (omitted for brevity, unchanged) */
         async function handleSendFriendRequest(e) {
             e.preventDefault();
             const recipientId = document.getElementById('recipient-id-input').value.trim();
@@ -862,7 +913,7 @@
             }
         }
 
-        /** Handles accepting a friend request. */
+        /** Handles accepting a friend request. (omitted for brevity, unchanged) */
         async function handleAcceptRequest(e) {
             const senderId = e.currentTarget.getAttribute('data-sender');
             const senderName = e.currentTarget.getAttribute('data-name');
@@ -900,7 +951,7 @@
             }
         }
 
-        /** Handles rejecting a friend request. */
+        /** Handles rejecting a friend request. (omitted for brevity, unchanged) */
         async function handleRejectRequest(e) {
              const senderId = e.currentTarget.closest('li').querySelector('.accept-btn').getAttribute('data-sender');
              const requestId = e.currentTarget.getAttribute('data-id');
@@ -921,7 +972,7 @@
              }
         }
         
-        /** Updates the friend request indicator dot. */
+        /** Updates the friend request indicator dot. (omitted for brevity, unchanged) */
         function updateFriendRequestButton() {
             const indicator = document.getElementById('friend-request-indicator');
             if (indicator) {
@@ -982,8 +1033,11 @@
             } else if (user && user.providerData.some(p => p.providerId === GoogleAuthProvider.PROVIDER_ID) && !user.isAnonymous) {
                 // Only prompt setup for Google users who are incomplete
                 renderProfileSetup();
+            } else if (user && user.email && !user.isAnonymous) {
+                 // For manual email/password users, if authenticated but setup is false, show setup page
+                 renderProfileSetup();
             } else {
-                 // For robustness, if not a Google user, assume ready for chat if authenticated.
+                 // If not a Google or manual setup user, but authenticated (e.g. from an older setup flow), assume ready for chat.
                  currentView = { type: 'global', id: 'global_fury_chat', displayName: 'Global FURY Chat' };
                  renderDashboard(); 
             }
@@ -992,9 +1046,6 @@
             onSnapshot(userDocRef, (docSnap) => {
                 if (docSnap.exists()) {
                     currentUserProfile = docSnap.data();
-                    if (document.getElementById('chat-header-name')) {
-                         // Small UI update logic can go here if needed (e.g., status changes)
-                    }
                 }
             }, (error) => {
                 console.error("Error listening to user's public profile:", error.message);
