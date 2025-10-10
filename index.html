@@ -6,6 +6,51 @@
     <title>FURY - Discord-like Platform</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- Firebase SDK -->
+    <script type="module">
+        // Import the functions you need from the SDKs you need
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-analytics.js";
+
+        // Your web app's Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCkp-J_21Nb7qBquiMA90Zl13elfGesCPI",
+            authDomain: "squit-up-auth.firebaseapp.com",
+            projectId: "squit-up-auth",
+            storageBucket: "squit-up-auth.firebasestorage.app",
+            messagingSenderId: "503910898443",
+            appId: "1:503910898443:web:c5a56eb24cd4f183d8600e",
+            measurementId: "G-K4LHFHSNJC"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const analytics = getAnalytics(app);
+        const provider = new GoogleAuthProvider();
+
+        // Make Firebase services available globally
+        window.firebaseAuth = auth;
+        window.firebaseDb = db;
+        window.GoogleAuthProvider = GoogleAuthProvider;
+        window.signInWithPopup = signInWithPopup;
+        window.createUserWithEmailAndPassword = createUserWithEmailAndPassword;
+        window.signInWithEmailAndPassword = signInWithEmailAndPassword;
+        window.onAuthStateChanged = onAuthStateChanged;
+        window.signOut = signOut;
+        window.doc = doc;
+        window.setDoc = setDoc;
+        window.getDoc = getDoc;
+        window.collection = collection;
+        window.query = query;
+        window.where = where;
+        window.getDocs = getDocs;
+        window.googleProvider = provider;
+    </script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
         
@@ -154,6 +199,9 @@
                 <button type="submit" class="w-full py-3 bg-blue-600 hover:bg-blue-700 rounded font-medium transition duration-200">
                     Log In
                 </button>
+                <div id="login-error" class="mt-3 p-3 bg-red-900 border border-red-700 rounded text-red-200 text-sm" style="display: none;">
+                    <p>No user found with this User ID. If you don't have an account, please use "Continue with Google" to create a new account.</p>
+                </div>
             </form>
 
             <div class="text-center mb-4">
@@ -205,6 +253,12 @@
                 <button type="submit" class="w-full py-3 bg-blue-600 hover:bg-blue-700 rounded font-medium transition duration-200">
                     Create Account
                 </button>
+                <div id="setup-error" class="mt-3 p-3 bg-red-900 border border-red-700 rounded text-red-200 text-sm" style="display: none;">
+                    <p id="setup-error-message">Please check your information and try again.</p>
+                </div>
+                <div id="setup-success" class="mt-3 p-3 bg-green-900 border border-green-700 rounded text-green-200 text-sm" style="display: none;">
+                    <p>Account created successfully! Setting up your profile...</p>
+                </div>
             </form>
         </div>
     </div>
@@ -517,49 +571,209 @@
             const setupForm = document.getElementById('setup-form');
             const googleSignupBtn = document.getElementById('google-signup-button');
 
+            // Check if user is already logged in
+            window.onAuthStateChanged(window.firebaseAuth, (user) => {
+                if (user) {
+                    // User is signed in, check if profile is complete
+                    checkUserProfile(user);
+                }
+            });
+
             // Existing user login
-            loginForm.addEventListener('submit', (e) => {
+            loginForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const userId = document.getElementById('login-userid').value.trim();
                 const password = document.getElementById('login-password').value.trim();
+                const errorDiv = document.getElementById('login-error');
+                
+                errorDiv.style.display = 'none';
                 
                 if (userId && password) {
-                    // Simulate login validation
-                    const user = {
-                        id: Date.now(),
-                        name: userId.replace('@', ''),
-                        userId: userId.startsWith('@') ? userId : '@' + userId,
-                        avatar: '👤',
-                        status: 'online'
-                    };
-                    loginUser(user);
+                    try {
+                        // Check if user exists in Firestore
+                        const userQuery = window.query(
+                            window.collection(window.firebaseDb, 'users'),
+                            window.where('userId', '==', userId.startsWith('@') ? userId : '@' + userId)
+                        );
+                        const querySnapshot = await window.getDocs(userQuery);
+                        
+                        if (querySnapshot.empty) {
+                            // User doesn't exist
+                            errorDiv.style.display = 'block';
+                            return;
+                        }
+                        
+                        // Get user data
+                        const userDoc = querySnapshot.docs[0];
+                        const userData = userDoc.data();
+                        
+                        // Sign in with email and password
+                        await window.signInWithEmailAndPassword(window.firebaseAuth, userData.email, password);
+                        
+                    } catch (error) {
+                        console.error('Login error:', error);
+                        errorDiv.style.display = 'block';
+                        document.querySelector('#login-error p').textContent = 'Invalid credentials. Please check your User ID and password.';
+                    }
                 }
             });
 
             // Google signup
-            googleSignupBtn.addEventListener('click', () => {
-                document.getElementById('login-screen').style.display = 'none';
-                document.getElementById('setup-screen').style.display = 'flex';
+            googleSignupBtn.addEventListener('click', async () => {
+                try {
+                    const result = await window.signInWithPopup(window.firebaseAuth, window.googleProvider);
+                    const user = result.user;
+                    
+                    // Check if user already has a profile
+                    const userDoc = await window.getDoc(window.doc(window.firebaseDb, 'users', user.uid));
+                    
+                    if (userDoc.exists()) {
+                        // User already exists, log them in
+                        const userData = userDoc.data();
+                        loginUser({
+                            id: user.uid,
+                            name: userData.displayName,
+                            userId: userData.userId,
+                            email: userData.email,
+                            avatar: userData.avatar || '👤',
+                            status: 'online'
+                        });
+                    } else {
+                        // New user, show setup screen
+                        window.tempGoogleUser = user;
+                        document.getElementById('login-screen').style.display = 'none';
+                        document.getElementById('setup-screen').style.display = 'flex';
+                    }
+                } catch (error) {
+                    console.error('Google sign-in error:', error);
+                    alert('Failed to sign in with Google. Please try again.');
+                }
             });
 
             // Account setup
-            setupForm.addEventListener('submit', (e) => {
+            setupForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const userId = document.getElementById('setup-userid').value.trim();
                 const password = document.getElementById('setup-password').value.trim();
                 const confirmPassword = document.getElementById('setup-confirm-password').value.trim();
+                const errorDiv = document.getElementById('setup-error');
+                const successDiv = document.getElementById('setup-success');
+                const errorMessage = document.getElementById('setup-error-message');
                 
-                if (userId && password && password === confirmPassword) {
-                    const user = {
-                        id: Date.now(),
+                errorDiv.style.display = 'none';
+                successDiv.style.display = 'none';
+                
+                if (!userId || !password || !confirmPassword) {
+                    errorMessage.textContent = 'Please fill in all fields.';
+                    errorDiv.style.display = 'block';
+                    return;
+                }
+                
+                if (password !== confirmPassword) {
+                    errorMessage.textContent = 'Passwords do not match.';
+                    errorDiv.style.display = 'block';
+                    return;
+                }
+                
+                if (password.length < 6) {
+                    errorMessage.textContent = 'Password must be at least 6 characters long.';
+                    errorDiv.style.display = 'block';
+                    return;
+                }
+                
+                try {
+                    const formattedUserId = userId.startsWith('@') ? userId : '@' + userId;
+                    
+                    // Check if userId is already taken
+                    const userQuery = window.query(
+                        window.collection(window.firebaseDb, 'users'),
+                        window.where('userId', '==', formattedUserId)
+                    );
+                    const querySnapshot = await window.getDocs(userQuery);
+                    
+                    if (!querySnapshot.empty) {
+                        errorMessage.textContent = 'This User ID is already taken. Please choose another one.';
+                        errorDiv.style.display = 'block';
+                        return;
+                    }
+                    
+                    successDiv.style.display = 'block';
+                    
+                    let user;
+                    if (window.tempGoogleUser) {
+                        // User came from Google sign-in
+                        user = window.tempGoogleUser;
+                        
+                        // Update password for the Google user
+                        await window.createUserWithEmailAndPassword(window.firebaseAuth, user.email, password);
+                    } else {
+                        // Create new email/password user
+                        const email = `${userId}@fury.app`; // Generate email from userId
+                        const result = await window.createUserWithEmailAndPassword(window.firebaseAuth, email, password);
+                        user = result.user;
+                    }
+                    
+                    // Save user profile to Firestore
+                    const userData = {
+                        userId: formattedUserId,
+                        displayName: userId,
+                        email: user.email,
+                        avatar: '👤',
+                        status: 'online',
+                        bio: '',
+                        createdAt: new Date(),
+                        friends: [],
+                        servers: []
+                    };
+                    
+                    await window.setDoc(window.doc(window.firebaseDb, 'users', user.uid), userData);
+                    
+                    // Clear temp user
+                    window.tempGoogleUser = null;
+                    
+                    // Login user
+                    loginUser({
+                        id: user.uid,
                         name: userId,
-                        userId: '@' + userId,
+                        userId: formattedUserId,
+                        email: user.email,
                         avatar: '👤',
                         status: 'online'
-                    };
-                    loginUser(user);
+                    });
+                    
+                } catch (error) {
+                    console.error('Setup error:', error);
+                    errorMessage.textContent = error.message || 'Failed to create account. Please try again.';
+                    errorDiv.style.display = 'block';
+                    successDiv.style.display = 'none';
                 }
             });
+        }
+
+        // Check user profile
+        async function checkUserProfile(firebaseUser) {
+            try {
+                const userDoc = await window.getDoc(window.doc(window.firebaseDb, 'users', firebaseUser.uid));
+                
+                if (userDoc.exists()) {
+                    const userData = userDoc.data();
+                    loginUser({
+                        id: firebaseUser.uid,
+                        name: userData.displayName,
+                        userId: userData.userId,
+                        email: userData.email,
+                        avatar: userData.avatar || '👤',
+                        status: 'online'
+                    });
+                } else {
+                    // User exists in Firebase Auth but not in Firestore, show setup
+                    window.tempGoogleUser = firebaseUser;
+                    document.getElementById('login-screen').style.display = 'none';
+                    document.getElementById('setup-screen').style.display = 'flex';
+                }
+            } catch (error) {
+                console.error('Error checking user profile:', error);
+            }
         }
 
         // Login user and show main app
@@ -1072,20 +1286,35 @@
             return div.innerHTML;
         }
 
-        function logout() {
-            currentUser = null;
-            currentChat = null;
-            messages = {};
-            friends = [];
-            friendRequests = [];
-            servers = [];
-            
-            document.getElementById('main-app').style.display = 'none';
-            document.getElementById('login-screen').style.display = 'flex';
-            
-            // Reset forms
-            document.getElementById('login-userid').value = '';
-            document.getElementById('login-password').value = '';
+        async function logout() {
+            try {
+                await window.signOut(window.firebaseAuth);
+                
+                currentUser = null;
+                currentChat = null;
+                messages = {};
+                friends = [];
+                friendRequests = [];
+                servers = [];
+                
+                document.getElementById('main-app').style.display = 'none';
+                document.getElementById('login-screen').style.display = 'flex';
+                
+                // Reset forms
+                document.getElementById('login-userid').value = '';
+                document.getElementById('login-password').value = '';
+                document.getElementById('setup-userid').value = '';
+                document.getElementById('setup-password').value = '';
+                document.getElementById('setup-confirm-password').value = '';
+                
+                // Hide error messages
+                document.getElementById('login-error').style.display = 'none';
+                document.getElementById('setup-error').style.display = 'none';
+                document.getElementById('setup-success').style.display = 'none';
+                
+            } catch (error) {
+                console.error('Logout error:', error);
+            }
         }
 
         // Render DMs
@@ -1117,5 +1346,5 @@
             }
         });
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'98c68a4a778733a2',t:'MTc2MDEwMzczOC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'98c6968ac2222e8f',t:'MTc2MDEwNDI0MC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
