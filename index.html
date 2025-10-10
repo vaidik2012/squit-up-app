@@ -12,7 +12,7 @@
         // Import the functions you need from the SDKs you need
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getAuth, signInWithPopup, GoogleAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
         import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-analytics.js";
 
         // Your web app's Firebase configuration
@@ -49,6 +49,7 @@
         window.query = query;
         window.where = where;
         window.getDocs = getDocs;
+        window.deleteDoc = deleteDoc;
         window.googleProvider = provider;
     </script>
     <style>
@@ -338,6 +339,19 @@
                         <input type="text" placeholder="Find or start a conversation" 
                                class="flex-1 px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white placeholder-gray-400 text-sm focus:outline-none focus:border-blue-500">
                     </div>
+                    
+                    <!-- Send Friend Request Section -->
+                    <div class="mb-6 p-3 bg-gray-700 rounded-lg">
+                        <h4 class="text-sm font-semibold text-gray-300 mb-2">Add New Friend</h4>
+                        <div class="flex space-x-2">
+                            <input type="text" id="dm-friend-request-input" placeholder="Enter User ID (@username)" 
+                                   class="flex-1 px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white placeholder-gray-400 text-sm focus:outline-none focus:border-blue-500">
+                            <button id="dm-send-friend-request" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white text-sm font-medium">
+                                Send Request
+                            </button>
+                        </div>
+                    </div>
+                    
                     <div id="dm-list" class="space-y-1">
                         <!-- DM conversations will be populated here -->
                     </div>
@@ -550,15 +564,6 @@
         let messages = {};
         let currentView = 'friends';
 
-        // Sample data
-        const sampleUsers = [
-            { id: 1, name: 'Alex Chen', userId: '@alexchen', avatar: '🚀', status: 'online', bio: 'Full-stack developer' },
-            { id: 2, name: 'Sarah Kim', userId: '@sarahk', avatar: '⚡', status: 'idle', bio: 'UI/UX Designer' },
-            { id: 3, name: 'Mike Johnson', userId: '@mikej', avatar: '🔥', status: 'online', bio: 'Game Developer' },
-            { id: 4, name: 'Emma Davis', userId: '@emmad', avatar: '💫', status: 'dnd', bio: 'Data Scientist' },
-            { id: 5, name: 'Chris Wilson', userId: '@chrisw', avatar: '🌟', status: 'offline', bio: 'DevOps Engineer' }
-        ];
-
         // Initialize app
         document.addEventListener('DOMContentLoaded', () => {
             lucide.createIcons();
@@ -684,6 +689,14 @@
                 try {
                     const formattedUserId = userId.startsWith('@') ? userId : '@' + userId;
                     
+                    // Validate userId format (only letters, numbers, underscores, hyphens)
+                    const userIdPattern = /^@[a-zA-Z0-9_-]+$/;
+                    if (!userIdPattern.test(formattedUserId)) {
+                        errorMessage.textContent = 'User ID can only contain letters, numbers, underscores, and hyphens.';
+                        errorDiv.style.display = 'block';
+                        return;
+                    }
+                    
                     // Check if userId is already taken
                     const userQuery = window.query(
                         window.collection(window.firebaseDb, 'users'),
@@ -692,7 +705,7 @@
                     const querySnapshot = await window.getDocs(userQuery);
                     
                     if (!querySnapshot.empty) {
-                        errorMessage.textContent = 'This User ID is already taken. Please choose another one.';
+                        errorMessage.textContent = 'This User ID is already taken. Please choose a different one.';
                         errorDiv.style.display = 'block';
                         return;
                     }
@@ -791,33 +804,60 @@
         }
 
         // Initialize main app
-        function initializeMainApp() {
-            // Initialize sample data
-            friends = sampleUsers.slice(0, 3);
-            friendRequests = [
-                { id: 6, name: 'John Doe', userId: '@johndoe', avatar: '🎮', status: 'online' },
-                { id: 7, name: 'Jane Smith', userId: '@janes', avatar: '🎨', status: 'idle' }
-            ];
+        async function initializeMainApp() {
+            // Load user's real friends and friend requests from Firebase
+            await loadUserData();
             
-            // Initialize servers
-            servers = [
-                { id: 1, name: 'Gaming Squad', icon: '🎮', channels: [
-                    { id: 1, name: 'general', type: 'text' },
-                    { id: 2, name: 'gaming', type: 'text' },
-                    { id: 3, name: 'Voice Chat', type: 'voice' }
-                ]},
-                { id: 2, name: 'Dev Team', icon: '💻', channels: [
-                    { id: 4, name: 'general', type: 'text' },
-                    { id: 5, name: 'code-review', type: 'text' }
-                ]}
-            ];
-
             renderFriends();
             renderServers();
             setupEventListeners();
             
             // Initialize with welcome message
             showWelcomeScreen();
+        }
+
+        // Load user data from Firebase
+        async function loadUserData() {
+            try {
+                // Load user's profile data
+                const userDoc = await window.getDoc(window.doc(window.firebaseDb, 'users', currentUser.id));
+                if (userDoc.exists()) {
+                    const userData = userDoc.data();
+                    friends = userData.friends || [];
+                    servers = userData.servers || [];
+                }
+
+                // Load friend requests
+                const requestsQuery = window.query(
+                    window.collection(window.firebaseDb, 'friendRequests'),
+                    window.where('toUserId', '==', currentUser.userId)
+                );
+                const requestsSnapshot = await window.getDocs(requestsQuery);
+                friendRequests = [];
+                
+                for (const doc of requestsSnapshot.docs) {
+                    const requestData = doc.data();
+                    // Get sender's profile
+                    const senderQuery = window.query(
+                        window.collection(window.firebaseDb, 'users'),
+                        window.where('userId', '==', requestData.fromUserId)
+                    );
+                    const senderSnapshot = await window.getDocs(senderQuery);
+                    
+                    if (!senderSnapshot.empty) {
+                        const senderData = senderSnapshot.docs[0].data();
+                        friendRequests.push({
+                            id: doc.id,
+                            name: senderData.displayName,
+                            userId: senderData.userId,
+                            avatar: senderData.avatar || '👤',
+                            status: 'online'
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading user data:', error);
+            }
         }
 
         // Event listeners
@@ -860,6 +900,26 @@
 
             // Emoji button
             document.getElementById('emoji-btn').addEventListener('click', toggleEmojiPicker);
+
+            // DM friend request button
+            document.getElementById('dm-send-friend-request').addEventListener('click', () => {
+                const userId = document.getElementById('dm-friend-request-input').value.trim();
+                if (userId) {
+                    sendFriendRequest(userId);
+                    document.getElementById('dm-friend-request-input').value = '';
+                }
+            });
+
+            // Enter key for DM friend request
+            document.getElementById('dm-friend-request-input').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    const userId = e.target.value.trim();
+                    if (userId) {
+                        sendFriendRequest(userId);
+                        e.target.value = '';
+                    }
+                }
+            });
 
             // Modal event listeners
             setupModalListeners();
@@ -970,65 +1030,95 @@
         function renderFriends() {
             // Friend requests
             const requestsList = document.getElementById('friend-requests-list');
-            requestsList.innerHTML = friendRequests.map(user => `
-                <div class="flex items-center justify-between p-2 hover:bg-gray-600 rounded slide-in">
-                    <div class="flex items-center space-x-3">
-                        <div class="relative">
-                            <span class="text-lg">${user.avatar}</span>
-                            <div class="absolute -bottom-1 -right-1 w-3 h-3 status-${user.status} rounded-full border border-gray-800"></div>
+            if (friendRequests.length === 0) {
+                requestsList.innerHTML = `
+                    <div class="text-center py-4">
+                        <p class="text-gray-500 text-sm">No pending friend requests</p>
+                    </div>
+                `;
+            } else {
+                requestsList.innerHTML = friendRequests.map(user => `
+                    <div class="flex items-center justify-between p-2 hover:bg-gray-600 rounded slide-in">
+                        <div class="flex items-center space-x-3">
+                            <div class="relative">
+                                <span class="text-lg">${user.avatar}</span>
+                                <div class="absolute -bottom-1 -right-1 w-3 h-3 status-online rounded-full border border-gray-800"></div>
+                            </div>
+                            <div>
+                                <div class="font-medium text-white">${user.name}</div>
+                                <div class="text-xs text-gray-400">${user.userId}</div>
+                            </div>
                         </div>
-                        <div>
-                            <div class="font-medium text-white">${user.name}</div>
-                            <div class="text-xs text-gray-400">${user.userId}</div>
+                        <div class="flex space-x-1">
+                            <button class="p-1 bg-green-600 hover:bg-green-700 rounded" onclick="acceptFriendRequest('${user.id}')">
+                                <i data-lucide="check" class="w-4 h-4 text-white"></i>
+                            </button>
+                            <button class="p-1 bg-red-600 hover:bg-red-700 rounded" onclick="declineFriendRequest('${user.id}')">
+                                <i data-lucide="x" class="w-4 h-4 text-white"></i>
+                            </button>
                         </div>
                     </div>
-                    <div class="flex space-x-1">
-                        <button class="p-1 bg-green-600 hover:bg-green-700 rounded" onclick="acceptFriendRequest(${user.id})">
-                            <i data-lucide="check" class="w-4 h-4 text-white"></i>
-                        </button>
-                        <button class="p-1 bg-red-600 hover:bg-red-700 rounded" onclick="declineFriendRequest(${user.id})">
-                            <i data-lucide="x" class="w-4 h-4 text-white"></i>
-                        </button>
-                    </div>
-                </div>
-            `).join('');
+                `).join('');
+            }
 
             // Online friends
-            const onlineFriends = friends.filter(f => f.status === 'online');
+            const onlineFriends = friends.filter(f => f.status === 'online' || !f.status);
             document.getElementById('online-friends-count').textContent = onlineFriends.length;
-            document.getElementById('online-friends-list').innerHTML = onlineFriends.map(user => `
-                <div class="flex items-center space-x-3 p-2 hover:bg-gray-600 rounded cursor-pointer" onclick="openDM('${user.userId}')">
-                    <div class="relative">
-                        <span class="text-lg">${user.avatar}</span>
-                        <div class="absolute -bottom-1 -right-1 w-3 h-3 status-online rounded-full border border-gray-800"></div>
+            
+            if (onlineFriends.length === 0) {
+                document.getElementById('online-friends-list').innerHTML = `
+                    <div class="text-center py-4">
+                        <p class="text-gray-500 text-sm">No friends online</p>
                     </div>
-                    <div class="flex-1">
-                        <div class="font-medium text-white">${user.name}</div>
-                        <div class="text-xs text-gray-400">${user.bio || 'Online'}</div>
+                `;
+            } else {
+                document.getElementById('online-friends-list').innerHTML = onlineFriends.map(user => `
+                    <div class="flex items-center space-x-3 p-2 hover:bg-gray-600 rounded cursor-pointer" onclick="openDM('${user.userId}')">
+                        <div class="relative">
+                            <span class="text-lg">${user.avatar || '👤'}</span>
+                            <div class="absolute -bottom-1 -right-1 w-3 h-3 status-online rounded-full border border-gray-800"></div>
+                        </div>
+                        <div class="flex-1">
+                            <div class="font-medium text-white">${user.name}</div>
+                            <div class="text-xs text-gray-400">Online</div>
+                        </div>
+                        <button class="p-1 hover:bg-gray-500 rounded" onclick="event.stopPropagation(); openDM('${user.userId}')">
+                            <i data-lucide="message-circle" class="w-4 h-4 text-gray-400"></i>
+                        </button>
                     </div>
-                    <button class="p-1 hover:bg-gray-500 rounded" onclick="event.stopPropagation(); openDM('${user.userId}')">
-                        <i data-lucide="message-circle" class="w-4 h-4 text-gray-400"></i>
-                    </button>
-                </div>
-            `).join('');
+                `).join('');
+            }
 
             // All friends
             document.getElementById('all-friends-count').textContent = friends.length;
-            document.getElementById('all-friends-list').innerHTML = friends.map(user => `
-                <div class="flex items-center space-x-3 p-2 hover:bg-gray-600 rounded cursor-pointer" onclick="openDM('${user.userId}')">
-                    <div class="relative">
-                        <span class="text-lg">${user.avatar}</span>
-                        <div class="absolute -bottom-1 -right-1 w-3 h-3 status-${user.status} rounded-full border border-gray-800"></div>
+            
+            if (friends.length === 0) {
+                document.getElementById('all-friends-list').innerHTML = `
+                    <div class="text-center py-8">
+                        <div class="w-12 h-12 bg-gray-600 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <i data-lucide="user-plus" class="w-6 h-6 text-gray-400"></i>
+                        </div>
+                        <p class="text-gray-400 text-sm">No friends yet!</p>
+                        <p class="text-gray-500 text-xs mt-1">Use the "Add Friend" button to send friend requests</p>
                     </div>
-                    <div class="flex-1">
-                        <div class="font-medium text-white">${user.name}</div>
-                        <div class="text-xs text-gray-400">${user.bio || user.status}</div>
+                `;
+            } else {
+                document.getElementById('all-friends-list').innerHTML = friends.map(user => `
+                    <div class="flex items-center space-x-3 p-2 hover:bg-gray-600 rounded cursor-pointer" onclick="openDM('${user.userId}')">
+                        <div class="relative">
+                            <span class="text-lg">${user.avatar || '👤'}</span>
+                            <div class="absolute -bottom-1 -right-1 w-3 h-3 status-online rounded-full border border-gray-800"></div>
+                        </div>
+                        <div class="flex-1">
+                            <div class="font-medium text-white">${user.name}</div>
+                            <div class="text-xs text-gray-400">${user.userId}</div>
+                        </div>
+                        <button class="p-1 hover:bg-gray-500 rounded" onclick="event.stopPropagation(); openDM('${user.userId}')">
+                            <i data-lucide="message-circle" class="w-4 h-4 text-gray-400"></i>
+                        </button>
                     </div>
-                    <button class="p-1 hover:bg-gray-500 rounded" onclick="event.stopPropagation(); openDM('${user.userId}')">
-                        <i data-lucide="message-circle" class="w-4 h-4 text-gray-400"></i>
-                    </button>
-                </div>
-            `).join('');
+                `).join('');
+            }
 
             document.getElementById('friend-requests-count').textContent = friendRequests.length;
             lucide.createIcons();
@@ -1130,23 +1220,125 @@
         }
 
         // Friend request functions
-        function sendFriendRequest(userId) {
-            // Simulate sending friend request
-            console.log(`Friend request sent to ${userId}`);
-        }
-
-        function acceptFriendRequest(userId) {
-            const user = friendRequests.find(u => u.id === userId);
-            if (user) {
-                friends.push(user);
-                friendRequests = friendRequests.filter(u => u.id !== userId);
-                renderFriends();
+        async function sendFriendRequest(userId) {
+            try {
+                const formattedUserId = userId.startsWith('@') ? userId : '@' + userId;
+                
+                // Check if user exists
+                const userQuery = window.query(
+                    window.collection(window.firebaseDb, 'users'),
+                    window.where('userId', '==', formattedUserId)
+                );
+                const userSnapshot = await window.getDocs(userQuery);
+                
+                if (userSnapshot.empty) {
+                    alert('User not found. Please check the User ID and try again.');
+                    return;
+                }
+                
+                // Check if already friends
+                if (friends.some(friend => friend.userId === formattedUserId)) {
+                    alert('You are already friends with this user.');
+                    return;
+                }
+                
+                // Check if friend request already sent
+                const existingRequestQuery = window.query(
+                    window.collection(window.firebaseDb, 'friendRequests'),
+                    window.where('fromUserId', '==', currentUser.userId),
+                    window.where('toUserId', '==', formattedUserId)
+                );
+                const existingRequestSnapshot = await window.getDocs(existingRequestQuery);
+                
+                if (!existingRequestSnapshot.empty) {
+                    alert('Friend request already sent to this user.');
+                    return;
+                }
+                
+                // Send friend request
+                await window.setDoc(window.doc(window.collection(window.firebaseDb, 'friendRequests')), {
+                    fromUserId: currentUser.userId,
+                    toUserId: formattedUserId,
+                    timestamp: new Date(),
+                    status: 'pending'
+                });
+                
+                alert('Friend request sent successfully!');
+                
+            } catch (error) {
+                console.error('Error sending friend request:', error);
+                alert('Failed to send friend request. Please try again.');
             }
         }
 
-        function declineFriendRequest(userId) {
-            friendRequests = friendRequests.filter(u => u.id !== userId);
-            renderFriends();
+        async function acceptFriendRequest(requestId) {
+            try {
+                const request = friendRequests.find(r => r.id === requestId);
+                if (!request) return;
+                
+                // Add to both users' friends lists
+                const currentUserDoc = window.doc(window.firebaseDb, 'users', currentUser.id);
+                const currentUserData = await window.getDoc(currentUserDoc);
+                
+                // Get the sender's user document
+                const senderQuery = window.query(
+                    window.collection(window.firebaseDb, 'users'),
+                    window.where('userId', '==', request.userId)
+                );
+                const senderSnapshot = await window.getDocs(senderQuery);
+                
+                if (!senderSnapshot.empty) {
+                    const senderDoc = senderSnapshot.docs[0];
+                    const senderData = senderDoc.data();
+                    
+                    // Update current user's friends list
+                    const currentFriends = currentUserData.data().friends || [];
+                    currentFriends.push({
+                        userId: request.userId,
+                        name: request.name,
+                        avatar: request.avatar
+                    });
+                    
+                    await window.setDoc(currentUserDoc, { friends: currentFriends }, { merge: true });
+                    
+                    // Update sender's friends list
+                    const senderFriends = senderData.friends || [];
+                    senderFriends.push({
+                        userId: currentUser.userId,
+                        name: currentUser.name,
+                        avatar: currentUser.avatar
+                    });
+                    
+                    await window.setDoc(senderDoc.ref, { friends: senderFriends }, { merge: true });
+                    
+                    // Delete the friend request
+                    await window.deleteDoc(window.doc(window.firebaseDb, 'friendRequests', requestId));
+                    
+                    // Update local state
+                    friends.push(request);
+                    friendRequests = friendRequests.filter(r => r.id !== requestId);
+                    renderFriends();
+                }
+                
+            } catch (error) {
+                console.error('Error accepting friend request:', error);
+                alert('Failed to accept friend request. Please try again.');
+            }
+        }
+
+        async function declineFriendRequest(requestId) {
+            try {
+                // Delete the friend request
+                await window.deleteDoc(window.doc(window.firebaseDb, 'friendRequests', requestId));
+                
+                // Update local state
+                friendRequests = friendRequests.filter(r => r.id !== requestId);
+                renderFriends();
+                
+            } catch (error) {
+                console.error('Error declining friend request:', error);
+                alert('Failed to decline friend request. Please try again.');
+            }
         }
 
         // Server functions
@@ -1320,13 +1512,26 @@
         // Render DMs
         function renderDMs() {
             const dmList = document.getElementById('dm-list');
-            const recentDMs = friends.slice(0, 5); // Show recent DM conversations
             
-            dmList.innerHTML = recentDMs.map(user => `
+            if (friends.length === 0) {
+                dmList.innerHTML = `
+                    <div class="text-center py-8">
+                        <div class="w-12 h-12 bg-gray-600 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <i data-lucide="users" class="w-6 h-6 text-gray-400"></i>
+                        </div>
+                        <p class="text-gray-400 text-sm">No friends yet!</p>
+                        <p class="text-gray-500 text-xs mt-1">Add friends using their User ID above</p>
+                    </div>
+                `;
+                lucide.createIcons();
+                return;
+            }
+            
+            dmList.innerHTML = friends.map(user => `
                 <div class="flex items-center space-x-3 p-2 hover:bg-gray-600 rounded cursor-pointer" onclick="openDM('${user.userId}')">
                     <div class="relative">
-                        <span class="text-lg">${user.avatar}</span>
-                        <div class="absolute -bottom-1 -right-1 w-3 h-3 status-${user.status} rounded-full border border-gray-800"></div>
+                        <span class="text-lg">${user.avatar || '👤'}</span>
+                        <div class="absolute -bottom-1 -right-1 w-3 h-3 status-online rounded-full border border-gray-800"></div>
                     </div>
                     <div class="flex-1">
                         <div class="font-medium text-white">${user.name}</div>
@@ -1346,5 +1551,5 @@
             }
         });
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'98c6968ac2222e8f',t:'MTc2MDEwNDI0MC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'98c69dfd674033a2',t:'MTc2MDEwNDU0NS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
