@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Squit! up - Real-Time Chat</title>
+    <title>FURY - Real-Time Chat</title>
     <!-- Tailwind CSS CDN for modern styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -12,10 +12,8 @@
             theme: {
                 extend: {
                     colors: {
-                        'primary-blue': '#4c51bf', // Deep Purple-Blue
-                        'secondary-purple': '#805ad5', // Lighter Purple
-                        'background-dark': '#1f1a30',
-                        'chat-bg': '#2b2440',
+                        'primary-black': '#000000', 
+                        'chat-bg': '#111111', // Slightly off-black for chat area distinction
                     },
                 }
             }
@@ -25,35 +23,29 @@
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
         body {
             font-family: 'Inter', sans-serif;
-            background: linear-gradient(135deg, #1f1a30 0%, #3a325a 100%);
+            background-color: #000000; /* Solid Black Background */
             min-height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
+            color: white; /* Default text color is white */
         }
         .glass-card {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+            background: rgba(255, 255, 255, 0.05); /* Very subtle transparent background */
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 15px 0 rgba(0, 0, 0, 0.5);
         }
+        /* RAINBOW GRADIENT for the FURY title */
         .main-title {
-            background: linear-gradient(90deg, #ff80b3, #805ad5);
+            background: linear-gradient(90deg, #ff0000, #ff8000, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-        }
-        .button-gradient {
-            background: linear-gradient(90deg, #805ad5, #4c51bf);
-            transition: all 0.2s ease-in-out;
-            box-shadow: 0 4px 10px rgba(76, 81, 191, 0.5);
-        }
-        .button-gradient:hover {
-            opacity: 0.9;
-            transform: translateY(-1px);
         }
         .button-google {
             background-color: #db4437; /* Google Red */
             transition: all 0.2s ease-in-out;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
         }
         .button-google:hover {
             opacity: 0.9;
@@ -64,10 +56,10 @@
             width: 8px;
         }
         #messages-container::-webkit-scrollbar-track {
-            background: #2b2440;
+            background: #111111;
         }
         #messages-container::-webkit-scrollbar-thumb {
-            background: #4c51bf;
+            background: rgba(255, 255, 255, 0.2);
             border-radius: 4px;
         }
     </style>
@@ -82,8 +74,6 @@
             signInAnonymously, 
             signInWithCustomToken, 
             onAuthStateChanged, 
-            createUserWithEmailAndPassword, 
-            signInWithEmailAndPassword, 
             GoogleAuthProvider, 
             signInWithPopup,
             signOut
@@ -98,7 +88,7 @@
             query, 
             orderBy, 
             serverTimestamp,
-            getDocs 
+            getDoc 
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- GLOBAL STATE AND CONFIGURATION ---
@@ -106,11 +96,11 @@
         let isAuthReady = false;
         
         // Use provided global variables or fallback for local testing
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-squit-up';
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-fury-chat';
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
             apiKey: "AIzaSyAzY-L_W8V7dOqg3M-G6y2e4aP7i",
-            authDomain: "squit-up-auth.firebaseapp.com",
-            projectId: "squit-up-auth",
+            authDomain: "squit-up-auth.firebaseapp.com", // Keep this if using the existing project
+            projectId: "squit-up-auth", // Keep this if using the existing project
             storageBucket: "squit-up-auth.appspot.com",
             messagingSenderId: "58591888443",
             appId: "1:58591888443:web:2a3e5e24c6d4f1638b80e"
@@ -124,11 +114,10 @@
         const messageInput = document.getElementById('message-input');
         const usernameDisplay = document.getElementById('username-display');
         const userIdDisplay = document.getElementById('user-id-display');
-        const messageError = document.getElementById('message-error');
+        const errorDisplay = document.getElementById('error-display');
 
         // --- INITIALIZATION AND AUTHENTICATION ---
         
-        // 1. Initialize Firebase and Authentication Listener
         document.addEventListener('DOMContentLoaded', () => {
             try {
                 const app = initializeApp(firebaseConfig);
@@ -144,10 +133,11 @@
             onAuthStateChanged(auth, async (user) => {
                 if (user) {
                     userProfile.uid = user.uid;
-                    userProfile.name = user.displayName || user.email || 'Guest';
-                    userProfile.photoURL = user.photoURL || 'https://placehold.co/150x150/805ad5/ffffff?text=' + (userProfile.name[0] || '?');
+                    // Prefer displayName from Google/provider, fallback to UID
+                    userProfile.name = user.displayName || 'Fury User ' + user.uid.substring(0, 4);
+                    // Use actual photoURL or simple placeholder
+                    userProfile.photoURL = user.photoURL || 'https://placehold.co/150x150/111111/ffffff?text=' + (userProfile.name[0] || '?');
                     
-                    // Show User ID for collaboration
                     userIdDisplay.textContent = `UID: ${user.uid}`;
 
                     // Update UI and start chat listener
@@ -161,14 +151,12 @@
                     // Sign-out or initial state
                     userProfile = {};
                     showAuthScreen();
-                    // Attempt automatic sign-in (custom token/anonymous)
                     await initialSignIn();
                 }
                 isAuthReady = true;
             });
         });
 
-        // 2. Handle initial sign-in (Canvas environment requirement)
         async function initialSignIn() {
             try {
                 if (__initial_auth_token) {
@@ -183,46 +171,25 @@
             }
         }
 
-        // 3. Email/Password Sign In/Sign Up
-        window.handleEmailAuth = async (email, password) => {
-            messageError.textContent = ''; 
-            try {
-                // Try to sign in
-                await signInWithEmailAndPassword(auth, email, password);
-                showMessage(`Welcome back, ${email}!`, 'success');
-
-            } catch (error) {
-                if (error.code === 'auth/user-not-found') {
-                    // If user not found, try to create a new one (sign up)
-                    try {
-                        await createUserWithEmailAndPassword(auth, email, password);
-                        showMessage(`New account created for ${email}.`, 'success');
-                    } catch (signUpError) {
-                        handleAuthError(signUpError, 'email-error');
-                    }
-                } else {
-                    handleAuthError(error, 'email-error');
-                }
-            }
-        };
-
-        // 4. Google Sign-In
+        // --- Google Sign-In (The ONLY method) ---
         window.handleGoogleSignIn = async () => {
-            messageError.textContent = ''; 
+            errorDisplay.textContent = ''; 
             try {
                 const provider = new GoogleAuthProvider();
+                // We use sign-in with redirect for GitHub Pages environments to avoid CORS/popup issues
+                // However, since we used popup successfully before, we'll keep that for simplicity unless errors occur.
                 await signInWithPopup(auth, provider);
                 // onAuthStateChanged listener handles the rest
             } catch (error) {
-                handleAuthError(error, 'email-error');
+                handleAuthError(error);
             }
         };
         
-        // 5. Sign Out
+        // --- Sign Out ---
         window.handleSignOut = async () => {
             try {
                 await signOut(auth);
-                showMessage('Successfully signed out.', 'info');
+                showMessage('Signed out. Goodbye!', 'info');
             } catch (error) {
                 console.error("Sign out error:", error);
             }
@@ -233,17 +200,11 @@
         function showAuthScreen() {
             if (authScreen) authScreen.classList.remove('hidden');
             if (chatScreen) chatScreen.classList.add('hidden');
-            // Reset auth UI state
-            document.getElementById('password-input').classList.add('hidden');
-            document.getElementById('email-input').disabled = false;
-            document.getElementById('continue-button').textContent = 'Continue';
-            document.getElementById('email-status').innerHTML = 'Enter your email above.';
         }
 
         function showChatScreen() {
             if (authScreen) authScreen.classList.add('hidden');
             if (chatScreen) chatScreen.classList.remove('hidden');
-            // Start listening for messages when chat screen is shown
             startMessageListener();
         }
 
@@ -255,8 +216,9 @@
         function startMessageListener() {
             if (!db || !userProfile.uid || unsubscribeMessages) return;
 
-            // Use a public collection for group chat (shared by all users)
+            // Use a public collection for group chat
             const chatCollectionPath = `artifacts/${appId}/public/data/messages`;
+            // Order by timestamp to maintain chat order
             const q = query(collection(db, chatCollectionPath), orderBy('timestamp', 'asc'));
 
             unsubscribeMessages = onSnapshot(q, (snapshot) => {
@@ -267,7 +229,6 @@
                     if (change.type === "added") {
                         addMessageToUI(message, messageId);
                     }
-                    // Implement other change types (modified, removed) if needed
                 });
                 // Always scroll to the bottom when new messages arrive
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
@@ -316,10 +277,10 @@
             messageDiv.id = `msg-${messageId}`;
             messageDiv.className = `flex mb-4 ${isMe ? 'justify-end' : 'justify-start'}`;
 
-            // Determine bubble style and order
+            // Determine bubble style and order (simple black/white theme)
             const bubbleClasses = isMe 
-                ? 'bg-primary-blue text-white rounded-br-none' 
-                : 'bg-white/10 text-gray-200 rounded-tl-none';
+                ? 'bg-gray-800 text-white rounded-br-none' 
+                : 'bg-gray-900 text-white rounded-tl-none';
 
             // Format timestamp
             const timeString = message.timestamp ? new Date(message.timestamp.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Sending...';
@@ -329,18 +290,18 @@
                     <!-- User Avatar -->
                     <img class="w-8 h-8 rounded-full object-cover shadow-md mt-4 ${isMe ? 'ml-2' : 'mr-2'}" 
                          src="${message.userPhoto}" 
-                         onerror="this.onerror=null; this.src='https://placehold.co/150x150/805ad5/ffffff?text=U'" 
+                         onerror="this.onerror=null; this.src='https://placehold.co/150x150/111111/ffffff?text=U'" 
                          alt="${message.userName[0]}">
                     
                     <!-- Message Bubble -->
                     <div class="flex flex-col">
                         <!-- Sender Name -->
-                        <p class="text-xs ${isMe ? 'text-right text-gray-400 mr-2' : 'text-left text-secondary-purple ml-2'} font-semibold mb-0.5">
+                        <p class="text-xs ${isMe ? 'text-right text-gray-400 mr-2' : 'text-left text-gray-300 ml-2'} font-semibold mb-0.5">
                             ${isMe ? 'You' : message.userName}
                         </p>
                         <div class="py-2 px-4 rounded-xl shadow-lg ${bubbleClasses}">
                             <p class="text-sm break-words">${message.text}</p>
-                            <span class="block text-xs mt-1 ${isMe ? 'text-white/80' : 'text-gray-400'} text-right">${timeString}</span>
+                            <span class="block text-xs mt-1 text-gray-400 text-right">${timeString}</span>
                         </div>
                     </div>
                 </div>
@@ -358,7 +319,6 @@
                 const docSnap = await getDoc(userDocRef);
 
                 if (!docSnap.exists()) {
-                    // Create basic profile if it doesn't exist
                     await setDoc(userDocRef, {
                         email: user.email || 'N/A',
                         name: user.displayName || 'Guest',
@@ -367,7 +327,6 @@
                         lastLogin: serverTimestamp(),
                     });
                 } else {
-                    // Update last login
                     await setDoc(userDocRef, { lastLogin: serverTimestamp() }, { merge: true });
                 }
             } catch (error) {
@@ -399,86 +358,28 @@
             }, 4000);
         };
         
-        function handleAuthError(error, elementId) {
-            const errorElement = document.getElementById(elementId);
-            errorElement.textContent = '';
+        function handleAuthError(error) {
+            errorDisplay.textContent = '';
             let message = "An unknown error occurred.";
 
             switch (error.code) {
-                case 'auth/user-not-found':
-                    message = 'Account not found. Proceed to create a new one.';
-                    break;
-                case 'auth/wrong-password':
-                    message = 'Invalid password.';
-                    break;
-                case 'auth/email-already-in-use':
-                    message = 'Email already in use. Please sign in or use a different email.';
-                    break;
-                case 'auth/weak-password':
-                    message = 'Password must be at least 6 characters.';
-                    break;
                 case 'auth/popup-closed-by-user':
-                    message = 'Google sign-in window was closed.';
+                    message = 'Google sign-in was canceled.';
+                    break;
+                case 'auth/unauthorized-domain':
+                    message = 'Authorization blocked. Did you add fury.com to your Firebase Authorized Domains?';
                     break;
                 default:
                     message = `Auth Error: ${error.message}`;
                     console.error(error);
             }
-            errorElement.textContent = message;
+            errorDisplay.textContent = message;
         }
 
-        // --- AUTH SCREEN UI LOGIC ---
-
-        window.handleContinue = () => {
-            const emailInput = document.getElementById('email-input');
-            const passwordInput = document.getElementById('password-input');
-            const continueButton = document.getElementById('continue-button');
-            const emailStatus = document.getElementById('email-status');
-            const emailErrorEl = document.getElementById('email-error');
-
-            const email = emailInput.value.trim();
-            const password = passwordInput.value.trim();
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-            emailErrorEl.textContent = ''; 
-
-            if (!emailRegex.test(email)) {
-                emailStatus.innerHTML = '<span class="text-red-400">Email format is invalid.</span>';
-                return;
-            }
-            
-            // Step 1: Show password field
-            if (passwordInput.classList.contains('hidden')) {
-                emailInput.disabled = true;
-                emailStatus.innerHTML = '<span class="text-green-400">Email looks good. Enter password.</span>';
-                
-                // Show password field and change button text
-                passwordInput.classList.remove('hidden');
-                passwordInput.focus();
-                continueButton.textContent = 'Sign In / Sign Up';
-                
-            } else {
-                // Step 2: Sign In / Sign Up attempt
-                if (password.length < 6) {
-                    emailStatus.innerHTML = '<span class="text-red-400">Password must be at least 6 characters.</span>';
-                    return;
-                }
-                
-                // Call Firebase Auth function
-                window.handleEmailAuth(email, password);
-            }
-        };
-
-        // Allow pressing Enter key to continue/sign-in
+        // Allow pressing Enter key to send message
         window.checkKey = (event) => {
-            if (event.key === 'Enter') {
-                // If the message input is focused, send the message
-                if (document.activeElement.id === 'message-input') {
-                    window.sendMessage();
-                } else {
-                    // Otherwise, handle auth flow
-                    window.handleContinue();
-                }
+            if (event.key === 'Enter' && document.activeElement.id === 'message-input') {
+                window.sendMessage();
             }
         };
 
@@ -492,7 +393,8 @@
         <!-- Header -->
         <header class="bg-chat-bg p-4 flex justify-between items-center shadow-lg border-b border-white/10">
             <div>
-                <h1 class="main-title text-3xl font-extrabold">Squit! up Chat</h1>
+                <!-- FURY Title with Rainbow Gradient -->
+                <h1 class="main-title text-3xl font-extrabold">FURY</h1>
                 <p id="username-display" class="text-sm text-gray-400"></p>
             </div>
             <div class="flex items-center space-x-4">
@@ -506,18 +408,18 @@
 
         <!-- Messages Container -->
         <div id="messages-container" class="flex-grow p-4 overflow-y-auto bg-chat-bg">
-            <p class="text-center text-gray-500 pt-10">Welcome to the Squit! up public chat. Start a conversation!</p>
+            <p class="text-center text-gray-500 pt-10">Welcome to the FURY public chat. Start a conversation!</p>
         </div>
 
         <!-- Message Input -->
         <div class="p-4 bg-chat-bg border-t border-white/10">
             <div class="flex items-center space-x-3">
                 <input type="text" id="message-input" onkeydown="checkKey(event)" placeholder="Type a message..."
-                       class="flex-grow px-5 py-3 rounded-xl bg-white/10 text-white border-transparent focus:border-secondary-purple focus:ring-2 focus:ring-secondary-purple outline-none transition duration-150 ease-in-out placeholder-gray-400" />
+                       class="flex-grow px-5 py-3 rounded-xl bg-gray-800 text-white border-transparent focus:border-gray-500 focus:ring-2 focus:ring-gray-600 outline-none transition duration-150 ease-in-out placeholder-gray-400" />
                 
                 <button onclick="sendMessage()"
-                        class="button-gradient p-3 rounded-xl text-white shadow-lg flex-shrink-0">
-                    <!-- Send Icon SVG (Lucide-react equivalent) -->
+                        class="bg-white text-black hover:bg-gray-200 p-3 rounded-xl shadow-lg flex-shrink-0 transition duration-150">
+                    <!-- Send Icon SVG -->
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6">
                         <line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
                     </svg>
@@ -533,63 +435,34 @@
     <div id="auth-screen" class="w-full max-w-sm sm:max-w-md text-center">
         <div class="glass-card p-8 md:p-10 rounded-3xl">
 
-            <h1 class="main-title text-5xl md:text-6xl font-extrabold mb-2 leading-none">Squit! up</h1>
-            <p class="text-gray-300 mb-8 text-lg">Connect with friends around the world</p>
+            <h1 class="main-title text-5xl md:text-6xl font-extrabold mb-2 leading-none">FURY</h1>
+            <p class="text-gray-300 mb-8 text-lg">Connect with friends instantly.</p>
 
-            <!-- Chat Icon Placeholder -->
-            <div class="mx-auto mb-6 w-20 h-20 rounded-full bg-primary-blue flex justify-center items-center shadow-lg"
-                 style="background: linear-gradient(135deg, #ff80b3 0%, #805ad5 100%);">
+            <!-- Chat Icon Placeholder (White on dark background) -->
+            <div class="mx-auto mb-6 w-20 h-20 rounded-full bg-gray-800 flex justify-center items-center shadow-lg border border-white/20">
                  <!-- Simple SVG Chat Icon -->
                  <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.677a9.986 9.986 0 01-1.253-5.591c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
             </div>
 
-            <h2 class="text-3xl font-semibold text-white mb-6">Welcome to Squit! up</h2>
-            <p class="text-gray-400 mb-8">Start chatting with friends instantly!</p>
+            <h2 class="text-3xl font-semibold text-white mb-6">Welcome to FURY</h2>
+            <p class="text-gray-400 mb-8">Please sign in with Google to continue.</p>
 
-            <!-- Form Section -->
-            <div>
-                <!-- Email Input -->
-                <input type="email" id="email-input" onkeydown="checkKey(event)" placeholder="Enter your Email"
-                       class="w-full px-5 py-3 mb-2 rounded-xl bg-white/10 text-white border border-transparent focus:border-secondary-purple focus:ring-2 focus:ring-secondary-purple outline-none transition duration-150 ease-in-out placeholder-gray-400"
-                       />
+            <!-- Error Message Display -->
+            <p id="error-display" class="text-center text-sm h-5 mb-4 text-red-400"></p>
 
-                <!-- Password Input (Initially Hidden) -->
-                <input type="password" id="password-input" onkeydown="checkKey(event)" placeholder="Enter your Password (min 6 chars)"
-                       class="w-full px-5 py-3 mb-4 rounded-xl bg-white/10 text-white border border-transparent focus:border-secondary-purple focus:ring-2 focus:ring-secondary-purple outline-none transition duration-150 ease-in-out placeholder-gray-400 hidden"
-                       />
 
-                <!-- Email Status/Error Message -->
-                <p id="email-status" class="text-left text-sm h-5 mb-4 text-gray-400">
-                    Enter your email above.
-                </p>
-                <p id="email-error" class="text-left text-sm h-5 mb-4 text-red-400"></p>
+            <!-- Sign In with Google Button -->
+            <button onclick="handleGoogleSignIn()"
+                    class="button-google w-full text-white font-bold py-3 rounded-xl shadow-lg hover:shadow-xl transform duration-150 ease-in-out flex items-center justify-center">
+                <!-- Google Icon SVG -->
+                <svg class="w-5 h-5 mr-2" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M43.61 20.083H24V28.98H35.48c-0.55 3.32-2.31 5.92-5.48 7.63v5.82h7.49c4.39-3.95 6.89-9.87 6.89-16.75 0-1.15-0.1-2.26-0.3-3.32z" fill="#FFFFFF"/><path d="M24 44c6.33 0 11.66-2.11 15.54-5.74l-7.49-5.82c-2.07 1.39-4.71 2.2-8.05 2.2-6.19 0-11.41-3.15-13.43-7.83H2.9v5.99c4.09 7.97 12.3 13.5 21.1 13.5z" fill="#FFFFFF"/><path d="M10.57 28.16c-0.95-2.7-0.95-5.59 0-8.29V13.88H2.9c-2.73 5.37-2.73 11.69 0 17.06l7.67-4.14z" fill="#FFFFFF"/><path d="M24 10.15c3.48 0 6.62 1.2 9.09 3.49l6.5-6.5c-4.47-4.14-10.42-6.54-15.59-6.54-8.8 0-17.01 5.53-21.1 13.5l7.67 4.14c2.02-4.68 7.24-7.83 13.43-7.83z" fill="#FFFFFF"/></svg>
+                Sign in with Google
+            </button>
 
-                <!-- Continue/Sign In Button -->
-                <button id="continue-button" onclick="handleContinue()"
-                        class="button-gradient w-full text-white font-bold py-3 rounded-xl shadow-lg hover:shadow-xl transform duration-150 ease-in-out mb-4">
-                    Continue
-                </button>
-
-                <!-- OR separator -->
-                <div class="flex items-center my-4">
-                    <div class="flex-grow border-t border-gray-600"></div>
-                    <span class="flex-shrink mx-4 text-gray-400">OR</span>
-                    <div class="flex-grow border-t border-gray-600"></div>
-                </div>
-
-                <!-- Sign In with Google Button -->
-                <button onclick="handleGoogleSignIn()"
-                        class="button-google w-full text-white font-bold py-3 rounded-xl shadow-lg hover:shadow-xl transform duration-150 ease-in-out flex items-center justify-center">
-                    <!-- Google Icon SVG -->
-                    <svg class="w-5 h-5 mr-2" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M43.61 20.083H24V28.98H35.48c-0.55 3.32-2.31 5.92-5.48 7.63v5.82h7.49c4.39-3.95 6.89-9.87 6.89-16.75 0-1.15-0.1-2.26-0.3-3.32z" fill="#FFFFFF"/><path d="M24 44c6.33 0 11.66-2.11 15.54-5.74l-7.49-5.82c-2.07 1.39-4.71 2.2-8.05 2.2-6.19 0-11.41-3.15-13.43-7.83H2.9v5.99c4.09 7.97 12.3 13.5 21.1 13.5z" fill="#FFFFFF"/><path d="M10.57 28.16c-0.95-2.7-0.95-5.59 0-8.29V13.88H2.9c-2.73 5.37-2.73 11.69 0 17.06l7.67-4.14z" fill="#FFFFFF"/><path d="M24 10.15c3.48 0 6.62 1.2 9.09 3.49l6.5-6.5c-4.47-4.14-10.42-6.54-15.59-6.54-8.8 0-17.01 5.53-21.1 13.5l7.67 4.14c2.02-4.68 7.24-7.83 13.43-7.83z" fill="#FFFFFF"/></svg>
-                    Sign in with Google
-                </button>
-
-                <!-- Footer Note -->
-                <p class="text-gray-500 text-xs mt-6">
-                    By signing in, you agree to our Terms of Service and Privacy Policy
-                </p>
-            </div>
+            <!-- Footer Note -->
+            <p class="text-gray-600 text-xs mt-6">
+                By signing in, you agree to our Terms of Service.
+            </p>
         </div>
     </div>
 
