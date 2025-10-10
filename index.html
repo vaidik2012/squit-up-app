@@ -1,525 +1,421 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, fetchSignInMethodsForEmail } from 'firebase/auth';
-import { getFirestore, doc, onSnapshot, collection, query, where, addDoc, serverTimestamp, getDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc, setDoc } from 'firebase/firestore';
-
-// --- GLOBAL VARIABLES (IMPORTANT: REPLACE THESE PLACEHOLDERS) ---
-// These variables are provided by the canvas environment, but if undefined, use fallbacks.
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-// Ensure your Firebase configuration has the necessary keys.
-if (!firebaseConfig.apiKey) {
-    console.error("CRITICAL ERROR: Firebase config missing or incomplete. Check the FIREBASE_CONFIG_PLACEHOLDER block in the code.");
-}
-
-// --- FIREBASE INITIALIZATION AND HOOKS ---
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-
-// Helper function for exponential backoff on API calls
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-// Custom hook for Firebase Authentication and State
-const useAuth = () => {
-    const [user, setUser] = useState(null);
-    const [authReady, setAuthReady] = useState(false);
-    const [userId, setUserId] = useState(null);
-    const [isAuthReady, setIsAuthReady] = useState(false);
-    
-    // Auth Listener and Initial Sign-in
-    useEffect(() => {
-        let unsubscribe = () => {};
-
-        const initializeAuth = async () => {
-            try {
-                // If a custom token is available, use it for direct sign-in.
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    // Otherwise, sign in anonymously (required for Firestore rules setup).
-                    await signInAnonymously(auth);
-                }
-
-                unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-                    if (currentUser) {
-                        setUser(currentUser);
-                        setUserId(currentUser.uid);
-                        
-                        // --- CRITICAL FIX: Ensure User Profile Exists ---
-                        await ensureUserProfile(currentUser.uid);
-                        
-                        setIsAuthReady(true);
-                        setAuthReady(true); // Redundant but kept for safety
-                    } else {
-                        setUser(null);
-                        setUserId(null);
-                        setIsAuthReady(true);
-                        setAuthReady(true); // Authentication state is known (logged out)
-                    }
-                });
-            } catch (error) {
-                console.error("Firebase authentication failed on startup:", error.message);
-                // Fallback: Still mark auth as ready to allow UI to proceed (maybe to sign-in page)
-                setAuthReady(true);
-                setIsAuthReady(true);
-            }
-        };
-
-        initializeAuth();
-        
-        return () => unsubscribe();
-    }, []);
-
-    // Function to ensure the user's profile document exists
-    const ensureUserProfile = async (uid) => {
-        const userDocRef = doc(db, 'artifacts', appId, 'users', uid, 'user_profile', 'data');
-        try {
-            const docSnap = await getDoc(userDocRef);
-            if (!docSnap.exists()) {
-                // Document does not exist, create it with default data
-                await setDoc(userDocRef, {
-                    userId: uid,
-                    displayName: `user_${uid.substring(0, 8)}`,
-                    onlineStatus: 'online',
-                    createdAt: serverTimestamp(),
-                    // Add other necessary default profile fields here
-                });
-                console.log(`User profile created for: ${uid}`);
-            }
-        } catch (error) {
-            console.error("Error ensuring user profile document:", error.message);
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FURY - Realtime Chat</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            overflow: hidden; /* Prevent body scroll */
         }
-    };
-
-    const signInWithGoogle = async () => {
-        const provider = new GoogleAuthProvider();
-        try {
-            await signInWithPopup(auth, provider);
-        } catch (error) {
-            console.error("Google Sign-In failed:", error.message);
-            // Handle specific errors like 'auth/cancelled-popup-request' or 'auth/popup-closed-by-user'
-            if (error.code === 'auth/account-exists-with-different-credential') {
-                const pendingCred = error.credential;
-                const email = error.email;
-                const methods = await fetchSignInMethodsForEmail(auth, email);
-                // This is a complex flow requiring linking accounts, often simplified in a basic app.
-                console.error("Account exists with a different credential:", methods);
-                alert("This email is already associated with a different sign-in method. Please use that method.");
-            } else {
-                alert(`Google Sign-In failed. Please ensure Firebase Auth is configured correctly. Error: ${error.message}`);
-            }
+        /* Custom scrollbar for chat box */
+        #messages-container::-webkit-scrollbar {
+            width: 8px;
         }
-    };
-
-    const handleSignOut = async () => {
-        try {
-            await signOut(auth);
-            // Optionally, sign in anonymously after sign out if needed for continued access
-            // await signInAnonymously(auth); 
-        } catch (error) {
-            console.error("Error during sign out:", error);
+        #messages-container::-webkit-scrollbar-thumb {
+            background-color: #4a5568; /* gray-600 */
+            border-radius: 4px;
         }
-    };
-
-    return { user, userId, authReady: isAuthReady, signInWithGoogle, handleSignOut, db, auth };
-};
-
-// --- FRIEND SYSTEM HOOK ---
-
-const useFriends = (db, currentUserId, isAuthReady) => {
-    const [friends, setFriends] = useState([]);
-    const [outgoingRequests, setOutgoingRequests] = useState([]);
-    const [incomingRequests, setIncomingRequests] = useState([]);
-
-    useEffect(() => {
-        if (!isAuthReady || !currentUserId) {
-            setFriends([]);
-            setOutgoingRequests([]);
-            setIncomingRequests([]);
-            return;
+        #messages-container::-webkit-scrollbar-track {
+            background-color: #1f2937; /* gray-800 */
         }
+    </style>
+</head>
+<body class="bg-gray-900 h-screen">
 
-        const friendRef = collection(db, 'artifacts', appId, 'users', currentUserId, 'friends');
-        const outgoingRef = collection(db, 'artifacts', appId, 'users', currentUserId, 'outgoing_requests');
-        const incomingRef = collection(db, 'artifacts', appId, 'users', currentUserId, 'incoming_requests');
-
-        const unsubFriends = onSnapshot(friendRef, (snapshot) => {
-            const friendList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setFriends(friendList);
-        }, (error) => {
-            console.error("Error listening to friends list:", error.message);
-        });
-
-        const unsubOutgoing = onSnapshot(outgoingRef, (snapshot) => {
-            const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setOutgoingRequests(requests);
-        }, (error) => {
-            console.error("Error listening to outgoing requests:", error.message);
-        });
-
-        const unsubIncoming = onSnapshot(incomingRef, (snapshot) => {
-            const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setIncomingRequests(requests);
-        }, (error) => {
-            console.error("Error listening to incoming requests:", error.message);
-        });
-
-        return () => {
-            unsubFriends();
-            unsubOutgoing();
-            unsubIncoming();
-        };
-    }, [db, currentUserId, isAuthReady]);
-
-    return { friends, outgoingRequests, incomingRequests };
-};
-
-
-// --- CHAT SYSTEM HOOK ---
-
-const useChatSystem = (db, currentUserId, isAuthReady) => {
-    const [messages, setMessages] = useState([]);
-    const [selectedChatId, setSelectedChatId] = useState(null);
-    const [chatRefs, setChatRefs] = useState([]); // List of chat room references (for DM and Global)
-
-    // Global Chat Room Reference
-    const globalChatRef = useMemo(() => {
-        if (!db) return null;
-        return doc(db, 'artifacts', appId, 'public', 'data', 'chats', 'global_fury_chat');
-    }, [db]);
-
-    // 1. Listen for Global Chat messages
-    useEffect(() => {
-        if (!isAuthReady || !db) {
-            setMessages([]);
-            return;
-        }
-
-        // Query for messages ordered by timestamp
-        const messagesRef = collection(globalChatRef, 'messages');
-        const q = query(messagesRef, where('type', '==', 'text')); // Only fetch text messages for now
-
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const msgs = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-                timestamp: doc.data().timestamp?.toDate() || new Date() // Convert timestamp to Date object
-            }));
-            // Sort in memory to avoid needing Firestore index for 'timestamp'
-            msgs.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-            setMessages(msgs);
-        }, (error) => {
-            console.error("Error listening to global chat messages:", error.message);
-        });
-
-        // Set the global chat as the selected chat by default
-        setSelectedChatId(globalChatRef.id);
-        setChatRefs([{ id: globalChatRef.id, name: 'Global FURY Chat' }]);
-        
-        return () => unsubscribe();
-    }, [db, isAuthReady, globalChatRef]);
-
-    // Function to send a message
-    const sendMessage = async (text) => {
-        if (!currentUserId || !selectedChatId || !text.trim()) return;
-
-        try {
-            // Reference to the messages sub-collection of the currently selected chat room
-            const messagesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'chats', selectedChatId, 'messages');
-            
-            await addDoc(messagesCollectionRef, {
-                senderId: currentUserId,
-                text: text.trim(),
-                timestamp: serverTimestamp(),
-                type: 'text', // Message type
-                // Add more fields if needed (e.g., sender display name)
-            });
-            return true;
-        } catch (error) {
-            console.error("Error sending message:", error.message);
-            return false;
-        }
-    };
-
-    return { 
-        messages, 
-        selectedChatId, 
-        setSelectedChatId, 
-        sendMessage,
-        chatRefs // The list of available chats (currently only Global)
-    };
-};
-
-
-// --- UI COMPONENTS ---
-
-// Custom Modal Component
-const Modal = ({ title, message, children, onClose }) => (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-70 backdrop-blur-sm">
-        <div className="bg-gray-800 p-6 md:p-8 rounded-xl shadow-2xl w-full max-w-md border border-red-500/30">
-            {title && <h3 className="text-xl font-bold text-red-400 mb-4">{title}</h3>}
-            <p className="text-gray-300 mb-6">{message}</p>
-            {children}
-            {onClose && (
-                <button
-                    onClick={onClose}
-                    className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3 rounded-xl transition duration-200 shadow-md mt-4"
-                >
-                    Close
-                </button>
-            )}
-        </div>
+    <!-- Main application container -->
+    <div id="app-container" class="h-full">
+        <!-- Content will be injected here -->
     </div>
-);
 
+    <!-- Firebase and Application Logic -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot, collection, query, where, addDoc, serverTimestamp, getDoc, setDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-// Direct Chat (Main Interface) Component
-const DirectChat = ({ auth, db, user, userId, handleSignOut }) => {
-    const [currentUserProfile, setCurrentUserProfile] = useState(null);
-    const [loadingProfile, setLoadingProfile] = useState(true);
+        // Global Firebase instances
+        let app, db, auth;
+        let userId = null;
+        let currentUserProfile = null; // Store fetched user profile data
 
-    // Fetch User Profile
-    useEffect(() => {
-        if (!userId) {
-            setCurrentUserProfile(null);
-            setLoadingProfile(false);
-            return;
-        }
-
-        const userDocRef = doc(db, 'artifacts', appId, 'users', userId, 'user_profile', 'data');
-        const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
-            if (docSnap.exists()) {
-                setCurrentUserProfile(docSnap.data());
-            } else {
-                console.warn(`User profile document not found for ${userId}. This should have been created by useAuth.`);
-            }
-            setLoadingProfile(false);
-        }, (error) => {
-            console.error("Error fetching user profile:", error.message);
-            setLoadingProfile(false);
-        });
-
-        return () => unsubscribe();
-    }, [db, userId]);
-
-
-    const { messages, sendMessage, chatRefs } = useChatSystem(db, userId, !loadingProfile);
-    // Note: loadingProfile is used as the 'isAuthReady' flag for chat system.
-
-    const [messageText, setMessageText] = useState('');
-    const [modal, setModal] = useState(null); // { title: '', message: '' }
-
-    const handleSendMessage = async (e) => {
-        e.preventDefault();
-        if (!messageText.trim()) return;
-
-        const success = await sendMessage(messageText);
-        if (success) {
-            setMessageText('');
-        } else {
-            setModal({ title: 'Send Failed', message: 'Could not send message. Please try again.' });
-        }
-    };
-
-    const ChatMessage = ({ message }) => {
-        // Use currentUserProfile for sender display info
-        const isCurrentUser = message.senderId === userId;
-        const senderDisplay = currentUserProfile && isCurrentUser 
-            ? 'You' 
-            : message.senderId.substring(0, 8); // Fallback to truncated ID
-
-        const bubbleClass = isCurrentUser
-            ? 'bg-indigo-500 text-white self-end rounded-bl-xl rounded-t-xl'
-            : 'bg-gray-700 text-gray-200 self-start rounded-br-xl rounded-t-xl';
+        // --- GLOBAL VARIABLES (Provided by environment) ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         
-        const timestampDisplay = message.timestamp instanceof Date 
-            ? message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
-            : '...';
+        // --- UTILITY FUNCTIONS ---
 
-        return (
-            <div className={`flex flex-col mb-4 max-w-xs md:max-w-md ${isCurrentUser ? 'items-end' : 'items-start'}`}>
-                <div className="text-xs text-gray-400 mb-1 px-3">
-                    {senderDisplay}
-                </div>
-                <div className={`p-3 shadow-md ${bubbleClass}`}>
-                    {message.text}
-                    <span className="ml-4 text-xs opacity-70 block text-right">{timestampDisplay}</span>
-                </div>
-            </div>
-        );
-    };
-
-    if (loadingProfile) {
-        return (
-            <div className="h-screen flex items-center justify-center text-white bg-gray-900">
-                <div className="flex flex-col items-center">
-                    <div className="w-12 h-12 border-4 border-t-4 border-indigo-500 border-opacity-25 rounded-full animate-spin"></div>
-                    <p className="mt-4 text-lg text-gray-400">Loading FURY...</p>
-                </div>
-            </div>
-        );
-    }
-    
-    // Safety check: if profile loading is complete but no profile found (highly unlikely now)
-    if (!currentUserProfile) {
-        return (
-             <div className="h-screen flex items-center justify-center text-red-500 bg-gray-900">
-                <Modal 
-                    title="Profile Error" 
-                    message="User data is missing or could not be loaded. Please try signing out and signing back in."
-                    onClose={() => setModal(null)}
-                >
-                    <button
-                        onClick={handleSignOut}
-                        className="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-semibold py-3 rounded-xl transition duration-200 shadow-md mt-4"
-                    >
-                        Sign Out
-                    </button>
-                </Modal>
-             </div>
-        );
-    }
-
-
-    const userDisplayId = currentUserProfile?.displayName || `user_${userId.substring(0, 8)}`;
-    const onlineStatus = currentUserProfile?.onlineStatus || 'offline';
-    const statusColor = onlineStatus === 'online' ? 'bg-green-500' : 'bg-gray-500';
-
-    return (
-        <div className="flex h-screen text-white bg-gray-900 antialiased">
-            {modal && <Modal {...modal} onClose={() => setModal(null)} />}
-
-            {/* Sidebar (Left) */}
-            <div className="w-64 bg-gray-800 flex flex-col border-r border-gray-700">
-                <div className="p-4 border-b border-gray-700 flex items-center justify-between">
-                    <h1 className="text-xl font-extrabold text-white">FURY</h1>
-                    <button onClick={handleSignOut} className="text-gray-400 hover:text-white transition duration-150">
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
-                    </button>
-                </div>
-                
-                {/* Channels / Chats List */}
-                <nav className="flex-grow p-4 space-y-4 overflow-y-auto">
-                    <div>
-                        <h2 className="text-xs font-semibold uppercase text-gray-400 mb-2">Global Channels</h2>
-                        <ul className="space-y-1">
-                            {chatRefs.map(chat => (
-                                <li key={chat.id}>
-                                    <button 
-                                        className={`w-full text-left p-2 rounded-lg transition duration-150 ${chat.id === chatRefs[0].id ? 'bg-indigo-600 text-white' : 'text-gray-300 hover:bg-gray-700'}`}
-                                    >
-                                        #{chat.name.toLowerCase().replace(/\s/g, '-')}{' '}
-                                    </button>
-                                </li>
-                            ))}
-                        </ul>
-                    </div>
-                </nav>
-
-                {/* User Info Bar */}
-                <div className="p-4 bg-gray-700 border-t border-gray-700 flex items-center">
-                    <div className={`w-3 h-3 rounded-full mr-3 ${statusColor} border-2 border-gray-700`}></div>
-                    <div className="flex flex-col">
-                        <span className="text-sm font-semibold">{userDisplayId}</span>
-                        <span className="text-xs text-gray-400 capitalize">{onlineStatus}</span>
+        /**
+         * Renders the loading spinner into the app container.
+         */
+        function renderLoading(message = "Connecting...") {
+            const container = document.getElementById('app-container');
+            container.innerHTML = `
+                <div class="h-full flex items-center justify-center text-white bg-gray-900">
+                    <div class="flex flex-col items-center">
+                        <div class="w-12 h-12 border-4 border-t-4 border-indigo-500 border-opacity-25 rounded-full animate-spin"></div>
+                        <p class="mt-4 text-lg text-gray-400">${message}</p>
                     </div>
                 </div>
-            </div>
-
-            {/* Chat Area (Right) */}
-            <div className="flex-grow flex flex-col">
-                {/* Header */}
-                <header className="p-4 border-b border-gray-700 bg-gray-800 flex items-center">
-                    <h2 className="text-xl font-bold"># {chatRefs[0]?.name || 'Chat'}</h2>
-                </header>
-
-                {/* Messages Body */}
-                <div className="flex-grow p-4 overflow-y-auto space-y-3 flex flex-col-reverse" id="messages-container">
-                    {messages.length === 0 ? (
-                        <div className="text-center text-gray-500 py-10">
-                            Say hello! Be the first to send a message to **{chatRefs[0]?.name || 'Global Chat'}**.
+            `;
+        }
+        
+        /**
+         * Renders the Sign-In screen.
+         */
+        function renderSignIn() {
+            const container = document.getElementById('app-container');
+            container.innerHTML = `
+                <div class="h-full flex items-center justify-center bg-gray-900">
+                    <div class="text-center p-8 bg-gray-800 rounded-2xl shadow-2xl max-w-sm w-full border border-gray-700">
+                        <div class="flex justify-center mb-6">
+                            <div class="p-3 bg-red-500 rounded-full">
+                                <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.111A9.502 9.502 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
+                            </div>
                         </div>
-                    ) : (
-                        messages.slice().reverse().map(msg => (
-                            <ChatMessage key={msg.id} message={msg} />
-                        ))
-                    )}
-                </div>
-
-                {/* Input Area */}
-                <form onSubmit={handleSendMessage} className="p-4 border-t border-gray-700 bg-gray-800">
-                    <div className="flex items-center space-x-3">
-                        <input
-                            type="text"
-                            value={messageText}
-                            onChange={(e) => setMessageText(e.target.value)}
-                            placeholder={`Message #${chatRefs[0]?.name.toLowerCase().replace(/\s/g, '-')}`}
-                            className="flex-grow bg-gray-700 text-white p-3 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none transition duration-150"
-                            disabled={!userId}
-                        />
-                        <button
-                            type="submit"
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white p-3 rounded-xl transition duration-150 shadow-lg disabled:opacity-50"
-                            disabled={!messageText.trim() || !userId}
-                        >
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+                        <h1 class="text-3xl font-extrabold text-red-500 mb-2">FURY</h1>
+                        <p class="text-gray-400 mb-8">Connect with friends instantly.</p>
+                        <h2 class="text-2xl font-semibold text-white mb-4">Welcome to FURY</h2>
+                        <p class="text-gray-500 mb-6">Please sign in with Google to continue.</p>
+                        <button id="google-signin-btn" class="w-full flex items-center justify-center bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-xl transition duration-200 shadow-lg shadow-red-600/30">
+                            <svg class="w-5 h-5 mr-3" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><path fill="#FFC107" d="M43.61 20.08v3.42H24V20.08h19.61z"/><path fill="#FF3D00" d="M6.3 33.15c.61 1.77 1.63 3.32 2.87 4.6l5.77-4.47c-.77-.48-1.44-1.07-1.95-1.78H6.3z"/><path fill="#4CAF50" d="M43.61 24.5v3.42H24v-3.42h19.61z"/><path fill="#1976D2" d="M12.94 37.75c3.08 3.52 7.7 5.75 12.87 5.75s9.79-2.23 12.87-5.75l-5.77-4.47c-2.34 2.1-5.32 3.42-9.1 3.42s-6.76-1.32-9.1-3.42L12.94 37.75z"/><path fill="#F44336" d="M24 8c-4.99 0-9.62 2.11-12.87 5.75l5.77 4.47c2.34-2.1 5.32-3.42 9.1-3.42s6.76 1.32 9.1 3.42l5.77-4.47C33.62 10.11 28.99 8 24 8z"/></svg>
+                            Sign in with Google
                         </button>
+                        <p class="text-xs text-gray-600 mt-4">By signing in, you agree to our <a href="#" class="text-red-500 hover:underline">Terms of Service</a>.</p>
                     </div>
-                </form>
-            </div>
-        </div>
-    );
-};
-
-
-// --- MAIN APPLICATION COMPONENT ---
-const App = () => {
-    const { user, userId, authReady, signInWithGoogle, handleSignOut, db, auth } = useAuth();
-    
-    if (!authReady) {
-        // Initial loading state while Firebase auth is setting up
-        return (
-            <div className="h-screen flex items-center justify-center text-white bg-gray-900">
-                <div className="flex flex-col items-center">
-                    <div className="w-12 h-12 border-4 border-t-4 border-indigo-500 border-opacity-25 rounded-full animate-spin"></div>
-                    <p className="mt-4 text-lg text-gray-400">Connecting...</p>
                 </div>
-            </div>
-        );
-    }
+            `;
+            document.getElementById('google-signin-btn').addEventListener('click', signInWithGoogle);
+        }
 
-    if (!user) {
-        // Sign-in page
-        return (
-            <div className="h-screen flex items-center justify-center bg-gray-900">
-                <div className="text-center p-8 bg-gray-800 rounded-2xl shadow-2xl max-w-sm w-full border border-gray-700">
-                    <div className="flex justify-center mb-6">
-                        <div className="p-3 bg-red-500 rounded-full">
-                            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.111A9.502 9.502 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
+        /**
+         * Google Sign-In handler.
+         */
+        async function signInWithGoogle() {
+            try {
+                const provider = new GoogleAuthProvider();
+                await signInWithPopup(auth, provider);
+            } catch (error) {
+                console.error("Google Sign-In failed:", error);
+                alert('Sign-in failed. Check the console for details.');
+            }
+        }
+
+        /**
+         * Signs out the current user.
+         */
+        async function handleSignOut() {
+            try {
+                await signOut(auth);
+                // Sign in anonymously immediately after sign out for continued Canvas access
+                await signInAnonymously(auth); 
+            } catch (error) {
+                console.error("Error during sign out:", error);
+            }
+        }
+
+        // --- CRITICAL FIX FUNCTION ---
+
+        /**
+         * Checks if the user's profile document exists and creates it if missing.
+         * @param {string} uid The current user ID.
+         */
+        async function ensureUserProfileExists(uid) {
+            const userDocRef = doc(db, 'artifacts', appId, 'users', uid, 'user_profile', 'data');
+            try {
+                const docSnap = await getDoc(userDocRef);
+                if (!docSnap.exists()) {
+                    // Document does not exist, CREATE IT. This is the fix for the infinite loading.
+                    await setDoc(userDocRef, {
+                        userId: uid,
+                        displayName: `user_${uid.substring(0, 8)}`,
+                        onlineStatus: 'online',
+                        createdAt: serverTimestamp(),
+                    });
+                    console.log(`User profile created for: ${uid}`);
+                }
+            } catch (error) {
+                console.error("Error ensuring user profile document:", error.message);
+                // Log the error but continue. The onSnapshot listener below will pick up the new doc.
+            }
+        }
+
+        // --- MAIN APP RENDER & LOGIC ---
+
+        /**
+         * Listens to the global chat for messages and updates the UI.
+         */
+        function startChatListeners() {
+            if (!userId) return;
+
+            // 1. Listen for Global Chat messages
+            const globalChatRef = doc(db, 'artifacts', appId, 'public', 'data', 'chats', 'global_fury_chat');
+            const messagesRef = collection(globalChatRef, 'messages');
+            
+            // Note: We avoid orderBy here to prevent required index issues, and sort in memory.
+            const q = query(messagesRef);
+
+            onSnapshot(q, (snapshot) => {
+                const msgs = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data(),
+                    timestamp: doc.data().timestamp?.toDate() || new Date()
+                }));
+
+                // Sort in memory
+                msgs.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+                renderMessages(msgs);
+            }, (error) => {
+                console.error("Error listening to global chat messages:", error.message);
+            });
+        }
+        
+        /**
+         * Renders all messages into the chat body.
+         * @param {Array<Object>} messages - Array of message objects.
+         */
+        function renderMessages(messages) {
+            const container = document.getElementById('messages-container');
+            if (!container) return;
+            
+            container.innerHTML = '';
+            
+            if (messages.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center text-gray-500 py-10 flex-grow flex items-center justify-center">
+                        Say hello! Be the first to send a message to **#global-fury-chat**.
+                    </div>
+                `;
+                return;
+            }
+
+            // Iterate in reverse to append to the top (which is reversed in CSS for scroll-to-bottom)
+            messages.slice().reverse().forEach(message => {
+                const isCurrentUser = message.senderId === userId;
+                const senderDisplay = currentUserProfile && isCurrentUser 
+                    ? 'You' 
+                    : message.senderId.substring(0, 8); 
+
+                const bubbleClass = isCurrentUser
+                    ? 'bg-indigo-500 text-white self-end rounded-bl-xl rounded-t-xl'
+                    : 'bg-gray-700 text-gray-200 self-start rounded-br-xl rounded-t-xl';
+                
+                const timestampDisplay = message.timestamp instanceof Date 
+                    ? message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+                    : '...';
+
+                const messageHTML = `
+                    <div class="flex flex-col mb-4 max-w-xs md:max-w-md ${isCurrentUser ? 'items-end' : 'items-start'}">
+                        <div class="text-xs text-gray-400 mb-1 px-3">
+                            ${senderDisplay}
+                        </div>
+                        <div class="p-3 shadow-md ${bubbleClass}">
+                            ${message.text}
+                            <span class="ml-4 text-xs opacity-70 block text-right mt-1">${timestampDisplay}</span>
                         </div>
                     </div>
-                    <h1 className="text-3xl font-extrabold text-red-500 mb-2">FURY</h1>
-                    <p className="text-gray-400 mb-8">Connect with friends instantly.</p>
-                    <h2 className="text-2xl font-semibold text-white mb-4">Welcome to FURY</h2>
-                    <p className="text-gray-500 mb-6">Please sign in with Google to continue.</p>
-                    <button
-                        onClick={signInWithGoogle}
-                        className="w-full flex items-center justify-center bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-xl transition duration-200 shadow-lg shadow-red-600/30"
-                    >
-                        <svg className="w-5 h-5 mr-3" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><path fill="#FFC107" d="M43.61 20.08v3.42H24V20.08h19.61z"/><path fill="#FF3D00" d="M6.3 33.15c.61 1.77 1.63 3.32 2.87 4.6l5.77-4.47c-.77-.48-1.44-1.07-1.95-1.78H6.3z"/><path fill="#4CAF50" d="M43.61 24.5v3.42H24v-3.42h19.61z"/><path fill="#1976D2" d="M12.94 37.75c3.08 3.52 7.7 5.75 12.87 5.75s9.79-2.23 12.87-5.75l-5.77-4.47c-2.34 2.1-5.32 3.42-9.1 3.42s-6.76-1.32-9.1-3.42L12.94 37.75z"/><path fill="#F44336" d="M24 8c-4.99 0-9.62 2.11-12.87 5.75l5.77 4.47c2.34-2.1 5.32-3.42 9.1-3.42s6.76 1.32 9.1 3.42l5.77-4.47C33.62 10.11 28.99 8 24 8z"/></svg>
-                        Sign in with Google
-                    </button>
-                    <p className="text-xs text-gray-600 mt-4">By signing in, you agree to our <a href="#" className="text-red-500 hover:underline">Terms of Service</a>.</p>
+                `;
+                container.innerHTML += messageHTML;
+            });
+            // Auto-scroll to the bottom (since we used flex-col-reverse)
+            container.scrollTop = container.scrollHeight;
+        }
+
+        /**
+         * Sends a message to the global chat room.
+         */
+        async function sendMessage(text) {
+            if (!userId || !text.trim()) return;
+
+            try {
+                const globalChatRef = doc(db, 'artifacts', appId, 'public', 'data', 'chats', 'global_fury_chat');
+                const messagesCollectionRef = collection(globalChatRef, 'messages');
+                
+                await addDoc(messagesCollectionRef, {
+                    senderId: userId,
+                    text: text.trim(),
+                    timestamp: serverTimestamp(),
+                    type: 'text',
+                });
+                document.getElementById('message-input').value = '';
+            } catch (error) {
+                console.error("Error sending message:", error.message);
+            }
+        }
+
+
+        /**
+         * Renders the main chat UI after successful login and profile load.
+         */
+        function renderChatUI() {
+            const userDisplayId = currentUserProfile?.displayName || `user_${userId.substring(0, 8)}`;
+            const onlineStatus = currentUserProfile?.onlineStatus || 'offline';
+            const statusColor = onlineStatus === 'online' ? 'bg-green-500' : 'bg-gray-500';
+
+            const container = document.getElementById('app-container');
+            container.innerHTML = `
+                <div class="flex h-full text-white bg-gray-900 antialiased">
+                    
+                    <!-- Sidebar (Left) -->
+                    <div class="w-64 bg-gray-800 flex flex-col border-r border-gray-700">
+                        <div class="p-4 border-b border-gray-700 flex items-center justify-between">
+                            <h1 class="text-xl font-extrabold text-white text-red-500">FURY</h1>
+                            <button id="signout-btn" class="text-gray-400 hover:text-white transition duration-150">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                            </button>
+                        </div>
+                        
+                        <!-- Channels List -->
+                        <nav class="flex-grow p-4 space-y-4 overflow-y-auto">
+                            <div>
+                                <h2 class="text-xs font-semibold uppercase text-gray-400 mb-2">Global Channels</h2>
+                                <ul class="space-y-1">
+                                    <li>
+                                        <button class="w-full text-left p-2 rounded-lg transition duration-150 bg-indigo-600 text-white">
+                                            #global-fury-chat
+                                        </button>
+                                    </li>
+                                </ul>
+                            </div>
+                        </nav>
+
+                        <!-- User Info Bar -->
+                        <div class="p-4 bg-gray-700 border-t border-gray-700 flex items-center">
+                            <div class="w-3 h-3 rounded-full mr-3 ${statusColor} border-2 border-gray-700"></div>
+                            <div class="flex flex-col">
+                                <span class="text-sm font-semibold">${userDisplayId}</span>
+                                <span class="text-xs text-gray-400 capitalize">${onlineStatus}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Chat Area (Right) -->
+                    <div class="flex-grow flex flex-col">
+                        <!-- Header -->
+                        <header class="p-4 border-b border-gray-700 bg-gray-800 flex items-center">
+                            <h2 class="text-xl font-bold"># global-fury-chat</h2>
+                        </header>
+
+                        <!-- Messages Body -->
+                        <div id="messages-container" class="flex-grow p-4 overflow-y-auto space-y-3 flex flex-col-reverse">
+                            <!-- Messages will be rendered here by renderMessages -->
+                        </div>
+
+                        <!-- Input Area -->
+                        <form id="chat-form" class="p-4 border-t border-gray-700 bg-gray-800">
+                            <div class="flex items-center space-x-3">
+                                <input
+                                    type="text"
+                                    id="message-input"
+                                    placeholder="Message #global-fury-chat"
+                                    class="flex-grow bg-gray-700 text-white p-3 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none transition duration-150"
+                                >
+                                <button
+                                    type="submit"
+                                    class="bg-indigo-600 hover:bg-indigo-700 text-white p-3 rounded-xl transition duration-150 shadow-lg disabled:opacity-50"
+                                >
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
-            </div>
-        );
-    }
+            `;
+            
+            // Setup Event Listeners
+            document.getElementById('signout-btn').addEventListener('click', handleSignOut);
+            document.getElementById('chat-form').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const input = document.getElementById('message-input');
+                sendMessage(input.value);
+            });
+            
+            // Start listening for messages now that the container exists
+            startChatListeners();
+        }
 
-    // Main application view
-    return <DirectChat auth={auth} db={db} user={user} userId={userId} handleSignOut={handleSignOut} />;
-};
+        /**
+         * Initializes Firebase and sets up the main authentication listener.
+         */
+        function initializeAppAndAuth() {
+            if (!firebaseConfig.apiKey) {
+                console.error("Firebase config missing. Cannot initialize app.");
+                return renderLoading("Error: Firebase configuration missing.");
+            }
 
-export default App;
+            try {
+                // Initialize Firebase
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                setLogLevel('debug'); // Enable detailed Firebase logging
+            } catch (e) {
+                console.error("Failed to initialize Firebase:", e);
+                return renderLoading("Error initializing Firebase.");
+            }
+
+            // Initial rendering state
+            renderLoading("Authenticating...");
+
+            // Set up Authentication Listener
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    userId = user.uid;
+                    // --- STEP 1: CRITICAL FIX INTEGRATION ---
+                    // Ensure profile exists before trying to load the UI
+                    await ensureUserProfileExists(userId); 
+
+                    // --- STEP 2: Start listening for user profile data (needed for the UI) ---
+                    const userDocRef = doc(db, 'artifacts', appId, 'users', userId, 'user_profile', 'data');
+                    onSnapshot(userDocRef, (docSnap) => {
+                        if (docSnap.exists()) {
+                            currentUserProfile = docSnap.data();
+                            // --- STEP 3: Render the app only after profile is loaded ---
+                            renderChatUI();
+                        } else {
+                            // Even if it fails, it means the profile hasn't been created yet.
+                            // The ensureUserProfileExists should have covered this.
+                            console.error("User profile still missing after attempted creation.");
+                            renderLoading("Loading FURY... (Profile Fetching)");
+                        }
+                    }, (error) => {
+                        console.error("Error listening to user profile:", error.message);
+                        renderLoading("Error loading profile. Check permissions.");
+                    });
+
+                } else {
+                    userId = null;
+                    currentUserProfile = null;
+                    // If no user is logged in, show the sign-in screen
+                    renderSignIn();
+                }
+            });
+
+            // Initial sign-in attempt if a custom token is provided by the environment
+            async function initialSignIn() {
+                 if (initialAuthToken) {
+                     try {
+                         await signInWithCustomToken(auth, initialAuthToken);
+                     } catch (e) {
+                         console.error("Custom token sign-in failed, falling back to anonymous:", e);
+                         await signInAnonymously(auth);
+                     }
+                 } else {
+                     await signInAnonymously(auth);
+                 }
+            }
+
+            initialSignIn();
+        }
+
+        // Start the whole application on window load
+        window.onload = initializeAppAndAuth;
+    </script>
+</body>
+</html>
