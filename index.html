@@ -47,7 +47,7 @@
     <!-- Firebase and Application Logic -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInWithCustomToken, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInWithCustomToken, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, onSnapshot, collection, query, addDoc, serverTimestamp, getDoc, setDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Global Firebase instances
@@ -61,8 +61,8 @@
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         
-        // --- Custom Configuration (Provided by user - UPDATED HERE) ---
-        // CRITICAL: This configuration must match your Firebase project settings exactly.
+        // --- Custom Configuration (Provided by user - CRITICAL) ---
+        // You MUST verify this configuration and ensure Email/Password is enabled in your Firebase project.
         const customFirebaseConfig = {
             apiKey: "AIzaSyCkp-J_21Nb7dqs33iMA90Zl13elfGesCPI", 
             authDomain: "squit-up-auth.firebaseapp.com",
@@ -97,7 +97,7 @@
         }
         
         /**
-         * Renders the Sign-In screen (Google option ONLY).
+         * Renders the Sign-In screen with Email/Password and Google options.
          */
         function renderSignIn(errorMessage = '') {
             const container = document.getElementById('app-container');
@@ -111,25 +111,105 @@
                         </div>
                         <h1 class="text-3xl font-extrabold text-red-500 mb-2">FURY</h1>
                         <p class="text-gray-400 mb-8">Connect with friends instantly.</p>
-                        <h2 class="text-2xl font-semibold text-white mb-4">Sign In Required</h2>
-                        <p class="text-gray-500 mb-6">Please use your Google account to access the chat.</p>
+                        
+                        <h2 class="text-2xl font-semibold text-white mb-4">Sign In</h2>
+                        
+                        <form id="email-password-form" class="space-y-4">
+                            <input 
+                                type="email" 
+                                id="email-input" 
+                                placeholder="Email"
+                                required 
+                                class="w-full bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                            >
+                            <input 
+                                type="password" 
+                                id="password-input" 
+                                placeholder="Password"
+                                required 
+                                class="w-full bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                            >
+                            <button id="email-signin-btn" type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-xl transition duration-200 shadow-lg shadow-indigo-600/30">
+                                Log In
+                            </button>
+                        </form>
+                        
+                        <div class="my-6 flex items-center">
+                            <div class="flex-grow border-t border-gray-700"></div>
+                            <span class="flex-shrink mx-4 text-gray-500">OR</span>
+                            <div class="flex-grow border-t border-gray-700"></div>
+                        </div>
+
                         <button id="google-signin-btn" class="w-full flex items-center justify-center bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-xl transition duration-200 shadow-lg shadow-red-600/30">
                             <svg class="w-5 h-5 mr-3" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><path fill="#FFC107" d="M43.61 20.08v3.42H24V20.08h19.61z"/><path fill="#FF3D00" d="M6.3 33.15c.61 1.77 1.63 3.32 2.87 4.6l5.77-4.47c-.77-.48-1.44-1.07-1.95-1.78H6.3z"/><path fill="#4CAF50" d="M43.61 24.5v3.42H24v-3.42h19.61z"/><path fill="#1976D2" d="M12.94 37.75c3.08 3.52 7.7 5.75 12.87 5.75s9.79-2.23 12.87-5.75l-5.77-4.47c-2.34 2.1-5.32 3.42-9.1 3.42s-6.76-1.32-9.1-3.42L12.94 37.75z"/><path fill="#F44336" d="M24 8c-4.99 0-9.62 2.11-12.87 5.75l5.77 4.47c2.34-2.1 5.32-3.42 9.1-3.42s6.76-1.32 9.1-3.42l5.77-4.47C33.62 10.11 28.99 8 24 8z"/></svg>
                             Sign in with Google
                         </button>
-                        ${errorMessage ? `<p class="text-sm text-red-400 mt-4 font-semibold">${errorMessage}</p>` : ''}
+                        
+                        ${errorMessage ? `<p id="error-message" class="text-sm text-red-400 mt-4 font-semibold p-2 bg-gray-900 rounded-lg">${errorMessage}</p>` : ''}
+                        
                         <p class="text-xs text-gray-600 mt-4">By signing in, you agree to our <a href="#" class="text-red-500 hover:underline">Terms of Service</a>.</p>
                     </div>
                 </div>
             `;
+            // Attach event listeners after rendering
             document.getElementById('google-signin-btn').addEventListener('click', signInWithGoogle);
+            document.getElementById('email-password-form').addEventListener('submit', handleEmailPasswordSignIn);
+        }
+
+        /**
+         * Parses Firebase errors for user-friendly display.
+         */
+        function getAuthErrorMessage(errorCode) {
+            switch (errorCode) {
+                case 'auth/invalid-email':
+                    return 'Invalid email format.';
+                case 'auth/user-not-found':
+                case 'auth/wrong-password':
+                    return 'Invalid email or password.';
+                case 'auth/popup-closed-by-user':
+                    return 'Sign-in window was closed. Please try again.';
+                case 'auth/unauthorized-domain':
+                    return 'Error: Unauthorized domain. Check your Firebase Auth settings.';
+                default:
+                    return `Authentication failed: ${errorCode}. Check console.`;
+            }
+        }
+
+        /**
+         * Email/Password Sign-In handler.
+         */
+        async function handleEmailPasswordSignIn(e) {
+            e.preventDefault();
+            const email = document.getElementById('email-input').value;
+            const password = document.getElementById('password-input').value;
+            const errorElement = document.getElementById('error-message');
+            
+            if (errorElement) errorElement.textContent = ''; // Clear previous error
+
+            if (!email || !password) {
+                 return renderSignIn('Please enter both email and password.');
+            }
+
+            renderLoading("Logging in with email...");
+
+            try {
+                // IMPORTANT: This only works if Email/Password sign-in method is enabled in your Firebase project.
+                await signInWithEmailAndPassword(auth, email, password);
+                // AuthStateChanged listener will handle the rest (rendering chat UI)
+
+            } catch (error) {
+                console.error("Email/Password Sign-In failed:", error);
+                
+                const userFriendlyMessage = getAuthErrorMessage(error.code);
+                renderSignIn(userFriendlyMessage); 
+            }
         }
 
         /**
          * Google Sign-In handler.
-         * Fix implemented here: Added a brief delay to ensure the main app registers the login event after pop-up closure.
          */
         async function signInWithGoogle() {
+            renderLoading("Opening Google Sign-In...");
             try {
                 const provider = new GoogleAuthProvider();
                 const result = await signInWithPopup(auth, provider);
@@ -144,13 +224,11 @@
             } catch (error) {
                 console.error("Google Sign-In failed:", error);
                 
-                let userFriendlyMessage = 'Google Sign-In failed. Please check your console for details.';
+                let userFriendlyMessage = getAuthErrorMessage(error.code);
 
-                if (error.code === 'auth/popup-closed-by-user') {
-                    userFriendlyMessage = 'Sign-in window was closed. Please try again.';
-                } else if (error.code === 'auth/unauthorized-domain') {
-                    userFriendlyMessage = 'Error: Unauthorized domain. Please add your domain (e.g., your-username.github.io) to the Firebase "Auth -> Settings -> Authorized Domains" list.';
-                } else if (error.message.includes('apiKey') || error.message.includes('API key')) {
+                if (error.code === 'auth/unauthorized-domain') {
+                    userFriendlyMessage = 'Google Sign-In failed: Unauthorized domain. Check your Firebase Auth settings.';
+                } else if (error.message.includes('apiKey')) {
                     userFriendlyMessage = 'Configuration Error: Invalid API Key. Please verify your customFirebaseConfig.';
                 }
                 
@@ -186,11 +264,19 @@
                 const docSnap = await getDoc(userDocRef);
                 const user = auth.currentUser;
                 
+                // Determine a display name based on provider
+                let display = user?.displayName;
+                if (!display) {
+                    // For Email/Password users, use the start of the email as a placeholder display name
+                    const emailPart = user?.email ? user.email.split('@')[0] : `user_${uid.substring(0, 8)}`;
+                    display = emailPart;
+                }
+
                 if (!docSnap.exists()) {
                     // Create the profile document
                     await setDoc(userDocRef, {
                         userId: uid,
-                        displayName: user?.displayName || `user_${uid.substring(0, 8)}`,
+                        displayName: display,
                         email: user?.email || '',
                         onlineStatus: 'online', 
                         lastActive: serverTimestamp(),
@@ -198,7 +284,7 @@
                     });
                 } else {
                     // Update existing profile with online status and last active time
-                     await setDoc(userDocRef, {
+                    await setDoc(userDocRef, {
                         onlineStatus: 'online',
                         lastActive: serverTimestamp(),
                     }, { merge: true });
@@ -274,15 +360,14 @@
 
             listContainer.innerHTML = '';
             
-            if (users.length === 0) {
-                 listContainer.innerHTML = `<li class="text-sm text-gray-500 p-2">No users currently active.</li>`;
+            const activeUsers = users.filter(user => user.userId !== userId);
+
+            if (activeUsers.length === 0) {
+                 listContainer.innerHTML = `<li class="text-sm text-gray-500 p-2">No other users currently active.</li>`;
                 return;
             }
 
-            users.forEach(user => {
-                // If the user's ID matches the current user, skip listing them here 
-                if (user.userId === userId) return; 
-
+            activeUsers.forEach(user => {
                 const statusColor = 'bg-green-500'; 
                 
                 const listItem = document.createElement('li');
@@ -412,6 +497,7 @@
          * Renders the main chat UI after successful login and profile load.
          */
         function renderChatUI() {
+            // Use display name from profile if available, otherwise fallback
             const userDisplayId = currentUserProfile?.displayName || `user_${userId.substring(0, 8)}`;
             const onlineStatus = currentUserProfile?.onlineStatus || 'offline';
             const statusColor = onlineStatus === 'online' ? 'bg-green-500' : 'bg-gray-500';
@@ -545,7 +631,7 @@
                     // once currentUserProfile is fetched/updated.
 
                 } else {
-                    // User is null (not signed in), show the Google Sign-in screen.
+                    // User is null (not signed in), show the Sign-in screen.
                     userId = null;
                     currentUserProfile = null;
                     renderSignIn();
