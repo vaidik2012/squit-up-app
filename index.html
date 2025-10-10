@@ -1,780 +1,450 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FURY - Discord Style Chat</title>
-    <!-- Load Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Load Lucide Icons for nice, clean icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <style>
-        /* Custom styles for dark theme and typography */
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
-        body {
-            font-family: 'Inter', sans-serif;
-            background: #111;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-        }
-        
-        /* Main application container for Discord-style layout */
-        #app-container {
-            width: 100%;
-            height: 100vh;
-            display: grid;
-            grid-template-columns: 72px 240px 1fr; /* Server list, Channel list, Chat area */
-            background: #1e1e1e;
-        }
+import React, { useState, useEffect, useCallback } from 'react';
+import { initializeApp } from 'firebase/app';
+import { 
+    getAuth, signInAnonymously, signInWithCustomToken, 
+    onAuthStateChanged, GoogleAuthProvider, signInWithPopup, 
+    signOut 
+} from 'firebase/auth';
+import { 
+    getFirestore, doc, onSnapshot, collection, query, 
+    where, addDoc, serverTimestamp, setDoc, getDocs 
+} from 'firebase/firestore';
+import { Send, LogOut, MessageSquare, Plus, User } from 'lucide-react';
 
-        /* Server List Panel (Far Left) */
-        #server-list {
-            background-color: #1e1e1e; /* Darker than the channels panel */
-            border-right: 1px solid #2d2d2d;
-            padding-top: 12px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            overflow-y: auto;
-        }
-        .server-icon {
-            width: 48px;
-            height: 48px;
-            border-radius: 9999px; /* Circle */
-            margin-bottom: 8px;
-            cursor: pointer;
-            transition: border-radius 0.2s, background-color 0.2s, transform 0.1s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            color: white;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-        }
-        .server-icon:hover {
-            border-radius: 16px; /* Squircle hover effect */
-            transform: scale(1.05);
-        }
-        .server-icon.active {
-            border-radius: 16px;
-            background-color: #ff416c;
-        }
-        #add-server-button {
-            background-color: #3e3e3e;
-            color: #949ba4;
-        }
+// --- GLOBAL VARIABLES ---
+// IMPORTANT: These variables are provided by the canvas environment
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+// --- END GLOBAL VARIABLES ---
 
-        /* Channel/DM List Panel (Middle) */
-        #channel-list {
-            background-color: #282828;
-            border-right: 1px solid #3d3d3d;
-            display: flex;
-            flex-direction: column;
-            padding: 12px;
-            overflow-y: auto;
-        }
-        .channel-item, .dm-item {
-            padding: 8px;
-            border-radius: 6px;
-            margin-bottom: 4px;
-            cursor: pointer;
-            color: #b9bbbe;
-            transition: background-color 0.15s;
-        }
-        .channel-item:hover, .dm-item:hover {
-            background-color: #3e3e3e;
-            color: white;
-        }
-        .channel-item.active, .dm-item.active {
-            background-color: #4a4a4a;
-            color: white;
-        }
-        .channel-header {
-            color: #949ba4;
-            font-size: 0.75rem;
-            font-weight: 600;
-            margin-top: 12px;
-            margin-bottom: 4px;
-        }
+// Utility function to handle exponential backoff for API calls (e.g., Gemini API)
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-        /* Chat Area (Right) */
-        #chat-area {
-            display: flex;
-            flex-direction: column;
-            background-color: #36393f; /* Dark background for chat */
-            padding-bottom: 16px; /* Space for the input box */
-        }
-        
-        #messages-container {
-            flex-grow: 1;
-            padding: 16px;
-            overflow-y: auto;
-        }
+// --- FIREBASE INITIALIZATION AND HOOKS ---
+const useFirebase = () => {
+    const [db, setDb] = useState(null);
+    const [auth, setAuth] = useState(null);
+    const [userId, setUserId] = useState(null);
+    const [isAuthReady, setIsAuthReady] = useState(false);
 
-        /* Message Bubble styles (from previous version) */
-        .message-bubble {
-            max-width: 60%;
-            word-wrap: break-word;
-        }
-        .message-line {
-            padding: 8px 0;
-        }
-        
-        /* Custom scrollbar for message area */
-        #messages-container::-webkit-scrollbar, #server-list::-webkit-scrollbar, #channel-list::-webkit-scrollbar {
-            width: 8px;
-        }
-        #messages-container::-webkit-scrollbar-thumb, #server-list::-webkit-scrollbar-thumb, #channel-list::-webkit-scrollbar-thumb {
-            background: #4a4a4a;
-            border-radius: 4px;
-        }
-        #messages-container::-webkit-scrollbar-track, #server-list::-webkit-scrollbar-track, #channel-list::-webkit-scrollbar-track {
-            background: #282828;
-        }
+    useEffect(() => {
+        if (!firebaseConfig.apiKey) return;
 
-        /* Profile Setup Screen styling */
-        .setup-card {
-            background: #282828;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-            max-width: 450px;
-            width: 100%;
-        }
+        try {
+            const app = initializeApp(firebaseConfig);
+            const firestoreDb = getFirestore(app);
+            const firebaseAuth = getAuth(app);
 
-        /* Auth Screen styling */
-        .auth-card {
-            background: #1e1e1e;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05);
-            max-width: 400px;
-            width: 100%;
-        }
-        
-        /* Utility for Rainbow Text Effect */
-        .fury-title {
-            background: linear-gradient(90deg, #ff416c, #ff4b2b, #ff7e5f, #ffa585);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-        
-        /* Footer for User Info Panel */
-        #user-info-footer {
-            background-color: #1e1e1e;
-            padding: 8px;
-            border-top: 1px solid #3e3e3e;
-            color: white;
-        }
+            setDb(firestoreDb);
+            setAuth(firebaseAuth);
 
-    </style>
-</head>
-<body class="text-white">
+            // 1. Initial Authentication Logic
+            const authenticate = async () => {
+                try {
+                    if (initialAuthToken) {
+                        await signInWithCustomToken(firebaseAuth, initialAuthToken);
+                    } else {
+                        await signInAnonymously(firebaseAuth);
+                    }
+                } catch (error) {
+                    console.error("Firebase authentication failed:", error);
+                    // Fallback to anonymous sign-in if custom token fails
+                    try {
+                        await signInAnonymously(firebaseAuth);
+                    } catch (anonError) {
+                        console.error("Anonymous sign-in also failed:", anonError);
+                    }
+                }
+            };
+            authenticate();
 
-    <!-- Primary Application Containers -->
-    <div id="loading-screen" class="fixed inset-0 bg-black flex items-center justify-center z-50">
-        <div class="text-center">
-            <h1 class="text-6xl font-extrabold fury-title mb-4">FURY</h1>
-            <p class="text-xl text-gray-400">Loading...</p>
-        </div>
-    </div>
+            // 2. Auth State Change Listener (CRITICAL FOR UI UPDATES)
+            const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
+                if (user) {
+                    setUserId(user.uid);
+                } else {
+                    setUserId(null);
+                }
+                setIsAuthReady(true);
+            });
+
+            return () => unsubscribe();
+
+        } catch (error) {
+            console.error("Failed to initialize Firebase:", error);
+        }
+    }, []);
+
+    return { db, auth, userId, isAuthReady };
+};
+
+// --- CHAT APP COMPONENTS ---
+
+const Header = ({ userId, auth }) => {
+    const handleSignOut = async () => {
+        if (auth) {
+            await signOut(auth);
+        }
+    };
     
-    <!-- Auth Screen -->
-    <main id="auth-screen" class="auth-card p-8 rounded-2xl text-center transition-opacity duration-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 hidden">
-        <h1 class="text-6xl font-extrabold fury-title mb-4">FURY</h1>
-        <div class="inline-block p-4 rounded-full" style="background: linear-gradient(135deg, #ff416c, #ff7e5f);">
-            <i data-lucide="message-square" class="w-8 h-8 text-white"></i>
-        </div>
-        <h2 class="text-3xl font-semibold mt-4 mb-2">Welcome to FURY</h2>
-        <p class="text-gray-400 mb-8">Please sign in with Google to continue.</p>
+    // Fallback display if userId is not available yet
+    const displayId = userId ? `${userId.substring(0, 8)}...` : 'Connecting...';
 
-        <button id="google-sign-in-button" 
-                class="w-full py-4 rounded-xl text-lg font-bold transition duration-300 transform hover:scale-[1.02] active:scale-[0.99] flex items-center justify-center space-x-3"
-                style="background-color: #db4437; box-shadow: 0 4px 15px rgba(219, 68, 55, 0.5);"
-        >
-            <i data-lucide="chrome" class="w-6 h-6"></i>
-            <span>Sign in with Google</span>
-        </button>
-        <p id="auth-error-message" class="text-red-400 mt-4 text-sm hidden">Authentication Error.</p>
-    </main>
-
-    <!-- Profile Setup Screen -->
-    <section id="profile-setup-screen" class="setup-card p-8 rounded-2xl text-center transition-opacity duration-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 hidden">
-        <h1 class="text-4xl font-extrabold fury-title mb-4">Set up your FURY Profile</h1>
-        <p class="text-gray-400 mb-6">Choose a unique username and customize your profile ID.</p>
-        
-        <form id="profile-setup-form" class="space-y-4">
-            <div class="text-left">
-                <label for="username-input" class="text-sm font-medium text-gray-300 block mb-1">Unique User ID (@)</label>
-                <div class="flex items-center bg-gray-700 rounded-lg">
-                    <span class="text-gray-400 pl-3">@</span>
-                    <input type="text" id="username-input" placeholder="e.g., vaidik_fury" required pattern="[a-zA-Z0-9_]+" minlength="3"
-                           class="w-full p-3 rounded-r-lg bg-gray-700 border-none focus:outline-none focus:ring-2 focus:ring-red-500 text-white placeholder-gray-400"
+    return (
+        <div className="flex justify-between items-center p-4 bg-indigo-700 shadow-lg text-white">
+            <h1 className="text-xl font-extrabold flex items-center">
+                <MessageSquare className="w-5 h-5 mr-2"/>
+                DirectChat
+            </h1>
+            <div className="flex items-center space-x-3">
+                <span className="text-sm font-medium opacity-80 flex items-center">
+                    <User className="w-4 h-4 mr-1"/> User ID: {userId ? displayId : 'Guest'}
+                </span>
+                {userId && (
+                    <button 
+                        onClick={handleSignOut}
+                        className="p-2 rounded-full bg-indigo-500 hover:bg-red-500 transition duration-150 shadow-md flex items-center"
+                        title="Sign Out"
                     >
-                </div>
-                <p id="username-error" class="text-red-400 text-xs mt-1 hidden text-right">Username is already taken or invalid.</p>
-            </div>
-            
-            <button type="submit" id="setup-submit-button"
-                    class="w-full py-3 rounded-lg text-lg font-bold text-white transition duration-300 transform hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
-                    style="background: linear-gradient(90deg, #ff416c, #ff7e5f); box-shadow: 0 4px 10px rgba(255, 65, 108, 0.3);"
-            >
-                Create Profile
-            </button>
-        </form>
-    </section>
-
-    <!-- Main Chat Application Shell -->
-    <section id="app-container" class="hidden">
-        
-        <!-- 1. Server List (Far Left) -->
-        <div id="server-list">
-            <div id="global-server-icon" class="server-icon active" style="background-color: #5865f2;" title="Global FURY">
-                <i data-lucide="zap" class="w-6 h-6"></i>
-            </div>
-            <div class="w-8 h-0.5 my-2 bg-gray-700 rounded-full"></div>
-            <div id="add-server-button" class="server-icon" title="Add Server">
-                <i data-lucide="plus" class="w-6 h-6"></i>
-            </div>
-        </div>
-        
-        <!-- 2. Channel/DM List (Middle) -->
-        <div id="channel-list">
-            <h3 class="text-lg font-bold text-white mb-2">FURY</h3>
-            
-            <!-- Direct Messages Header -->
-            <div class="channel-header flex justify-between items-center">
-                <span>DIRECT MESSAGES</span>
-                <i data-lucide="plus" class="w-4 h-4 cursor-pointer hover:text-white" title="Start New DM"></i>
-            </div>
-            <div class="dm-item active flex items-center space-x-2" data-channel-id="dm_current">
-                <div class="w-2 h-2 rounded-full bg-green-400"></div>
-                <span>@JohnDoe</span>
-            </div>
-            <div class="dm-item flex items-center space-x-2" data-channel-id="dm_friend2">
-                <div class="w-2 h-2 rounded-full bg-gray-500"></div>
-                <span>@JaneS_Dev</span>
-            </div>
-
-            <!-- Global Server Channels Header -->
-            <div class="channel-header flex justify-between items-center">
-                <span>GLOBAL FURY CHANNELS</span>
-            </div>
-            <div class="channel-item flex items-center space-x-2" data-channel-id="global_main">
-                <i data-lucide="hash" class="w-4 h-4"></i>
-                <span>main-chat</span>
-            </div>
-            <div class="channel-item flex items-center space-x-2" data-channel-id="global_dev">
-                <i data-lucide="hash" class="w-4 h-4"></i>
-                <span>dev-talk</span>
-            </div>
-            
-            <!-- User Info Footer -->
-            <div id="user-info-footer" class="mt-auto flex items-center justify-between rounded-md">
-                <div class="flex items-center space-x-2">
-                    <img id="user-avatar" class="w-8 h-8 rounded-full bg-gray-500" src="" alt="Avatar">
-                    <div class="text-xs">
-                        <div id="user-display-name" class="font-bold">Loading...</div>
-                        <div id="user-custom-id" class="text-gray-400">@...</div>
-                    </div>
-                </div>
-                <button id="sign-out-button" title="Sign Out" class="p-1 rounded-full text-gray-400 hover:bg-gray-700">
-                    <i data-lucide="log-out" class="w-5 h-5"></i>
-                </button>
-            </div>
-        </div>
-        
-        <!-- 3. Chat Area (Right) -->
-        <div id="chat-area">
-            <!-- Chat Header -->
-            <div class="p-4 flex justify-between items-center border-b border-gray-700 bg-gray-800">
-                <h2 id="current-channel-name" class="text-xl font-semibold text-white flex items-center space-x-2">
-                    <i data-lucide="zap" class="w-5 h-5 text-yellow-400"></i>
-                    <span>#main-chat</span>
-                </h2>
-                <!-- Future right-side icons (e.g., search, user list) -->
-            </div>
-
-            <!-- Messages Container -->
-            <div id="messages-container" class="messages-container flex-1 overflow-y-auto p-4 space-y-4">
-                <div class="text-center text-gray-500 italic pt-20">Welcome to FURY. Send your first message!</div>
-            </div>
-
-            <!-- Message Input with Emoji Button -->
-            <div class="p-4">
-                <form id="message-form" class="flex space-x-3 bg-gray-700 rounded-xl p-2">
-                    <!-- Emoji Picker Button -->
-                    <button type="button" id="emoji-button" 
-                            class="p-2 rounded-full text-gray-400 hover:text-yellow-300 transition duration-150"
-                            title="Add Emoji"
-                    >
-                        <i data-lucide="smile" class="w-6 h-6"></i>
+                        <LogOut className="w-4 h-4"/>
                     </button>
-                    
-                    <input type="text" id="message-input" placeholder="Message #main-chat" required
-                           class="flex-1 bg-gray-700 border-none focus:outline-none text-white placeholder-gray-400 transition duration-150"
+                )}
+            </div>
+        </div>
+    );
+};
+
+const ChatBubble = ({ message, currentUserId }) => {
+    const isCurrentUser = message.senderId === currentUserId;
+    const alignClass = isCurrentUser ? 'justify-end' : 'justify-start';
+    const bubbleClass = isCurrentUser 
+        ? 'bg-indigo-500 text-white rounded-bl-xl rounded-t-xl' 
+        : 'bg-gray-200 text-gray-800 rounded-br-xl rounded-t-xl';
+
+    const senderDisplay = isCurrentUser ? 'You' : `${message.senderId.substring(0, 8)}...`;
+    const time = message.timestamp ? new Date(message.timestamp.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+
+    return (
+        <div className={`flex w-full my-2 ${alignClass}`}>
+            <div className={`max-w-xs md:max-w-md lg:max-w-lg p-3 shadow-md ${bubbleClass}`}>
+                <div className="font-semibold text-xs mb-1 opacity-90">
+                    {senderDisplay}
+                </div>
+                <p className="text-sm break-words">
+                    {message.text}
+                </p>
+                <div className="text-right text-xs mt-1 opacity-70">
+                    {time}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const MessageList = ({ db, currentUserId, selectedChatId }) => {
+    const [messages, setMessages] = useState([]);
+    const messagesRef = selectedChatId 
+        ? collection(db, 'artifacts', appId, 'public', 'data', 'chats', selectedChatId, 'messages')
+        : null;
+
+    useEffect(() => {
+        if (!messagesRef) {
+            setMessages([]);
+            return;
+        }
+
+        // Use onSnapshot to listen for real-time updates
+        const q = query(messagesRef);
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const newMessages = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            })).sort((a, b) => a.timestamp?.toMillis() - b.timestamp?.toMillis()); // Sort by timestamp
+
+            setMessages(newMessages);
+        }, (error) => {
+            console.error("Error listening to messages:", error);
+        });
+
+        return () => unsubscribe();
+    }, [messagesRef]);
+
+    if (!selectedChatId) {
+        return (
+            <div className="flex-1 flex items-center justify-center text-gray-500 text-center p-8">
+                Select or start a new chat to begin messaging.
+            </div>
+        );
+    }
+
+    return (
+        <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-gray-50">
+            {messages.map(message => (
+                <ChatBubble key={message.id} message={message} currentUserId={currentUserId} />
+            ))}
+            <div id="scroll-bottom-anchor"></div> {/* Anchor for auto-scrolling */}
+        </div>
+    );
+};
+
+const MessageInput = ({ db, currentUserId, selectedChatId }) => {
+    const [messageText, setMessageText] = useState('');
+
+    const sendMessage = async (e) => {
+        e.preventDefault();
+        if (!messageText.trim() || !selectedChatId || !currentUserId) return;
+
+        const messagesRef = collection(db, 'artifacts', appId, 'public', 'data', 'chats', selectedChatId, 'messages');
+
+        try {
+            await addDoc(messagesRef, {
+                text: messageText,
+                timestamp: serverTimestamp(),
+                senderId: currentUserId
+            });
+            setMessageText('');
+        } catch (error) {
+            console.error("Error sending message:", error);
+        }
+    };
+
+    return (
+        <div className="p-4 bg-white border-t border-gray-200">
+            <form onSubmit={sendMessage} className="flex space-x-3">
+                <input
+                    type="text"
+                    value={messageText}
+                    onChange={(e) => setMessageText(e.target.value)}
+                    placeholder={selectedChatId ? "Type a message..." : "Select a chat first"}
+                    disabled={!selectedChatId}
+                    className="flex-1 p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 disabled:bg-gray-100"
+                />
+                <button
+                    type="submit"
+                    disabled={!messageText.trim() || !selectedChatId}
+                    className="p-3 bg-indigo-600 text-white rounded-xl shadow-md hover:bg-indigo-700 transition duration-150 disabled:bg-indigo-300 flex items-center justify-center"
+                >
+                    <Send className="w-5 h-5"/>
+                </button>
+            </form>
+        </div>
+    );
+};
+
+const ChatSidebar = ({ db, currentUserId, setSelectedChatId }) => {
+    const [chats, setChats] = useState([]);
+    const [newChatPartnerId, setNewChatPartnerId] = useState('');
+    const chatsRef = collection(db, 'artifacts', appId, 'public', 'data', 'chats');
+
+    // Listener for all chats the current user is a part of
+    useEffect(() => {
+        if (!currentUserId || !db) return;
+
+        // Query for chats where the current user ID is in the 'participants' array
+        const q = query(chatsRef, where('participants', 'array-contains', currentUserId));
+        
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const newChats = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            setChats(newChats);
+        }, (error) => {
+            console.error("Error listening to chats:", error);
+        });
+
+        return () => unsubscribe();
+    }, [currentUserId, db]);
+
+    const startNewChat = async (e) => {
+        e.preventDefault();
+        if (!newChatPartnerId.trim() || newChatPartnerId === currentUserId) return;
+
+        // 1. Define the sorted participant list for consistent chat ID generation
+        const participants = [currentUserId, newChatPartnerId].sort();
+        
+        // 2. Check if chat already exists (optional, but good practice)
+        // For simplicity, we'll just check if a document with that ID exists (less efficient than the query above, but simpler for creation)
+        const chatQuery = query(
+            chatsRef, 
+            where('participants', 'array-contains', currentUserId)
+        );
+        const existingChats = await getDocs(chatQuery);
+
+        const existingChat = existingChats.docs.find(doc => {
+            const data = doc.data();
+            return data.participants.includes(newChatPartnerId);
+        });
+
+        if (existingChat) {
+            setSelectedChatId(existingChat.id);
+            setNewChatPartnerId('');
+            return;
+        }
+
+        // 3. Create a new chat document
+        try {
+            const newChatData = {
+                participants: participants,
+                createdAt: serverTimestamp(),
+                // Display name for the chat (e.g., the other user's ID)
+                name: `Chat with ${newChatPartnerId.substring(0, 8)}...`
+            };
+
+            const newChatRef = doc(chatsRef); // Let Firebase generate the ID
+            await setDoc(newChatRef, newChatData);
+            
+            setSelectedChatId(newChatRef.id);
+            setNewChatPartnerId('');
+        } catch (error) {
+            console.error("Error creating new chat:", error);
+        }
+    };
+
+    return (
+        <div className="w-full md:w-72 border-r border-gray-200 bg-white flex flex-col h-full">
+            <div className="p-4 border-b border-gray-200">
+                <form onSubmit={startNewChat} className="flex flex-col space-y-2">
+                    <input
+                        type="text"
+                        value={newChatPartnerId}
+                        onChange={(e) => setNewChatPartnerId(e.target.value)}
+                        placeholder="Enter partner's full user ID"
+                        className="p-2 border border-gray-300 rounded-lg text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                    />
+                    <button
+                        type="submit"
+                        disabled={!newChatPartnerId.trim()}
+                        className="w-full p-2 bg-green-500 text-white rounded-lg shadow-md hover:bg-green-600 transition duration-150 disabled:bg-gray-300 flex items-center justify-center text-sm font-semibold"
                     >
-                    
-                    <button type="submit" 
-                            class="p-2 rounded-lg font-bold transition duration-300 transform hover:scale-[1.02] active:scale-[0.99] flex items-center justify-center disabled:opacity-50"
-                            style="background: linear-gradient(90deg, #ff416c, #ff7e5f); box-shadow: 0 4px 10px rgba(255, 65, 108, 0.3);"
-                    >
-                        <i data-lucide="send" class="w-5 h-5 text-white"></i>
+                        <Plus className="w-4 h-4 mr-1"/> Start New Chat
                     </button>
                 </form>
             </div>
-        </div>
-    </section>
-
-    <!-- Modal for displaying custom messages/errors (replaces alert/confirm) -->
-    <div id="message-modal" class="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center hidden">
-        <div class="bg-gray-800 p-6 rounded-lg shadow-xl max-w-sm w-full text-center">
-            <p id="modal-text" class="text-white text-lg mb-4"></p>
-            <button id="modal-close-button" class="px-4 py-2 bg-red-500 rounded-lg text-white font-semibold hover:bg-red-600 transition duration-150">
-                Close
-            </button>
-        </div>
-    </div>
-
-
-    <script type="module">
-        // --- FIREBASE IMPORTS ---
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, query, onSnapshot, serverTimestamp, doc, getDoc, setDoc, where } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        
-        setLogLevel('Debug'); 
-        
-        // --- CONFIGURATION AND INITIALIZATION ---
-        
-        // Firebase configuration (using user-provided keys)
-        let firebaseConfig = {
-            apiKey: "AIzaSyCkp-J_21Nb7qBquiMA90Zl13elfGesCPI",
-            authDomain: "squit-up-auth.firebaseapp.com",
-            projectId: "squit-up-auth",
-            storageBucket: "squit-up-auth.firebasestorage.app",
-            messagingSenderId: "503910898443",
-            appId: "1:503910898443:web:c5a56eb24cd4f183d8600e"
-        };
-
-        // Use global config if available
-        try {
-            if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-                firebaseConfig = JSON.parse(__firebase_config);
-            }
-        } catch (e) {
-            console.error("Error parsing __firebase_config JSON:", e);
-        }
-
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-fury-app';
-
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const provider = new GoogleAuthProvider();
-        
-        let currentUserId = null;
-        let currentUserData = null;
-        let authReady = false;
-        let activeChannelId = 'global_main'; // Default channel
-
-        // --- DOM ELEMENTS ---
-        const loadingScreen = document.getElementById('loading-screen');
-        const authScreen = document.getElementById('auth-screen');
-        const profileSetupScreen = document.getElementById('profile-setup-screen');
-        const appContainer = document.getElementById('app-container');
-        const signInButton = document.getElementById('google-sign-in-button');
-        const signOutButton = document.getElementById('sign-out-button');
-        const messageForm = document.getElementById('message-form');
-        const messageInput = document.getElementById('message-input');
-        const messagesContainer = document.getElementById('messages-container');
-        const authErrorMessage = document.getElementById('auth-error-message');
-        const messageModal = document.getElementById('message-modal');
-        const modalText = document.getElementById('modal-text');
-        const modalCloseButton = document.getElementById('modal-close-button');
-        const profileSetupForm = document.getElementById('profile-setup-form');
-        const usernameInput = document.getElementById('username-input');
-        const usernameError = document.getElementById('username-error');
-        const userInfoFooter = document.getElementById('user-info-footer');
-        const userDisplayName = document.getElementById('user-display-name');
-        const userCustomId = document.getElementById('user-custom-id');
-        const userAvatar = document.getElementById('user-avatar');
-        const currentChannelName = document.getElementById('current-channel-name');
-        
-        // Channel/DM elements for click handling
-        const channelList = document.getElementById('channel-list');
-
-        // --- UTILITY FUNCTIONS ---
-
-        /** Displays a custom modal message instead of using alert() */
-        function showCustomAlert(message) {
-            modalText.textContent = message;
-            messageModal.classList.remove('hidden');
-        }
-
-        modalCloseButton.addEventListener('click', () => {
-            messageModal.classList.add('hidden');
-        });
-
-        /** Switches the main visible screen */
-        function switchScreen(screenId) {
-            const screens = [authScreen, profileSetupScreen, appContainer];
             
-            // Convert appContainer to grid/flex before showing, otherwise hide it.
-            if (screenId === 'app-container') {
-                appContainer.style.display = 'grid';
-            } else {
-                appContainer.style.display = 'none';
-            }
+            <div className="flex-1 overflow-y-auto">
+                {chats.length === 0 ? (
+                    <p className="p-4 text-sm text-gray-500">No chats yet. Start one!</p>
+                ) : (
+                    chats.map(chat => {
+                        // Find the other participant's ID for display
+                        const otherParticipant = chat.participants.find(id => id !== currentUserId);
+                        const chatDisplay = otherParticipant ? `Chat with ${otherParticipant.substring(0, 8)}...` : 'Self Chat';
 
-            screens.forEach(screen => {
-                if (screen.id === screenId) {
-                    screen.classList.remove('hidden');
-                    // Center non-grid screens
-                    if (screen.id !== 'app-container') {
-                        screen.classList.add('absolute', 'top-1/2', 'left-1/2', '-translate-x-1/2', '-translate-y-1/2');
-                    } else {
-                        screen.classList.remove('absolute', 'top-1/2', 'left-1/2', '-translate-x-1/2', '-translate-y-1/2');
-                    }
-                } else {
-                    screen.classList.add('hidden');
-                }
-            });
-            loadingScreen.classList.add('hidden');
-        }
-        
-        /** Updates the user info footer panel */
-        function updateUserInfoFooter(userData) {
-            if (userData) {
-                userDisplayName.textContent = userData.displayName || 'User';
-                userCustomId.textContent = `@${userData.customId || 'loading'}`;
-                userAvatar.src = userData.photoURL || 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23FFFFFF"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.93 0 3.5 1.57 3.5 3.5S13.93 12 12 12 8.5 10.43 8.5 8.5 10.07 5 12 5zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4.03-3.08 6-3.08s5.97 1.09 6 3.08c-1.29 1.94-3.5 3.22-6 3.22z"/></svg>';
-            }
-        }
-
-        /** Renders a list of messages into the container */
-        function renderMessages(messages) {
-            // Sort messages locally by timestamp (ascending). 
-            const sortedMessages = messages.sort((a, b) => {
-                const timeA = (a.createdAt && a.createdAt.toMillis) ? a.createdAt.toMillis() : (a.createdAt || 0);
-                const timeB = (b.createdAt && b.createdAt.toMillis) ? b.createdAt.toMillis() : (b.createdAt || 0);
-                return timeA - timeB;
-            });
-            
-            messagesContainer.innerHTML = '';
-            
-            if (sortedMessages.length === 0) {
-                 messagesContainer.innerHTML = '<div class="text-center text-gray-400 italic pt-20">Start the conversation!</div>';
-                 return;
-            }
-
-            let lastSenderId = null;
-            let lastTimestamp = 0;
-
-            sortedMessages.forEach(msg => {
-                const isNewSender = msg.userId !== lastSenderId;
-                // Only show a full header if the sender changes or if more than 5 minutes have passed (300000ms)
-                const timestamp = (msg.createdAt && msg.createdAt.toMillis) ? msg.createdAt.toMillis() : 0;
-                const isNewTimeBlock = (timestamp - lastTimestamp) > 300000;
-                
-                if (isNewSender || isNewTimeBlock) {
-                    // Render message header
-                    const headerHtml = `
-                        <div class="message-line flex items-start mt-4">
-                            <img class="w-10 h-10 rounded-full mr-3 bg-gray-500" src="${msg.userPhoto || userAvatar.src}" alt="Avatar">
-                            <div>
-                                <div class="flex items-center space-x-2">
-                                    <span class="font-bold text-white hover:underline cursor-pointer">${msg.userName || 'Anonymous'}</span>
-                                    <span class="text-xs text-gray-400">${formatTime(msg.createdAt)}</span>
-                                </div>
-                                <p class="text-gray-200">${msg.text}</p>
+                        return (
+                            <div 
+                                key={chat.id}
+                                onClick={() => setSelectedChatId(chat.id)}
+                                className="p-3 border-b border-gray-100 cursor-pointer hover:bg-indigo-50 transition duration-150"
+                            >
+                                <p className="font-medium text-sm text-gray-800">{chatDisplay}</p>
+                                <p className="text-xs text-gray-500 truncate">Tap to open...</p>
                             </div>
-                        </div>
-                    `;
-                    messagesContainer.insertAdjacentHTML('beforeend', headerHtml);
-                } else {
-                    // Render compact continuation message
-                    const continuationHtml = `
-                        <div class="message-line pl-[52px]">
-                            <p class="text-gray-200">${msg.text}</p>
-                        </div>
-                    `;
-                    messagesContainer.insertAdjacentHTML('beforeend', continuationHtml);
-                }
+                        );
+                    })
+                )}
+            </div>
+        </div>
+    );
+};
 
-                lastSenderId = msg.userId;
-                lastTimestamp = timestamp;
-            });
-            
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+// --- AUTH SCREEN ---
+
+const AuthScreen = ({ auth, setIsAuthReady }) => {
+
+    const handleGoogleSignIn = async () => {
+        if (!auth) return;
+        const provider = new GoogleAuthProvider();
+        try {
+            const result = await signInWithPopup(auth, provider);
+            console.log("Google Sign-In Successful:", result.user.uid);
+            // FIX: Since the onAuthStateChanged listener in useFirebase is handling 
+            // the state update (setting userId), we just need to ensure the popup 
+            // closes and the listener fires correctly. The listener will manage 
+            // the subsequent UI change. We call setIsAuthReady to force a potential re-check.
+            setIsAuthReady(true); 
+
+        } catch (error) {
+            // Handle errors, e.g., if the user closes the popup
+            console.error("Google Sign-In Error:", error);
         }
+    };
 
-        /** Formats Firestore timestamp to a readable time string (e.g., 2:30 PM) */
-        function formatTime(timestamp) {
-            if (!timestamp) return '';
-            
-            let date;
-            if (timestamp.toDate) {
-                date = timestamp.toDate();
-            } else if (typeof timestamp === 'number') {
-                date = new Date(timestamp);
-            } else {
-                return '';
-            }
-
-            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        }
-
-
-        // --- PROFILE LOGIC ---
-
-        /** Checks if the current authenticated user has a Firestore profile */
-        async function fetchUserProfile(uid) {
-            const userDocRef = doc(db, `artifacts/${appId}/public/data/users`, uid);
-            const userDoc = await getDoc(userDocRef);
-            return userDoc.exists() ? { id: userDoc.id, ...userDoc.data() } : null;
-        }
-
-        /** Checks if a custom username is unique */
-        async function isUsernameUnique(customId) {
-            const usersRef = collection(db, `artifacts/${appId}/public/data/users`);
-            // Query for documents where the customId field matches the proposed ID
-            const q = query(usersRef, where('customId', '==', customId));
-            const snapshot = await getDocs(q);
-            return snapshot.empty;
-        }
-
-        /** Handles the submission of the profile setup form */
-        async function handleProfileSetup(event) {
-            event.preventDefault();
-            
-            const customId = usernameInput.value.trim().toLowerCase();
-            const submitButton = document.getElementById('setup-submit-button');
-            submitButton.disabled = true;
-            usernameError.classList.add('hidden');
-
-            if (!customId.match(/^[a-z0-9_]{3,16}$/)) {
-                usernameError.textContent = "ID must be 3-16 characters, lowercase letters, numbers, and underscores only.";
-                usernameError.classList.remove('hidden');
-                submitButton.disabled = false;
-                return;
-            }
-
-            if (!await isUsernameUnique(customId)) {
-                usernameError.textContent = `The ID @${customId} is already taken.`;
-                usernameError.classList.remove('hidden');
-                submitButton.disabled = false;
-                return;
-            }
-
-            try {
-                // Create the user profile document
-                const userDocRef = doc(db, `artifacts/${appId}/public/data/users`, currentUserId);
+    return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
+            <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-sm w-full text-center">
+                <h2 className="text-3xl font-bold mb-6 text-indigo-700">Welcome to DirectChat</h2>
+                <p className="text-gray-600 mb-8">Sign in to start messaging with other users.</p>
                 
-                currentUserData = {
-                    uid: currentUserId,
-                    customId: customId,
-                    displayName: auth.currentUser.displayName,
-                    email: auth.currentUser.email,
-                    photoURL: auth.currentUser.photoURL,
-                    bannerURL: 'https://placehold.co/800x200/5865f2/ffffff?text=FURY+Banner', // Placeholder for profile banner
-                    friends: [],
-                    servers: ['global']
-                };
+                <button
+                    onClick={handleGoogleSignIn}
+                    className="w-full py-3 px-4 bg-indigo-600 text-white font-semibold rounded-xl shadow-lg hover:bg-indigo-700 transition duration-300 transform hover:scale-[1.02] flex items-center justify-center space-x-2"
+                >
+                    <svg className="w-5 h-5" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.343c-1.157 3.179-4.343 6-9.343 6-5.406 0-9.761-4.356-9.761-9.761s4.355-9.761 9.761-9.761c2.815 0 5.341 1.137 7.273 2.907l5.657-5.657C34.046 6.883 29.388 4 24 4c-11.052 0-20 8.948-20 20s8.948 20 20 20c11.048 0 20-8.952 20-20 0-1.341-.138-2.65-.389-3.917z"/>
+                        <path fill="#FF3D00" d="M6.306 14.693l6.571 4.819C14.655 15.108 18.9 13 24 13c3.084 0 5.862 1.01 8.077 2.766l6.571-4.819C34.046 6.883 29.388 4 24 4 15.3 4 8.016 8.324 4 14.693h2.306z"/>
+                        <path fill="#4CAF50" d="M24 44c5.108 0 9.761-2.108 13.041-5.657l-6.571-4.819C28.281 35.881 26.21 36 24 36c-5.152 0-9.845-3.882-11.516-9.088l-6.571 4.819C8.016 39.676 15.3 44 24 44z"/>
+                        <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.343c-.875 2.569-2.583 4.887-4.851 6.368l6.571 4.819C40.919 36.882 44 32.518 44 28c0-1.341-.138-2.65-.389-3.917V20.083z"/>
+                    </svg>
+                    <span>Sign in with Google</span>
+                </button>
+            </div>
+        </div>
+    );
+};
 
-                await setDoc(userDocRef, currentUserData);
+// --- MAIN APP ---
 
-                // If successful, proceed to the main app
-                initializeAppUI();
-            } catch (error) {
-                console.error("Error setting up profile:", error);
-                showCustomAlert("Failed to create profile. Please try again.");
-                submitButton.disabled = false;
-            }
+const App = () => {
+    const { db, auth, userId, isAuthReady } = useFirebase();
+    const [selectedChatId, setSelectedChatId] = useState(null);
+
+    // Auto-scroll to the bottom of the message list whenever messages or chat ID change
+    useEffect(() => {
+        const anchor = document.getElementById('scroll-bottom-anchor');
+        if (anchor) {
+            anchor.scrollIntoView({ behavior: 'smooth' });
         }
-        
-        // --- CHAT AND UI LOGIC ---
+    }, [selectedChatId, userId]); // Depend on userId to scroll after auth is ready
 
-        /** Sets up the real-time listener for the active chat channel */
-        function setupMessageListener(channelId) {
-            // Note: In a real app, channelId would map to a specific Firestore collection path.
-            // For now, all messages go to one "global_main" collection.
-            if (!authReady || !currentUserId || !currentUserData) return;
-            
-            const channelPath = `artifacts/${appId}/public/data/messages`;
-            const messagesRef = collection(db, channelPath);
-            const q = query(messagesRef); 
+    if (!isAuthReady) {
+        return (
+            <div className="min-h-screen flex items-center justify-center text-indigo-700 bg-gray-100">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-500"></div>
+                <p className="ml-3 font-medium">Authenticating...</p>
+            </div>
+        );
+    }
 
-            // Clear previous listener if any
-            if (window.unsubscribeMessages) {
-                window.unsubscribeMessages();
-            }
-            
-            // Update UI to reflect current channel
-            const channelMapping = {
-                'global_main': 'main-chat',
-                'global_dev': 'dev-talk',
-                'dm_current': `@${currentUserData.customId}'s DM`,
-                'dm_friend2': `@JaneS_Dev`
-            };
+    if (!userId || !db || !auth) {
+        return <AuthScreen auth={auth} setIsAuthReady={setIsAuthReady} />;
+    }
 
-            currentChannelName.innerHTML = (channelId.startsWith('dm_') ? 
-                `<i data-lucide="at-sign" class="w-5 h-5 text-gray-400"></i>` : 
-                `<i data-lucide="hash" class="w-5 h-5 text-gray-400"></i>`
-            ) + `<span>${channelMapping[channelId] || '#main-chat'}</span>`;
-            lucide.createIcons(); // Re-render icon in header
+    return (
+        <div className="flex flex-col min-h-screen bg-gray-100 font-sans">
+            <Header userId={userId} auth={auth} />
+            <div className="flex flex-1 overflow-hidden">
+                <ChatSidebar 
+                    db={db} 
+                    currentUserId={userId} 
+                    setSelectedChatId={setSelectedChatId}
+                />
+                <div className="flex-1 flex flex-col">
+                    <MessageList 
+                        db={db} 
+                        currentUserId={userId} 
+                        selectedChatId={selectedChatId}
+                    />
+                    <MessageInput 
+                        db={db} 
+                        currentUserId={userId} 
+                        selectedChatId={selectedChatId}
+                    />
+                </div>
+            </div>
+        </div>
+    );
+};
 
-            // Set up new real-time listener (onSnapshot)
-            window.unsubscribeMessages = onSnapshot(q, (snapshot) => {
-                const messages = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                }));
-                
-                // Filter messages based on the current activeChannelId here if needed for DMs
-                // For now, all messages are global (global_main)
-                renderMessages(messages);
-            }, (error) => {
-                console.error("Error fetching messages:", error);
-            });
-        }
-
-        async function handleMessageSubmit(event) {
-            event.preventDefault();
-            
-            if (!currentUserId || !currentUserData) return showCustomAlert("Error: User data is missing.");
-
-            const text = messageInput.value.trim();
-            if (text === "") return;
-
-            try {
-                const channelPath = `artifacts/${appId}/public/data/messages`;
-
-                await addDoc(collection(db, channelPath), {
-                    text: text,
-                    createdAt: serverTimestamp(), 
-                    userId: currentUserId,
-                    userName: currentUserData.displayName,
-                    userCustomId: currentUserData.customId,
-                    userPhoto: currentUserData.photoURL,
-                    channelId: activeChannelId, // Store the channel ID for future filtering
-                });
-
-                messageInput.value = ''; 
-            } catch (error) {
-                console.error("Error sending message:", error);
-                showCustomAlert("Failed to send message: " + (error.message || "Unknown error."));
-            }
-        }
-        
-        /** Handles switching between channels/DMs */
-        function handleChannelSwitch(event) {
-            const target = event.target.closest('.channel-item, .dm-item');
-            if (!target) return;
-
-            // Remove active state from all items
-            document.querySelectorAll('.channel-item, .dm-item').forEach(el => el.classList.remove('active'));
-
-            // Add active state to the clicked item
-            target.classList.add('active');
-            
-            const newChannelId = target.getAttribute('data-channel-id');
-            if (newChannelId !== activeChannelId) {
-                activeChannelId = newChannelId;
-                setupMessageListener(activeChannelId);
-            }
-            
-            // Update input placeholder
-            const channelMapping = {
-                'global_main': 'Message #main-chat',
-                'global_dev': 'Message #dev-talk',
-                'dm_current': 'Message @JohnDoe',
-                'dm_friend2': 'Message @JaneS_Dev'
-            };
-            messageInput.placeholder = channelMapping[activeChannelId] || 'Send a message...';
-
-        }
-        
-        // --- INITIALIZATION HANDLER ---
-
-        /** Called after user profile data is successfully loaded or created */
-        function initializeAppUI() {
-            switchScreen('app-container');
-            updateUserInfoFooter(currentUserData);
-            setupMessageListener(activeChannelId);
-        }
-
-        // --- EVENT LISTENERS ---
-        signInButton.addEventListener('click', handleSignIn);
-        signOutButton.addEventListener('click', handleSignOut);
-        messageForm.addEventListener('submit', handleMessageSubmit);
-        profileSetupForm.addEventListener('submit', handleProfileSetup);
-        channelList.addEventListener('click', handleChannelSwitch);
-        
-        // Placeholder for future emoji picker
-        document.getElementById('emoji-button').addEventListener('click', () => {
-            showCustomAlert("Emoji Picker coming soon! Adding emojis is the next step.");
-        });
-
-        // --- AUTH STATE OBSERVER ---
-        onAuthStateChanged(auth, async (user) => {
-            authReady = true;
-            loadingScreen.classList.add('hidden');
-
-            if (user) {
-                currentUserId = user.uid;
-                
-                // 1. Check if user has a profile document in Firestore
-                const profile = await fetchUserProfile(user.uid);
-                
-                if (profile) {
-                    // 2. Profile exists, proceed to main app
-                    currentUserData = profile;
-                    initializeAppUI();
-                } else {
-                    // 3. Profile does not exist, show setup screen
-                    switchScreen('profile-setup-screen');
-                }
-            } else {
-                // User is signed out (Show Auth UI)
-                currentUserId = null;
-                currentUserData = null;
-                switchScreen('auth-screen');
-                // Clean up listener
-                if (window.unsubscribeMessages) window.unsubscribeMessages();
-            }
-        });
-        
-        async function handleSignIn() {
-            try {
-                authErrorMessage.classList.add('hidden');
-                await signInWithPopup(auth, provider);
-            } catch (error) {
-                console.error("Authentication Error:", error);
-                const message = error.code === 'auth/popup-closed-by-user' ? "Sign-in window closed." : "Google Sign-In failed. Please check console.";
-                authErrorMessage.textContent = message;
-                authErrorMessage.classList.remove('hidden');
-            }
-        }
-
-        async function handleSignOut() {
-            try {
-                await signOut(auth);
-            } catch (error) {
-                showCustomAlert("Error signing out: " + error.message);
-            }
-        }
-
-        // Initialize Lucide icons on window load
-        window.onload = () => {
-            lucide.createIcons();
-            // Start on the loading screen until auth state is determined
-            loadingScreen.classList.remove('hidden'); 
-        };
-
-    </script>
-</body>
-</html>
+export default App;
