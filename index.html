@@ -21,9 +21,9 @@
             justify-content: center;
             padding: 1rem;
         }
-        .auth-card {
+        .loading-screen {
             background: #1e1e1e;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
             max-width: 400px;
             width: 100%;
         }
@@ -33,7 +33,7 @@
             max-width: 800px;
             width: 100%;
             height: 80vh;
-            display: none; /* Hidden by default */
+            display: none; /* Hidden by default, shown after auth */
             flex-direction: column;
         }
         .message-bubble {
@@ -67,23 +67,13 @@
         <p class="text-gray-400 font-light text-xl">Connect with friends instantly.</p>
     </header>
 
-    <!-- Authentication Screen -->
-    <main id="auth-screen" class="auth-card p-8 rounded-2xl text-center transition-opacity duration-500">
-        <div class="inline-block p-4 rounded-full" style="background: linear-gradient(135deg, #ff416c, #ff7e5f);">
-            <i data-lucide="message-square" class="w-8 h-8 text-white"></i>
-        </div>
-        <h2 class="text-3xl font-semibold mt-4 mb-2">Welcome to FURY</h2>
-        <p class="text-gray-400 mb-8">Please sign in with Google to continue.</p>
-
-        <button id="google-sign-in-button" 
-                class="w-full py-4 rounded-xl text-lg font-bold transition duration-300 transform hover:scale-[1.02] active:scale-[0.99] flex items-center justify-center space-x-3"
-                style="background-color: #db4437; box-shadow: 0 4px 15px rgba(219, 68, 55, 0.5);"
-        >
-            <i data-lucide="chrome" class="w-6 h-6"></i>
-            <span>Sign in with Google</span>
-        </button>
-        <p id="auth-error-message" class="text-red-400 mt-4 text-sm hidden">Authentication Error.</p>
-        <p class="text-xs text-gray-500 mt-4">By signing in, you agree to our Terms of Service.</p>
+    <!-- Loading Screen (Displayed while authentication is running) -->
+    <main id="loading-screen" class="loading-card p-10 rounded-2xl text-center flex items-center justify-center space-x-3 transition-opacity duration-500">
+        <svg class="animate-spin h-5 w-5 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <p class="text-lg text-gray-400">Connecting to FURY...</p>
     </main>
 
     <!-- Chat Screen -->
@@ -95,18 +85,21 @@
                 <i data-lucide="zap" class="w-5 h-5 text-yellow-400"></i>
                 <span>Global FURY Chat</span>
             </h2>
-            <button id="sign-out-button" 
-                    class="p-2 rounded-full text-sm text-gray-400 hover:text-white hover:bg-gray-700 transition duration-150"
-                    title="Sign Out"
-            >
-                <i data-lucide="log-out" class="w-5 h-5"></i>
-            </button>
+            <div id="user-info" class="text-xs text-gray-400 flex items-center space-x-2">
+                <p>User ID: <span id="display-user-id" class="font-mono text-red-400 text-sm">...</span></p>
+                <button id="sign-out-button" 
+                        class="p-2 rounded-full text-sm text-gray-400 hover:text-white hover:bg-gray-700 transition duration-150"
+                        title="Sign Out"
+                >
+                    <i data-lucide="log-out" class="w-5 h-5"></i>
+                </button>
+            </div>
         </div>
 
         <!-- Messages Container -->
         <div id="messages-container" class="flex-1 overflow-y-auto p-4 space-y-4">
             <!-- Messages will be injected here -->
-            <div class="text-center text-gray-500 italic pt-20">Loading messages...</div>
+            <div class="text-center text-gray-500 italic pt-20">Starting chat...</div>
         </div>
 
         <!-- Message Input -->
@@ -139,43 +132,40 @@
     <script type="module">
         // --- FIREBASE IMPORTS ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, query, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
         setLogLevel('Debug'); // Enable debug logging for better troubleshooting
         
-        // --- CONFIGURATION AND INITIALIZATION ---
-        
-        // !!! IMPORTANT: REPLACE THESE PLACEHOLDERS WITH YOUR ACTUAL FIREBASE CONFIGURATION !!!
-        // You can find this in your Firebase Project Settings -> Web App (</>)
-        const firebaseConfig = {
-            apiKey: "YOUR_API_KEY", 
-            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-            projectId: "YOUR_PROJECT_ID",
-            storageBucket: "YOUR_PROJECT_ID.appspot.com",
-            messagingSenderId: "YOUR_SENDER_ID",
-            appId: "YOUR_APP_ID"
-        };
-        // !!! END OF CONFIGURATION SECTION !!!
+        // --- ENVIRONMENT VARIABLES & INITIALIZATION ---
+
+        // Safely access environment variables provided by the canvas
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-fury-app';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        if (!firebaseConfig) {
+            console.error("Firebase configuration not found. Cannot initialize app.");
+            document.getElementById('loading-screen').innerHTML = '<p class="text-red-500">Error: Firebase config missing.</p>';
+            throw new Error("Firebase config missing.");
+        }
 
         // Initialize Firebase
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
-        const provider = new GoogleAuthProvider();
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-fury-app'; // Use global ID if available
+        
         let currentUserId = null;
-        let authReady = false;
 
         // --- DOM ELEMENTS ---
-        const authScreen = document.getElementById('auth-screen');
+        const loadingScreen = document.getElementById('loading-screen');
         const chatScreen = document.getElementById('chat-screen');
-        const signInButton = document.getElementById('google-sign-in-button');
         const signOutButton = document.getElementById('sign-out-button');
         const messageForm = document.getElementById('message-form');
         const messageInput = document.getElementById('message-input');
         const messagesContainer = document.getElementById('messages-container');
-        const authErrorMessage = document.getElementById('auth-error-message');
+        const displayUserId = document.getElementById('display-user-id');
         const messageModal = document.getElementById('message-modal');
         const modalText = document.getElementById('modal-text');
         const modalCloseButton = document.getElementById('modal-close-button');
@@ -195,10 +185,20 @@
 
         /** Renders a list of messages into the container */
         function renderMessages(messages) {
-            // Reverse messages to show newest at the bottom
-            const sortedMessages = messages.sort((a, b) => a.createdAt - b.createdAt); 
+            // Sort messages locally by createdAt to ensure correct order
+            const sortedMessages = messages.sort((a, b) => {
+                const timeA = a.createdAt ? (a.createdAt.seconds * 1000 + a.createdAt.nanoseconds / 1000000) : 0;
+                const timeB = b.createdAt ? (b.createdAt.seconds * 1000 + b.createdAt.nanoseconds / 1000000) : 0;
+                return timeA - timeB;
+            }); 
 
             messagesContainer.innerHTML = '';
+            
+            if (sortedMessages.length === 0) {
+                 messagesContainer.innerHTML = '<div class="text-center text-gray-500 italic pt-20">Start the conversation! Be the first to send a message.</div>';
+                 return;
+            }
+
             sortedMessages.forEach(msg => {
                 const isMine = msg.userId === currentUserId;
                 const messageHtml = `
@@ -218,57 +218,27 @@
 
         /** Formats Firestore timestamp to a readable time string */
         function formatTime(timestamp) {
-            if (!timestamp) return '';
-            const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        }
-
-
-        // --- FIREBASE AUTHENTICATION LOGIC ---
-
-        async function handleSignIn() {
+            if (!timestamp || !timestamp.toDate) return '';
             try {
-                // Clear any previous error
-                authErrorMessage.classList.add('hidden');
-                
-                // Sign in with Google Popup
-                const result = await signInWithPopup(auth, provider);
-                
-                // User signed in successfully. The onAuthStateChanged listener will handle the UI switch.
-                console.log("Sign-in successful:", result.user);
-
-            } catch (error) {
-                console.error("Authentication Error:", error);
-                
-                // Display user-friendly error message
-                authErrorMessage.textContent = `Auth Error: ${error.message.substring(0, 100)}...`;
-                authErrorMessage.classList.remove('hidden');
+                const date = timestamp.toDate();
+                return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            } catch (e) {
+                console.error("Failed to convert timestamp:", e);
+                return 'N/A';
             }
         }
 
-        async function handleSignOut() {
-            try {
-                await signOut(auth);
-            } catch (error) {
-                showCustomAlert("Error signing out: " + error.message);
-            }
-        }
 
         // --- FIREBASE CHAT LOGIC ---
 
         /** Sets up the real-time listener for chat messages */
         function setupMessageListener() {
-            if (!authReady) {
-                console.log("Auth not ready, skipping message listener setup.");
-                return;
-            }
-            
             // Define the collection path for public data
             const messagesCollectionPath = `artifacts/${appId}/public/data/messages`;
             const messagesRef = collection(db, messagesCollectionPath);
 
-            // Create a query to get messages (Note: orderBy is risky, using default fetch here)
-            const q = query(messagesRef); // Fetch all messages
+            // Fetch all messages (no orderBy to avoid needing indexes)
+            const q = query(messagesRef); 
 
             // Set up real-time listener (onSnapshot)
             onSnapshot(q, (snapshot) => {
@@ -276,8 +246,6 @@
                     id: doc.id,
                     ...doc.data()
                 }));
-                // Sort messages locally by createdAt if available, otherwise by doc ID
-                messages.sort((a, b) => (a.createdAt || '').toString().localeCompare((b.createdAt || '').toString()));
                 renderMessages(messages);
             }, (error) => {
                 console.error("Error fetching messages:", error);
@@ -290,7 +258,7 @@
             event.preventDefault();
             
             if (!currentUserId) {
-                showCustomAlert("Please sign in to send messages.");
+                showCustomAlert("Authentication is not complete. Please wait a moment.");
                 return;
             }
 
@@ -299,13 +267,16 @@
 
             try {
                 const messagesCollectionPath = `artifacts/${appId}/public/data/messages`;
+                
+                // Get user info from the authenticated user object
+                const user = auth.currentUser;
 
                 await addDoc(collection(db, messagesCollectionPath), {
                     text: text,
                     createdAt: serverTimestamp(),
                     userId: currentUserId,
-                    userName: auth.currentUser.displayName || 'Anonymous',
-                    userPhoto: auth.currentUser.photoURL || null
+                    userName: user.displayName || user.email || 'Anonymous',
+                    userPhoto: user.photoURL || null
                 });
 
                 messageInput.value = ''; // Clear input on success
@@ -315,39 +286,67 @@
             }
         }
 
+        // --- AUTHENTICATION FLOW (Environment Mandatory) ---
+        async function authenticateUser() {
+            try {
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    // Fallback to anonymous sign-in if token is missing (though it shouldn't be)
+                    await signInAnonymously(auth);
+                }
+            } catch (error) {
+                console.error("Authentication failed:", error);
+                loadingScreen.innerHTML = `<p class="text-red-500">Auth Error: ${error.code}. Check console for details.</p>`;
+                showCustomAlert("Authentication failed. Please check your network connection.");
+            }
+        }
+
+        async function handleSignOut() {
+            try {
+                // Since we are in the canvas environment, signing out usually just reloads the auth token.
+                await signOut(auth);
+            } catch (error) {
+                showCustomAlert("Error signing out: " + error.message);
+            }
+        }
+
         // --- EVENT LISTENERS ---
-        signInButton.addEventListener('click', handleSignIn);
         signOutButton.addEventListener('click', handleSignOut);
         messageForm.addEventListener('submit', handleMessageSubmit);
 
         // --- AUTH STATE OBSERVER ---
         onAuthStateChanged(auth, (user) => {
-            authReady = true; // Auth process has finished its initial check
             if (user) {
                 // User is signed in (Show Chat UI)
                 currentUserId = user.uid;
-                authScreen.style.display = 'none';
+                loadingScreen.style.display = 'none';
                 chatScreen.style.display = 'flex';
+                displayUserId.textContent = user.uid; // Display the full UID
+                
                 // Initialize chat listener after successful sign-in
                 setupMessageListener();
-                console.log("User signed in:", user.displayName, user.uid);
+                console.log("User signed in:", user.uid);
             } else {
-                // User is signed out (Show Auth UI)
+                // User is signed out or waiting for sign-in (Show Loading UI or trigger sign-in)
                 currentUserId = null;
                 chatScreen.style.display = 'none';
-                authScreen.style.display = 'block';
-                console.log("User signed out.");
+                loadingScreen.style.display = 'block';
+
+                // Attempt to re-authenticate only if a known token is present
+                if (initialAuthToken) {
+                    authenticateUser();
+                } else {
+                    // If running outside the environment, this is where you'd redirect to a login page.
+                    loadingScreen.innerHTML = '<p class="text-yellow-400">Please sign in to start chatting.</p>';
+                }
             }
+            // Re-create icons to ensure they are visible when screens switch
+            lucide.createIcons();
         });
 
-        // Initialize Lucide icons
-        window.onload = () => {
-            lucide.createIcons();
-            // Fallback for immediate auth check if onAuthStateChanged fires too fast
-            if (!authReady) {
-                // Display loading or waiting message if needed, but the auth listener should resolve quickly.
-            }
-        };
+        // Start the authentication process on load
+        authenticateUser();
 
     </script>
 </body>
