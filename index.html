@@ -106,7 +106,7 @@
         <!-- Messages Container -->
         <div id="messages-container" class="flex-1 overflow-y-auto p-4 space-y-4">
             <!-- Messages will be injected here -->
-            <div class="text-center text-gray-500 italic pt-20">Loading messages...</div>
+            <div class="text-center text-gray-500 italic pt-20">Please sign in to view messages...</div>
         </div>
 
         <!-- Message Input -->
@@ -140,30 +140,41 @@
         // --- FIREBASE IMPORTS ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, query, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        setLogLevel('Debug'); // Enable debug logging for better troubleshooting
+        
+        // Enable debug logging for better troubleshooting
+        setLogLevel('Debug'); 
         
         // --- CONFIGURATION AND INITIALIZATION ---
         
-        // !!! IMPORTANT: REPLACE THESE PLACEHOLDERS WITH YOUR ACTUAL FIREBASE CONFIGURATION !!!
-        // You can find this in your Firebase Project Settings -> Web App (</>)
-        const firebaseConfig = {
-            apiKey: "YOUR_API_KEY", 
-            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-            projectId: "YOUR_PROJECT_ID",
-            storageBucket: "YOUR_PROJECT_ID.appspot.com",
-            messagingSenderId: "YOUR_SENDER_ID",
-            appId: "YOUR_APP_ID"
+        // Firebase configuration using your provided credentials
+        let firebaseConfig = {
+            apiKey: "AIzaSyCkp-J_21Nb7qBquiMA90Zl13elfGesCPI",
+            authDomain: "squit-up-auth.firebaseapp.com",
+            projectId: "squit-up-auth",
+            storageBucket: "squit-up-auth.firebasestorage.app",
+            messagingSenderId: "503910898443",
+            appId: "1:503910898443:web:c5a56eb24cd4f183d8600e"
         };
-        // !!! END OF CONFIGURATION SECTION !!!
+
+        // Attempt to use global config if provided (overwrites the hardcoded config above)
+        try {
+            if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+                firebaseConfig = JSON.parse(__firebase_config);
+            }
+        } catch (e) {
+            console.error("Error parsing __firebase_config JSON:", e);
+        }
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-fury-app'; // Use global ID if available
 
         // Initialize Firebase
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
         const provider = new GoogleAuthProvider();
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-fury-app'; // Use global ID if available
+        
         let currentUserId = null;
         let authReady = false;
 
@@ -195,10 +206,20 @@
 
         /** Renders a list of messages into the container */
         function renderMessages(messages) {
-            // Reverse messages to show newest at the bottom
-            const sortedMessages = messages.sort((a, b) => a.createdAt - b.createdAt); 
-
+            // Sort messages locally by timestamp (ascending)
+            const sortedMessages = messages.sort((a, b) => {
+                const timeA = (a.createdAt && a.createdAt.toMillis) ? a.createdAt.toMillis() : 0;
+                const timeB = (b.createdAt && b.createdAt.toMillis) ? b.createdAt.toMillis() : 0;
+                return timeA - timeB;
+            });
+            
             messagesContainer.innerHTML = '';
+            
+            if (sortedMessages.length === 0 && currentUserId) {
+                 messagesContainer.innerHTML = '<div class="text-center text-gray-500 italic pt-20">Start the conversation!</div>';
+                 return;
+            }
+
             sortedMessages.forEach(msg => {
                 const isMine = msg.userId === currentUserId;
                 const messageHtml = `
@@ -234,14 +255,23 @@
                 // Sign in with Google Popup
                 const result = await signInWithPopup(auth, provider);
                 
-                // User signed in successfully. The onAuthStateChanged listener will handle the UI switch.
-                console.log("Sign-in successful:", result.user);
+                // The onAuthStateChanged listener will handle the UI switch.
+                console.log("Sign-in successful:", result.user.displayName, result.user.uid);
 
             } catch (error) {
                 console.error("Authentication Error:", error);
                 
-                // Display user-friendly error message
-                authErrorMessage.textContent = `Auth Error: ${error.message.substring(0, 100)}...`;
+                let message = "Google Sign-In failed. Please ensure Firebase Auth is configured correctly.";
+                if (error.code === 'auth/popup-closed-by-user') {
+                    message = "Sign-in window closed. Please try again.";
+                } else if (error.code === 'auth/cancelled-popup-request') {
+                    message = "Sign-in attempt interrupted. Please try again.";
+                } else if (error.code === 'auth/network-request-failed') {
+                    message = "Network error. Check your internet connection.";
+                }
+
+                // Display user-friendly error message on the auth screen
+                authErrorMessage.textContent = message;
                 authErrorMessage.classList.remove('hidden');
             }
         }
@@ -258,8 +288,8 @@
 
         /** Sets up the real-time listener for chat messages */
         function setupMessageListener() {
-            if (!authReady) {
-                console.log("Auth not ready, skipping message listener setup.");
+            if (!authReady || !currentUserId) {
+                console.log("Auth not ready or no user ID, skipping message listener setup.");
                 return;
             }
             
@@ -267,8 +297,8 @@
             const messagesCollectionPath = `artifacts/${appId}/public/data/messages`;
             const messagesRef = collection(db, messagesCollectionPath);
 
-            // Create a query to get messages (Note: orderBy is risky, using default fetch here)
-            const q = query(messagesRef); // Fetch all messages
+            // Create a query to get messages (Note: Avoiding orderBy to prevent index errors)
+            const q = query(messagesRef); 
 
             // Set up real-time listener (onSnapshot)
             onSnapshot(q, (snapshot) => {
@@ -276,12 +306,11 @@
                     id: doc.id,
                     ...doc.data()
                 }));
-                // Sort messages locally by createdAt if available, otherwise by doc ID
-                messages.sort((a, b) => (a.createdAt || '').toString().localeCompare((b.createdAt || '').toString()));
+                
                 renderMessages(messages);
             }, (error) => {
                 console.error("Error fetching messages:", error);
-                showCustomAlert("Failed to load chat messages.");
+                showCustomAlert("Failed to load chat messages. Check console for details.");
             });
         }
 
@@ -304,14 +333,14 @@
                     text: text,
                     createdAt: serverTimestamp(),
                     userId: currentUserId,
-                    userName: auth.currentUser.displayName || 'Anonymous',
+                    userName: auth.currentUser.displayName || 'Anonymous User',
                     userPhoto: auth.currentUser.photoURL || null
                 });
 
                 messageInput.value = ''; // Clear input on success
             } catch (error) {
                 console.error("Error sending message:", error);
-                showCustomAlert("Failed to send message: " + error.message);
+                showCustomAlert("Failed to send message: " + (error.message || "Unknown error."));
             }
         }
 
@@ -323,6 +352,13 @@
         // --- AUTH STATE OBSERVER ---
         onAuthStateChanged(auth, (user) => {
             authReady = true; // Auth process has finished its initial check
+
+            // Hide the initial "Please sign in..." message when auth starts
+            const initialMessageDiv = messagesContainer.querySelector('.text-center.text-gray-500.italic');
+            if (initialMessageDiv) {
+                initialMessageDiv.textContent = 'Loading messages...';
+            }
+
             if (user) {
                 // User is signed in (Show Chat UI)
                 currentUserId = user.uid;
@@ -337,16 +373,15 @@
                 chatScreen.style.display = 'none';
                 authScreen.style.display = 'block';
                 console.log("User signed out.");
+                
+                // Reset message container content to prompt sign-in
+                messagesContainer.innerHTML = '<div class="text-center text-gray-500 italic pt-20">Please sign in to view messages...</div>';
             }
         });
 
-        // Initialize Lucide icons
+        // Initialize Lucide icons on window load
         window.onload = () => {
             lucide.createIcons();
-            // Fallback for immediate auth check if onAuthStateChanged fires too fast
-            if (!authReady) {
-                // Display loading or waiting message if needed, but the listener should resolve quickly.
-            }
         };
 
     </script>
