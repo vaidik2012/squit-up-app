@@ -62,9 +62,9 @@
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         
         // --- Custom Configuration (Provided by user - CRITICAL) ---
-        // This configuration has been updated using the details from your Firebase project's setup guide.
+        // This key has been updated based on the user's latest input.
         const customFirebaseConfig = {
-            apiKey: "AIzaSyCkp-J_21Nb7dqs33iMA90Zl13elfGesCPI", 
+            apiKey: "AIzaSyB1zvVHaBrbzX5iA9fBVNGa_3sY1-WCSpY", 
             authDomain: "squit-up-auth.firebaseapp.com",
             projectId: "squit-up-auth",
             storageBucket: "squit-up-auth.firebasestorage.app",
@@ -82,6 +82,26 @@
         // --- UTILITY FUNCTIONS ---
 
         /**
+         * Generic function to retry an async function with exponential backoff.
+         */
+        async function fetchWithExponentialBackoff(apiCall, maxRetries = 3, delay = 1000) {
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    return await apiCall();
+                } catch (error) {
+                    // Check if it's the specific API key error code
+                    if (error.code && error.code.includes('api-key-not-valid') && i < maxRetries - 1) {
+                         // Only retry on API key error or general network issues
+                        await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, i)));
+                        // Do not log retry as an error in the console
+                        continue; 
+                    }
+                    throw error; // Re-throw if it's the last attempt or a different error
+                }
+            }
+        }
+
+        /**
          * Renders the loading spinner into the app container.
          */
         function renderLoading(message = "Connecting...") {
@@ -89,7 +109,7 @@
             container.innerHTML = `
                 <div class="h-full flex items-center justify-center text-white bg-gray-900">
                     <div class="flex flex-col items-center">
-                        <div class="w-12 h-12 border-4 border-t-4 border-indigo-500 border-opacity-25 rounded-full animate-spin"></div>
+                        <div class="w-12 h-12 border-4 border-t-4 border-red-500 border-opacity-25 rounded-full animate-spin"></div>
                         <p class="mt-4 text-lg text-gray-400">${message}</p>
                     </div>
                 </div>
@@ -120,14 +140,14 @@
                                 id="email-input" 
                                 placeholder="Email"
                                 required 
-                                class="w-full bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                class="w-full bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-red-500 focus:border-red-500"
                             >
                             <input 
                                 type="password" 
                                 id="password-input" 
                                 placeholder="Password"
                                 required 
-                                class="w-full bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                class="w-full bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-red-500 focus:border-red-500"
                             >
                             <button id="email-signin-btn" type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-xl transition duration-200 shadow-lg shadow-indigo-600/30">
                                 Log In
@@ -171,7 +191,8 @@
                 case 'auth/unauthorized-domain':
                     return 'Error: Unauthorized domain. Check your Firebase Auth settings.';
                 case 'auth/api-key-not-valid':
-                    return 'Configuration Error: Invalid Firebase API Key. Please check your customFirebaseConfig.';
+                    // Specific message for the persistent error
+                    return 'Configuration Error: Invalid Firebase API Key. Please regenerate your API key in Google Cloud Console.';
                 default:
                     return `Authentication failed: ${errorCode}. Check console.`;
             }
@@ -205,17 +226,20 @@
         }
 
         /**
-         * Google Sign-In handler.
+         * Google Sign-In handler with Exponential Backoff.
          */
         async function signInWithGoogle() {
             renderLoading("Opening Google Sign-In...");
+            
             try {
                 const provider = new GoogleAuthProvider();
-                const result = await signInWithPopup(auth, provider);
                 
+                // Use exponential backoff for the sign-in popup call
+                const result = await fetchWithExponentialBackoff(async () => {
+                    return await signInWithPopup(auth, provider);
+                });
+
                 // IMPORTANT FIX: Add a short delay (500ms) on successful sign-in 
-                // to prevent a race condition where the pop-up closes too fast 
-                // for the main window's onAuthStateChanged listener to update.
                 if (result.user) {
                     renderLoading("Login successful, loading chat...");
                     await new Promise(resolve => setTimeout(resolve, 500)); 
@@ -228,7 +252,8 @@
                 if (error.code === 'auth/unauthorized-domain') {
                     userFriendlyMessage = 'Google Sign-In failed: Unauthorized domain. Check your Firebase Auth settings.';
                 } else if (error.message.includes('apiKey') || error.code === 'auth/api-key-not-valid') {
-                    userFriendlyMessage = 'Configuration Error: Invalid API Key. Please verify your customFirebaseConfig.';
+                    // Use the specific, actionable message for this persistent error
+                    userFriendlyMessage = getAuthErrorMessage('auth/api-key-not-valid');
                 }
                 
                 // Re-render the sign-in screen with a specific error message
@@ -441,7 +466,7 @@
                 const senderDisplay = message.displayName || message.senderId.substring(0, 8); 
 
                 const bubbleClass = isCurrentUser
-                    ? 'bg-indigo-500 text-white self-end rounded-bl-xl rounded-t-xl'
+                    ? 'bg-red-500 text-white self-end rounded-bl-xl rounded-t-xl'
                     : 'bg-gray-700 text-gray-200 self-start rounded-br-xl rounded-t-xl';
                 
                 const timestampDisplay = message.timestamp instanceof Date 
@@ -521,7 +546,7 @@
                                 <h2 class="text-xs font-semibold uppercase text-gray-400 mb-2">Global Channels</h2>
                                 <ul class="space-y-1">
                                     <li>
-                                        <button class="w-full text-left p-2 rounded-lg transition duration-150 bg-indigo-600 text-white">
+                                        <button class="w-full text-left p-2 rounded-lg transition duration-150 bg-red-600 hover:bg-red-500 text-white">
                                             #global-fury-chat
                                         </button>
                                     </li>
@@ -566,11 +591,11 @@
                                     type="text"
                                     id="message-input"
                                     placeholder="Message #global-fury-chat"
-                                    class="flex-grow bg-gray-700 text-white p-3 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none transition duration-150"
+                                    class="flex-grow bg-gray-700 text-white p-3 rounded-xl focus:ring-2 focus:ring-red-500 focus:outline-none transition duration-150"
                                 >
                                 <button
                                     type="submit"
-                                    class="bg-indigo-600 hover:bg-indigo-700 text-white p-3 rounded-xl transition duration-150 shadow-lg disabled:opacity-50"
+                                    class="bg-red-600 hover:bg-red-700 text-white p-3 rounded-xl transition duration-150 shadow-lg disabled:opacity-50"
                                 >
                                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
                                 </button>
@@ -601,6 +626,7 @@
         function initializeAppAndAuth() {
             if (!firebaseConfig.apiKey) {
                 console.error("Firebase config is missing.");
+                // This check is now less likely to trigger but remains for safety
                 return renderLoading("Error: Firebase configuration missing.");
             }
 
