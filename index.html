@@ -43,14 +43,13 @@
         let app, db, auth;
         let userId = null;
         let currentUserProfile = null; // Store fetched user profile data
+        let isAuthReady = false; // Flag to ensure listeners only start after auth state is stable
 
         // --- GLOBAL VARIABLES (Provided by environment or manually configured) ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         
-        // -------------------------------------------------------------------------------
         // --- Custom Configuration (Provided by user) ---
-        // -------------------------------------------------------------------------------
         const customFirebaseConfig = {
             apiKey: "AIzaSyCkp-J_21Nb7qBquiMA90Zl13elfGesCPI",
             authDomain: "squit-up-auth.firebaseapp.com",
@@ -85,7 +84,7 @@
         }
         
         /**
-         * Renders the Sign-In screen.
+         * Renders the Sign-In screen (only shown if all other auth fails or user signs out).
          */
         function renderSignIn() {
             const container = document.getElementById('app-container');
@@ -106,10 +105,14 @@
                             Sign in with Google
                         </button>
                         <p class="text-xs text-gray-600 mt-4">By signing in, you agree to our <a href="#" class="text-red-500 hover:underline">Terms of Service</a>.</p>
+                        <button id="anon-signin-btn" class="mt-4 text-sm text-gray-500 hover:text-white transition duration-200">
+                            Continue as Guest
+                        </button>
                     </div>
                 </div>
             `;
             document.getElementById('google-signin-btn').addEventListener('click', signInWithGoogle);
+            document.getElementById('anon-signin-btn').addEventListener('click', () => signInAnonymously(auth));
         }
 
         /**
@@ -125,10 +128,9 @@
                 const container = document.getElementById('app-container');
                 const errorMessage = `
                     <p class="text-sm text-red-400 mt-4">
-                        Auth Error: Firebase: Error (${error.code}). Please ensure Firebase Auth is configured correctly.
+                        Auth Error: Firebase: Error (${error.code}). Please ensure Google Sign-In is enabled and your domain is authorized.
                     </p>
                 `;
-                // Simple way to show error on the sign-in screen without re-rendering the whole page
                 const signInBox = container.querySelector('.text-center');
                 if (signInBox && !signInBox.querySelector('.text-red-400')) {
                     signInBox.insertAdjacentHTML('beforeend', errorMessage);
@@ -142,14 +144,13 @@
         async function handleSignOut() {
             try {
                 await signOut(auth);
-                // Sign in anonymously immediately after sign out for continued Canvas access
+                // After signing out, immediately attempt to sign in anonymously 
+                // to keep the user session active for the application environment.
                 await signInAnonymously(auth); 
             } catch (error) {
                 console.error("Error during sign out:", error);
             }
         }
-
-        // --- CRITICAL FIX FUNCTION ---
 
         /**
          * Checks if the user's profile document exists and creates it if missing.
@@ -160,10 +161,11 @@
             try {
                 const docSnap = await getDoc(userDocRef);
                 if (!docSnap.exists()) {
-                    // Document does not exist, CREATE IT. This is the fix for the infinite loading.
+                    // Create the profile document
                     await setDoc(userDocRef, {
                         userId: uid,
-                        displayName: `user_${uid.substring(0, 8)}`,
+                        // If it's an anonymous user, use 'Guest'
+                        displayName: auth.currentUser?.isAnonymous ? `Guest_${uid.substring(0, 4)}` : (auth.currentUser?.displayName || `user_${uid.substring(0, 8)}`),
                         onlineStatus: 'online',
                         createdAt: serverTimestamp(),
                     });
@@ -171,7 +173,6 @@
                 }
             } catch (error) {
                 console.error("Error ensuring user profile document:", error.message);
-                // Log the error but continue. The onSnapshot listener below will pick up the new doc.
             }
         }
 
@@ -181,7 +182,7 @@
          * Listens to the global chat for messages and updates the UI.
          */
         function startChatListeners() {
-            if (!userId) return;
+            if (!userId || !isAuthReady) return;
 
             // 1. Listen for Global Chat messages
             const globalChatRef = doc(db, 'artifacts', appId, 'public', 'data', 'chats', 'global_fury_chat');
@@ -223,17 +224,26 @@
                         Say hello! Be the first to send a message to **#global-fury-chat**.
                     </div>
                 `;
+                // Add padding/flex to the container to manage the reversed layout
+                container.style.display = 'flex';
+                container.style.flexDirection = 'column-reverse';
+                container.style.justifyContent = 'center';
                 return;
+            } else {
+                // Ensure correct display properties if we found messages
+                container.style.display = 'flex';
+                container.style.flexDirection = 'column-reverse';
+                container.style.justifyContent = 'flex-start';
             }
 
             // Use DocumentFragment for performance when appending many elements
             const fragment = document.createDocumentFragment();
 
-            // Iterate in reverse to append to the top (which is reversed in CSS for scroll-to-bottom)
             messages.slice().reverse().forEach(message => {
                 const isCurrentUser = message.senderId === userId;
+                // Display the user's displayName from their profile or a truncated ID
                 const senderDisplay = currentUserProfile && isCurrentUser 
-                    ? 'You' 
+                    ? currentUserProfile.displayName
                     : message.senderId.substring(0, 8); 
 
                 const bubbleClass = isCurrentUser
@@ -248,7 +258,7 @@
                 messageElement.className = `flex flex-col mb-4 max-w-xs md:max-w-md ${isCurrentUser ? 'items-end' : 'items-start'}`;
                 messageElement.innerHTML = `
                     <div class="text-xs text-gray-400 mb-1 px-3">
-                        ${senderDisplay}
+                        ${isCurrentUser ? 'You' : senderDisplay}
                     </div>
                     <div class="p-3 shadow-md ${bubbleClass}">
                         ${message.text}
@@ -268,7 +278,7 @@
          * Sends a message to the global chat room.
          */
         async function sendMessage(text) {
-            if (!userId || !text.trim()) return;
+            if (!userId || !text.trim() || !isAuthReady) return;
 
             try {
                 const globalChatRef = doc(db, 'artifacts', appId, 'public', 'data', 'chats', 'global_fury_chat');
@@ -303,7 +313,7 @@
                     <!-- Sidebar (Left) -->
                     <div class="w-64 bg-gray-800 flex flex-col border-r border-gray-700">
                         <div class="p-4 border-b border-gray-700 flex items-center justify-between">
-                            <h1 class="text-xl font-extrabold text-white text-red-500">FURY</h1>
+                            <h1 class="text-xl font-extrabold text-red-500">FURY</h1>
                             <button id="signout-btn" class="text-gray-400 hover:text-white transition duration-150">
                                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
                             </button>
@@ -328,8 +338,12 @@
                             <div class="flex-shrink-0 w-3 h-3 rounded-full mr-3 ${statusColor} border-2 border-gray-700"></div>
                             <div class="flex flex-col overflow-hidden">
                                 <span class="text-sm font-semibold whitespace-nowrap overflow-hidden text-ellipsis">${userDisplayId}</span>
-                                <span class="text-xs text-gray-400 capitalize">${onlineStatus}</span>
+                                <span class="text-xs text-gray-400 capitalize">${onlineStatus} (${userId.substring(0, 8)})</span>
                             </div>
+                            <button id="google-upgrade-btn" class="ml-auto text-yellow-400 text-xs font-bold hover:text-yellow-300 transition duration-150 p-1 rounded-md" 
+                                    title="Sign in with Google to save your identity">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                            </button>
                         </div>
                     </div>
 
@@ -341,7 +355,7 @@
                         </header>
 
                         <!-- Messages Body -->
-                        <div id="messages-container" class="flex-grow p-4 overflow-y-auto space-y-3 flex flex-col-reverse">
+                        <div id="messages-container" class="flex-grow p-4 overflow-y-auto space-y-3 flex flex-col-reverse" style="display: flex; flex-direction: column-reverse; justify-content: flex-start;">
                             <!-- Messages will be rendered here by renderMessages -->
                         </div>
 
@@ -373,6 +387,14 @@
                 const input = document.getElementById('message-input');
                 sendMessage(input.value);
             });
+
+            // If the current user is anonymous, offer the upgrade button
+            if (auth.currentUser && auth.currentUser.isAnonymous) {
+                document.getElementById('google-upgrade-btn').addEventListener('click', signInWithGoogle);
+            } else {
+                // Hide the upgrade button if the user is already signed in (Google or custom token)
+                document.getElementById('google-upgrade-btn').style.display = 'none';
+            }
             
             // Start listening for messages now that the container exists
             startChatListeners();
@@ -382,10 +404,10 @@
          * Initializes Firebase and sets up the main authentication listener.
          */
         function initializeAppAndAuth() {
-            // Check if Firebase config is valid (either provided by environment or custom)
-            if (!firebaseConfig.apiKey || firebaseConfig.apiKey.includes("{YOUR_")) {
-                console.error("Firebase config missing or incomplete. Please replace the placeholders.");
-                return renderLoading("Error: Firebase configuration missing. Please update the customFirebaseConfig block in index.html.");
+            // Check if Firebase config is valid 
+            if (!firebaseConfig.apiKey) {
+                console.error("Firebase config is missing.");
+                return renderLoading("Error: Firebase configuration missing.");
             }
 
             try {
@@ -406,7 +428,10 @@
             onAuthStateChanged(auth, async (user) => {
                 if (user) {
                     userId = user.uid;
+                    isAuthReady = true;
+
                     // --- STEP 1: CRITICAL FIX INTEGRATION (Ensures user doc exists) ---
+                    // This is done before the listener to prevent infinite loading if the profile is missing
                     await ensureUserProfileExists(userId); 
 
                     // --- STEP 2: Start listening for user profile data (needed for the UI) ---
@@ -417,8 +442,8 @@
                             // --- STEP 3: Render the app only after profile is loaded ---
                             renderChatUI();
                         } else {
-                            // This should not happen after the fix, but handle defensively
-                            console.error("User profile still missing after attempted creation.");
+                            // If profile is somehow missing after creation attempt, show loading
+                            console.warn("User profile not found. Retrying...");
                             renderLoading("Loading FURY... (Profile Fetching)");
                         }
                     }, (error) => {
@@ -427,14 +452,23 @@
                     });
 
                 } else {
+                    // User is null (logged out or failed initial check)
                     userId = null;
                     currentUserProfile = null;
-                    // If no user is logged in, show the sign-in screen
-                    renderSignIn();
+                    isAuthReady = false;
+                    
+                    // IF NO USER, ATTEMPT ANONYMOUS SIGN IN
+                    try {
+                        await signInAnonymously(auth);
+                        // onAuthStateChanged will trigger again with the new anonymous user
+                    } catch (e) {
+                        console.error("Anonymous sign-in failed. Showing sign-in screen.", e);
+                        renderSignIn(); // Show the full sign-in screen if even anonymous fails
+                    }
                 }
             });
 
-            // Initial sign-in attempt if a custom token is provided by the environment
+            // Initial sign-in attempt (This is the critical part to fix the "stuck" state)
             async function initialSignIn() {
                  if (initialAuthToken) {
                      try {
@@ -444,6 +478,7 @@
                          await signInAnonymously(auth);
                      }
                  } else {
+                     // Force anonymous sign-in if no custom token exists
                      await signInAnonymously(auth);
                  }
             }
