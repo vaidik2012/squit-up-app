@@ -3,20 +3,68 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FURY - Discord-like Platform</title>
+    <title>FURY - Realtime Chat</title>
+    <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            overflow: hidden; /* Prevent body scroll */
+        }
+        /* Custom scrollbar for chat box */
+        #messages-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        #messages-container::-webkit-scrollbar-thumb {
+            background-color: #4a5568; /* gray-600 */
+            border-radius: 4px;
+        }
+        #messages-container::-webkit-scrollbar-track {
+            background-color: #1f2937; /* gray-800 */
+        }
+        /* Custom scrollbar for sidebar */
+        #users-list::-webkit-scrollbar {
+            width: 6px;
+        }
+        #users-list::-webkit-scrollbar-thumb {
+            background-color: #374151; /* gray-700 */
+            border-radius: 3px;
+        }
+        #users-list::-webkit-scrollbar-track {
+            background-color: transparent;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 h-screen">
 
+    <!-- Main application container -->
+    <div id="app-container" class="h-full">
+        <!-- Content will be injected here -->
+    </div>
+
+    <!-- Firebase and Application Logic -->
     <script type="module">
-        // Import the functions you need from the SDKs you need
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getAuth, signInWithPopup, GoogleAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-        import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-analytics.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithCustomToken, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot, collection, query, addDoc, serverTimestamp, getDoc, setDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Your web app's Firebase configuration
-        const firebaseConfig = {
-            apiKey: "AIzaSyCkp-J_21Nb7qBquiMA90Zl13elfGesCPI",
+        // Global Firebase instances
+        let app, db, auth;
+        let userId = null;
+        let currentUserProfile = null; // Store fetched user profile data
+        let isAuthReady = false; 
+        let totalUserCount = 0; 
+
+        // --- GLOBAL VARIABLES (Provided by environment or manually configured) ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        
+        // --- Custom Configuration (Provided by user - UPDATED HERE) ---
+        // CRITICAL: This configuration must match your Firebase project settings exactly.
+        const customFirebaseConfig = {
+            apiKey: "AIzaSyCkp-J_21Nb7dqs33iMA90Zl13elfGesCPI", 
             authDomain: "squit-up-auth.firebaseapp.com",
             projectId: "squit-up-auth",
             storageBucket: "squit-up-auth.firebasestorage.app",
@@ -24,789 +72,502 @@
             appId: "1:503910898443:web:c5a56eb24cd4f183d8600e",
             measurementId: "G-K4LHFHSNJC"
         };
+        // -------------------------------------------------------------------------------
 
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const analytics = getAnalytics(app);
-        const provider = new GoogleAuthProvider();
-
-        // Make Firebase services available globally
-        // NOTE: This practice of setting everything to window is generally discouraged, 
-        // but kept here to match your original coding style.
-        window.firebaseAuth = auth;
-        window.firebaseDb = db;
-        window.GoogleAuthProvider = GoogleAuthProvider;
-        window.signInWithPopup = signInWithPopup;
-        window.createUserWithEmailAndPassword = createUserWithEmailAndPassword;
-        window.signInWithEmailAndPassword = signInWithEmailAndPassword;
-        window.onAuthStateChanged = onAuthStateChanged;
-        window.signOut = signOut;
-        window.doc = doc;
-        window.setDoc = setDoc;
-        window.getDoc = getDoc;
-        window.collection = collection;
-        window.query = query;
-        window.where = where;
-        window.getDocs = getDocs;
-        window.deleteDoc = deleteDoc;
-        window.googleProvider = provider;
-        window.provider = provider; // Added for clarity with the sign-in code below
-    </script>
-
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        // Use the environment configuration if available, otherwise use the custom config.
+        const firebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config) 
+            : customFirebaseConfig;
         
-        body {
-            font-family: 'Inter', sans-serif;
-            background: #36393f;
-            min-height: 100%;
-            box-sizing: border-box;
-        }
-        
-        html, body {
-            height: 100%;
-            margin: 0;
-            padding: 0;
-        }
+        // --- UTILITY FUNCTIONS ---
 
-        /* Discord-like styling */
-        .discord-bg { background: #36393f; }
-        .discord-sidebar { background: #2f3136; }
-        .discord-channel { background: #40444b; }
-        .discord-chat { background: #36393f; }
-        .discord-input { background: #40444b; }
-        
-        /* Auth screens */
-        .auth-container {
-            background: #36393f;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 2rem;
-        }
-        
-        .auth-card {
-            background: #2f3136;
-            border-radius: 8px;
-            padding: 2rem;
-            width: 100%;
-            max-width: 480px;
-            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.24);
-        }
-
-        /* Main app layout */
-        .main-app {
-            display: none;
-            height: 100vh;
-            overflow: hidden;
-        }
-
-
-        /* Custom scrollbars */
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 8px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: #202225;
-            border-radius: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-
-        /* Server icons */
-        .server-icon {
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            transition: border-radius 0.2s ease;
-            cursor: pointer;
-        }
-        .server-icon:hover {
-            border-radius: 16px;
-        }
-        .server-icon.active {
-            border-radius: 16px;
-        }
-
-
-        /* Message styling */
-        .message-hover:hover {
-            background: rgba(4, 4, 5, 0.07);
-        }
-
-
-        /* Emoji picker */
-        .emoji-picker {
-            background: #2f3136;
-            border: 1px solid #40444b;
-            border-radius: 8px;
-            max-height: 300px;
-            overflow-y: auto;
-        }
-
-
-        /* Profile customization */
-        .profile-banner {
-            height: 120px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            position: relative;
-        }
-
-
-        /* Friend request animations */
-        .slide-in {
-            animation: slideIn 0.3s ease-out;
-        }
-        
-        @keyframes slideIn {
-            from { transform: translateX(-100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-
-
-        /* Status indicators */
-        .status-online { background: #43b581; }
-        .status-idle { background: #faa61a; }
-        .status-dnd { background: #f04747; }
-        .status-offline { background: #747f8d; }
-
-
-        /* Modal backdrop */
-        .modal-backdrop {
-            background: rgba(0, 0, 0, 0.85);
-        }
-    </style>
-</head>
-
-<body class="text-white discord-bg">
-
-
-    <div id="login-screen" class="auth-container">
-        <div class="auth-card">
-            <div class="text-center mb-8">
-                <h1 class="text-3xl font-bold mb-2" style="
-                    background: linear-gradient(90deg, #ff416c, #ff4b2b, #ff7e5f, #ffa585);
-                    -webkit-background-clip: text;
-                    -webkit-text-fill-color: transparent;
-                ">Welcome to FURY</h1>
-                <p class="text-gray-400">We're so excited to see you again!</p>
-            </div>
-
-
-            <form id="login-form" class="space-y-4 mb-6">
-                <div>
-                    <label class="block text-sm font-medium text-gray-300 mb-2">USER ID</label>
-                    <input type="text" id="login-userid" placeholder="@username" 
-                                class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-300 mb-2">PASSWORD</label>
-                    <input type="password" id="login-password" placeholder="Password" 
-                                class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500">
-                </div>
-                <button type="submit" class="w-full py-3 bg-blue-600 hover:bg-blue-700 rounded font-medium transition duration-200">
-                    Log In
-                </button>
-                <div id="login-error" class="mt-3 p-3 bg-red-900 border border-red-700 rounded text-red-200 text-sm" style="display: none;">
-                    <p>No user found with this User ID. If you don't have an account, please use "Continue with Google" to create a new account.</p>
-                </div>
-            </form>
-
-
-            <div class="text-center mb-4">
-                <span class="text-gray-400 text-sm">Don't have an account?</span>
-            </div>
-
-
-            <button id="google-signup-button" 
-                            class="w-full py-3 bg-white hover:bg-gray-100 text-gray-800 rounded font-medium transition duration-200 flex items-center justify-center space-x-2 mb-4">
-                <i data-lucide="chrome" class="w-5 h-5"></i>
-                <span>Continue with Google</span>
-            </button>
-            
-            <div id="google-error" class="mt-3 p-3 bg-red-900 border border-red-700 rounded text-red-200 text-sm" style="display: none;">
-                <p>Google Sign-in Failed. Check your console for details, or verify your Firebase 'Auth > Sign-in Method' and 'Project Settings > Authorized Domains'.</p>
-            </div>
-            <p class="text-xs text-gray-500 text-center">By registering, you agree to FURY's Terms of Service and Privacy Policy.</p>
-
-        </div>
-    </div>
-
-
-    <div id="setup-screen" class="auth-container" style="display: none;">
-        <div class="auth-card">
-            <div class="text-center mb-8">
-                <h2 class="text-2xl font-bold mb-2">Complete Your Profile</h2>
-                <p class="text-gray-400">Set up your FURY account</p>
-            </div>
-
-
-            <form id="setup-form" class="space-y-4">
-                <div>
-                    <label class="block text-sm font-medium text-gray-300 mb-2">CHOOSE YOUR USER ID</label>
-                    <div class="relative">
-                        <span class="absolute left-3 top-2 text-gray-400">@</span>
-                        <input type="text" id="setup-userid" placeholder="username" 
-                                class="w-full pl-8 pr-3 py-2 bg-gray-800 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500">
+        /**
+         * Renders the loading spinner into the app container.
+         */
+        function renderLoading(message = "Connecting...") {
+            const container = document.getElementById('app-container');
+            container.innerHTML = `
+                <div class="h-full flex items-center justify-center text-white bg-gray-900">
+                    <div class="flex flex-col items-center">
+                        <div class="w-12 h-12 border-4 border-t-4 border-indigo-500 border-opacity-25 rounded-full animate-spin"></div>
+                        <p class="mt-4 text-lg text-gray-400">${message}</p>
                     </div>
-                    <p class="text-xs text-gray-400 mt-1">This will be your unique identifier</p>
                 </div>
+            `;
+        }
+        
+        /**
+         * Renders the Sign-In screen (Google option ONLY).
+         */
+        function renderSignIn(errorMessage = '') {
+            const container = document.getElementById('app-container');
+            container.innerHTML = `
+                <div class="h-full flex items-center justify-center bg-gray-900">
+                    <div class="text-center p-8 bg-gray-800 rounded-2xl shadow-2xl max-w-sm w-full border border-gray-700">
+                        <div class="flex justify-center mb-6">
+                            <div class="p-3 bg-red-500 rounded-full">
+                                <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.111A9.502 9.502 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
+                            </div>
+                        </div>
+                        <h1 class="text-3xl font-extrabold text-red-500 mb-2">FURY</h1>
+                        <p class="text-gray-400 mb-8">Connect with friends instantly.</p>
+                        <h2 class="text-2xl font-semibold text-white mb-4">Sign In Required</h2>
+                        <p class="text-gray-500 mb-6">Please use your Google account to access the chat.</p>
+                        <button id="google-signin-btn" class="w-full flex items-center justify-center bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-xl transition duration-200 shadow-lg shadow-red-600/30">
+                            <svg class="w-5 h-5 mr-3" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><path fill="#FFC107" d="M43.61 20.08v3.42H24V20.08h19.61z"/><path fill="#FF3D00" d="M6.3 33.15c.61 1.77 1.63 3.32 2.87 4.6l5.77-4.47c-.77-.48-1.44-1.07-1.95-1.78H6.3z"/><path fill="#4CAF50" d="M43.61 24.5v3.42H24v-3.42h19.61z"/><path fill="#1976D2" d="M12.94 37.75c3.08 3.52 7.7 5.75 12.87 5.75s9.79-2.23 12.87-5.75l-5.77-4.47c-2.34 2.1-5.32 3.42-9.1 3.42s-6.76-1.32-9.1-3.42L12.94 37.75z"/><path fill="#F44336" d="M24 8c-4.99 0-9.62 2.11-12.87 5.75l5.77 4.47c2.34-2.1 5.32-3.42 9.1-3.42s6.76-1.32 9.1-3.42l5.77-4.47C33.62 10.11 28.99 8 24 8z"/></svg>
+                            Sign in with Google
+                        </button>
+                        ${errorMessage ? `<p class="text-sm text-red-400 mt-4 font-semibold">${errorMessage}</p>` : ''}
+                        <p class="text-xs text-gray-600 mt-4">By signing in, you agree to our <a href="#" class="text-red-500 hover:underline">Terms of Service</a>.</p>
+                    </div>
+                </div>
+            `;
+            document.getElementById('google-signin-btn').addEventListener('click', signInWithGoogle);
+        }
+
+        /**
+         * Google Sign-In handler.
+         * Fix implemented here: Added a brief delay to ensure the main app registers the login event after pop-up closure.
+         */
+        async function signInWithGoogle() {
+            try {
+                const provider = new GoogleAuthProvider();
+                const result = await signInWithPopup(auth, provider);
                 
-                <div>
-                    <label class="block text-sm font-medium text-gray-300 mb-2">CREATE PASSWORD</label>
-                    <input type="password" id="setup-password" placeholder="Password" 
-                                class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500">
-                </div>
+                // IMPORTANT FIX: Add a short delay (500ms) on successful sign-in 
+                // to prevent a race condition where the pop-up closes too fast 
+                // for the main window's onAuthStateChanged listener to update.
+                if (result.user) {
+                    renderLoading("Login successful, loading chat...");
+                    await new Promise(resolve => setTimeout(resolve, 500)); 
+                }
+            } catch (error) {
+                console.error("Google Sign-In failed:", error);
                 
-                <div>
-                    <label class="block text-sm font-medium text-gray-300 mb-2">CONFIRM PASSWORD</label>
-                    <input type="password" id="setup-confirm-password" placeholder="Confirm Password" 
-                                class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500">
-                </div>
+                let userFriendlyMessage = 'Google Sign-In failed. Please check your console for details.';
 
+                if (error.code === 'auth/popup-closed-by-user') {
+                    userFriendlyMessage = 'Sign-in window was closed. Please try again.';
+                } else if (error.code === 'auth/unauthorized-domain') {
+                    userFriendlyMessage = 'Error: Unauthorized domain. Please add your domain (e.g., your-username.github.io) to the Firebase "Auth -> Settings -> Authorized Domains" list.';
+                } else if (error.message.includes('apiKey') || error.message.includes('API key')) {
+                    userFriendlyMessage = 'Configuration Error: Invalid API Key. Please verify your customFirebaseConfig.';
+                }
+                
+                // Re-render the sign-in screen with a specific error message
+                renderSignIn(userFriendlyMessage); 
+            }
+        }
 
-                <button type="submit" class="w-full py-3 bg-blue-600 hover:bg-blue-700 rounded font-medium transition duration-200">
-                    Create Account
-                </button>
-                <div id="setup-error" class="mt-3 p-3 bg-red-900 border border-red-700 rounded text-red-200 text-sm" style="display: none;">
-                    <p id="setup-error-message">Please check your information and try again.</p>
-                </div>
-                <div id="setup-success" class="mt-3 p-3 bg-green-900 border border-green-700 rounded text-green-200 text-sm" style="display: none;">
-                    <p>Account created successfully! Setting up your profile...</p>
-                </div>
-            </form>
+        /**
+         * Signs out the current user and sets their status to 'offline'.
+         */
+        async function handleSignOut() {
+            try {
+                if (userId) {
+                    const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'user_profiles', userId);
+                    await setDoc(userDocRef, { onlineStatus: 'offline' }, { merge: true });
+                }
+                await signOut(auth);
+            } catch (error) {
+                console.error("Error during sign out:", error);
+            }
+        }
 
-        </div>
-    </div>
-
-
-    <div id="main-app" class="main-app flex">
-        <div class="w-18 discord-sidebar flex flex-col items-center py-3 space-y-2">
-            <div class="server-icon bg-blue-600 flex items-center justify-center active" id="home-server">
-                <i data-lucide="home" class="w-6 h-6 text-white"></i>
-            </div>
-
+        /**
+         * Checks if the user's profile document exists (in the public collection) and creates/updates it.
+         * This function also sets up the real-time listener for the current user's profile data.
+         * @param {string} uid The current user ID.
+         */
+        async function ensureUserProfileExistsNew(uid) {
+            // Path to the public collection where all user profiles are stored for global access/counting
+            const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'user_profiles', uid);
+            try {
+                const docSnap = await getDoc(userDocRef);
+                const user = auth.currentUser;
+                
+                if (!docSnap.exists()) {
+                    // Create the profile document
+                    await setDoc(userDocRef, {
+                        userId: uid,
+                        displayName: user?.displayName || `user_${uid.substring(0, 8)}`,
+                        email: user?.email || '',
+                        onlineStatus: 'online', 
+                        lastActive: serverTimestamp(),
+                        createdAt: serverTimestamp(),
+                    });
+                } else {
+                    // Update existing profile with online status and last active time
+                     await setDoc(userDocRef, {
+                        onlineStatus: 'online',
+                        lastActive: serverTimestamp(),
+                    }, { merge: true });
+                }
+            } catch (error) {
+                console.error("Error ensuring user profile document (Public Path):", error.message);
+            }
             
-            <div class="w-8 h-0.5 bg-gray-600 rounded"></div>
+            // Set up listener for the current user's profile
+            onSnapshot(userDocRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    currentUserProfile = docSnap.data();
+                    renderChatUI(); // Re-render to update the user info bar and load chat
+                } else if (isAuthReady) {
+                    console.warn("User profile missing for logged-in user.");
+                    renderLoading("Profile data missing. Please sign out and sign in again.");
+                }
+            }, (error) => {
+                console.error("Error listening to user's public profile:", error.message);
+                renderLoading("Error loading profile. Check permissions.");
+            });
+        }
 
+        // --- USER COUNTING LOGIC ---
+
+        /**
+         * Listens to ALL user profiles (in the public collection) to get the total count and list of active users.
+         */
+        function startUserCountListener() {
+            // Path to the public user profiles collection
+            const publicProfilesRef = collection(db, 'artifacts', appId, 'public', 'data', 'user_profiles');
             
-            <div id="server-list" class="space-y-2">
-                </div>
-
-            
-            <div class="server-icon bg-gray-700 hover:bg-green-600 flex items-center justify-center transition-colors" id="add-server-btn">
-                <i data-lucide="plus" class="w-6 h-6 text-white"></i>
-            </div>
-        </div>
-
-
-        <div class="w-60 discord-channel flex flex-col">
-            <div class="p-4 border-b border-gray-600">
-                <div class="flex items-center space-x-3" id="current-server-info">
-                    <i data-lucide="users" class="w-5 h-5 text-gray-400"></i>
-                    <span class="font-semibold">Direct Messages</span>
-                </div>
-            </div>
-
-
-            <div class="flex border-b border-gray-600" id="nav-tabs">
-                <button class="flex-1 py-2 px-4 text-sm font-medium text-white bg-gray-600" data-tab="friends">Friends</button>
-                <button class="flex-1 py-2 px-4 text-sm font-medium text-gray-400 hover:text-white" data-tab="dms">DMs</button>
-            </div>
-
-
-            <div id="friends-panel" class="flex-1 overflow-y-auto custom-scrollbar">
-                <div class="p-4">
-                    <div class="flex items-center justify-between mb-3">
-                        <h3 class="text-sm font-semibold text-gray-300">FRIEND REQUESTS</h3>
-                        <span class="bg-red-500 text-xs px-2 py-1 rounded-full" id="friend-requests-count">2</span>
-                    </div>
-                    <div id="friend-requests-list" class="space-y-2">
-                        </div>
-                </div>
-
-
-                <div class="p-4">
-                    <h3 class="text-sm font-semibold text-gray-300 mb-3">ONLINE — <span id="online-friends-count">3</span></h3>
-                    <div id="online-friends-list" class="space-y-2">
-                        </div>
-                </div>
-
-
-                <div class="p-4">
-                    <h3 class="text-sm font-semibold text-gray-300 mb-3">ALL FRIENDS — <span id="all-friends-count">12</span></h3>
-                    <div id="all-friends-list" class="space-y-2">
-                        </div>
-                </div>
-
-            </div>
-
-
-            <div id="dms-panel" class="flex-1 overflow-y-auto custom-scrollbar" style="display: none;">
-                <div class="p-4">
-                    <div class="flex items-center space-x-2 mb-4">
-                        <input type="text" placeholder="Find or start a conversation" 
-                                class="flex-1 px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white placeholder-gray-400 text-sm focus:outline-none focus:border-blue-500">
-                    </div>
-
+            onSnapshot(publicProfilesRef, (snapshot) => {
+                const onlineUsers = [];
+                snapshot.forEach(doc => {
+                    const profile = doc.data();
                     
-                    <div class="mb-6 p-3 bg-gray-700 rounded-lg">
-                        <h4 class="text-sm font-semibold text-gray-300 mb-2">Add New Friend</h4>
-                        <div class="flex space-x-2">
-                            <input type="text" id="dm-friend-request-input" placeholder="Enter User ID (@username)" 
-                                    class="flex-1 px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white placeholder-gray-400 text-sm focus:outline-none focus:border-blue-500">
-                            <button id="dm-send-friend-request" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white text-sm font-medium">
-                                Send Request
+                    // Filter for users explicitly marked as 'online'
+                    if (profile.onlineStatus === 'online') {
+                        onlineUsers.push(profile);
+                    }
+                });
+
+                totalUserCount = snapshot.size; // Total documents = total registered users
+                
+                // Update the UI with the new count and list
+                updateSidebarUserCount(totalUserCount);
+                renderOnlineUsersList(onlineUsers);
+
+            }, (error) => {
+                console.error("Error listening to public user profiles:", error.message);
+            });
+        }
+        
+        /**
+         * Renders the total user count in the sidebar.
+         * @param {number} count - The total number of registered users.
+         */
+        function updateSidebarUserCount(count) {
+            const countElement = document.getElementById('user-count');
+            if (countElement) {
+                countElement.textContent = `Registered Users (${count})`;
+            }
+        }
+        
+        /**
+         * Renders the list of online users in the sidebar.
+         * @param {Array<Object>} users - Array of online user profiles.
+         */
+        function renderOnlineUsersList(users) {
+            const listContainer = document.getElementById('users-list');
+            if (!listContainer) return;
+
+            listContainer.innerHTML = '';
+            
+            if (users.length === 0) {
+                 listContainer.innerHTML = `<li class="text-sm text-gray-500 p-2">No users currently active.</li>`;
+                return;
+            }
+
+            users.forEach(user => {
+                // If the user's ID matches the current user, skip listing them here 
+                if (user.userId === userId) return; 
+
+                const statusColor = 'bg-green-500'; 
+                
+                const listItem = document.createElement('li');
+                listItem.className = "flex items-center p-2 rounded-lg hover:bg-gray-700 transition duration-150 cursor-pointer";
+                listItem.innerHTML = `
+                    <div class="flex-shrink-0 w-2 h-2 rounded-full mr-2 ${statusColor}"></div>
+                    <span class="text-sm text-gray-300 font-medium">${user.displayName}</span>
+                `;
+                listContainer.appendChild(listItem);
+            });
+        }
+
+
+        // --- CHAT LOGIC ---
+
+        /**
+         * Listens to the global chat for messages and updates the UI.
+         */
+        function startChatListeners() {
+            if (!userId || !isAuthReady) return;
+
+            // 1. Listen for Global Chat messages
+            const globalChatRef = doc(db, 'artifacts', appId, 'public', 'data', 'chats', 'global_fury_chat');
+            const messagesRef = collection(globalChatRef, 'messages');
+            
+            const q = query(messagesRef);
+
+            onSnapshot(q, (snapshot) => {
+                const msgs = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data(),
+                    timestamp: doc.data().timestamp?.toDate() || new Date()
+                }));
+
+                // Sort in memory (newer messages at higher index)
+                msgs.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+                renderMessages(msgs);
+            }, (error) => {
+                console.error("Error listening to global chat messages:", error.message);
+            });
+        }
+        
+        /**
+         * Renders all messages into the chat body.
+         * @param {Array<Object>} messages - Array of message objects.
+         */
+        function renderMessages(messages) {
+            const container = document.getElementById('messages-container');
+            if (!container) return;
+            
+            container.innerHTML = ''; 
+            
+            if (messages.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center text-gray-500 py-10 flex-grow flex items-center justify-center">
+                        Say hello! Be the first to send a message to **#global-fury-chat**.
+                    </div>
+                `;
+                container.style.display = 'flex';
+                container.style.flexDirection = 'column-reverse';
+                container.style.justifyContent = 'center';
+                return;
+            } else {
+                container.style.display = 'block'; 
+            }
+
+            const fragment = document.createDocumentFragment();
+
+            messages.forEach(message => {
+                const isCurrentUser = message.senderId === userId;
+                // Use the display name stored in the message document
+                const senderDisplay = message.displayName || message.senderId.substring(0, 8); 
+
+                const bubbleClass = isCurrentUser
+                    ? 'bg-indigo-500 text-white self-end rounded-bl-xl rounded-t-xl'
+                    : 'bg-gray-700 text-gray-200 self-start rounded-br-xl rounded-t-xl';
+                
+                const timestampDisplay = message.timestamp instanceof Date 
+                    ? message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+                    : '...';
+
+                const messageElement = document.createElement('div');
+                messageElement.className = `flex flex-col mb-4 max-w-xs md:max-w-md ${isCurrentUser ? 'items-end' : 'items-start'}`;
+                messageElement.innerHTML = `
+                    <div class="text-xs text-gray-400 mb-1 px-3">
+                        ${isCurrentUser ? 'You' : senderDisplay}
+                    </div>
+                    <div class="p-3 shadow-md ${bubbleClass}">
+                        ${message.text}
+                        <span class="ml-4 text-xs opacity-70 block text-right mt-1">${timestampDisplay}</span>
+                    </div>
+                `;
+                fragment.appendChild(messageElement);
+            });
+            
+            container.appendChild(fragment);
+
+            // Auto-scroll to the bottom
+            container.scrollTop = container.scrollHeight;
+        }
+
+        /**
+         * Sends a message to the global chat room.
+         */
+        async function sendMessage(text) {
+            if (!userId || !text.trim() || !isAuthReady || !currentUserProfile) return;
+
+            try {
+                const globalChatRef = doc(db, 'artifacts', appId, 'public', 'data', 'chats', 'global_fury_chat');
+                const messagesCollectionRef = collection(globalChatRef, 'messages');
+                
+                await addDoc(messagesCollectionRef, {
+                    senderId: userId,
+                    displayName: currentUserProfile.displayName, // Include display name for easy message rendering
+                    text: text.trim(),
+                    timestamp: serverTimestamp(),
+                    type: 'text',
+                });
+                document.getElementById('message-input').value = '';
+            } catch (error) {
+                console.error("Error sending message:", error.message);
+            }
+        }
+
+
+        /**
+         * Renders the main chat UI after successful login and profile load.
+         */
+        function renderChatUI() {
+            const userDisplayId = currentUserProfile?.displayName || `user_${userId.substring(0, 8)}`;
+            const onlineStatus = currentUserProfile?.onlineStatus || 'offline';
+            const statusColor = onlineStatus === 'online' ? 'bg-green-500' : 'bg-gray-500';
+
+            const container = document.getElementById('app-container');
+            container.innerHTML = `
+                <div class="flex h-full text-white bg-gray-900 antialiased">
+                    
+                    <!-- Sidebar (Left) -->
+                    <div class="w-64 bg-gray-800 flex flex-col border-r border-gray-700">
+                        <div class="p-4 border-b border-gray-700 flex items-center justify-between">
+                            <h1 class="text-xl font-extrabold text-red-500">FURY</h1>
+                            <button id="signout-btn" class="text-gray-400 hover:text-white transition duration-150" title="Sign Out">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
                             </button>
                         </div>
-                    </div>
+                        
+                        <!-- Channels and User List -->
+                        <div class="flex-grow flex flex-col p-4 overflow-y-auto" style="min-height: 0;">
+                            <!-- Channels List -->
+                            <div class="mb-6">
+                                <h2 class="text-xs font-semibold uppercase text-gray-400 mb-2">Global Channels</h2>
+                                <ul class="space-y-1">
+                                    <li>
+                                        <button class="w-full text-left p-2 rounded-lg transition duration-150 bg-indigo-600 text-white">
+                                            #global-fury-chat
+                                        </button>
+                                    </li>
+                                </ul>
+                            </div>
 
-                    
-                    <div id="dm-list" class="space-y-1">
+                            <!-- User Count and List -->
+                            <div class="flex-grow flex flex-col overflow-hidden">
+                                <h2 id="user-count" class="text-xs font-semibold uppercase text-gray-400 mb-2">Registered Users (0)</h2>
+                                <ul id="users-list" class="space-y-1 overflow-y-auto">
+                                    <!-- Online users will be rendered here -->
+                                </ul>
+                            </div>
                         </div>
-                </div>
 
-            </div>
-
-
-            <div id="channels-panel" class="flex-1 overflow-y-auto custom-scrollbar" style="display: none;">
-                <div id="channels-list" class="p-2">
+                        <!-- User Info Bar -->
+                        <div class="p-4 bg-gray-700 border-t border-gray-700 flex items-center">
+                            <div class="flex-shrink-0 w-3 h-3 rounded-full mr-3 ${statusColor} border-2 border-gray-700"></div>
+                            <div class="flex flex-col overflow-hidden">
+                                <span class="text-sm font-semibold whitespace-nowrap overflow-hidden text-ellipsis">${userDisplayId}</span>
+                                <span class="text-xs text-gray-400 capitalize">${onlineStatus} (ID: ${userId.substring(0, 8)})</span>
+                            </div>
+                        </div>
                     </div>
-            </div>
 
+                    <!-- Chat Area (Right) -->
+                    <div class="flex-grow flex flex-col">
+                        <!-- Header -->
+                        <header class="p-4 border-b border-gray-700 bg-gray-800 flex items-center">
+                            <h2 class="text-xl font-bold"># global-fury-chat</h2>
+                        </header>
 
-            <div class="p-3 bg-gray-800 flex items-center justify-between">
-                <div class="flex items-center space-x-2">
-                    <div class="relative">
-                        <img id="user-avatar" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%236366f1'/%3E%3Ctext x='16' y='20' text-anchor='middle' fill='white' font-size='14'%3E👤%3C/text%3E%3C/svg%3E" 
-                                class="w-8 h-8 rounded-full" alt="Avatar">
-                        <div class="absolute -bottom-1 -right-1 w-3 h-3 status-online rounded-full border-2 border-gray-800"></div>
-                    </div>
-                    <div class="text-sm">
-                        <div class="font-medium text-white" id="user-display-name">User</div>
-                        <div class="text-gray-400" id="user-id-display">@user</div>
-                    </div>
-                </div>
-                <div class="flex space-x-1">
-                    <button class="p-1 hover:bg-gray-700 rounded" id="settings-btn" title="Settings">
-                        <i data-lucide="settings" class="w-4 h-4 text-gray-400"></i>
-                    </button>
-                    <button class="p-1 hover:bg-gray-700 rounded" id="logout-btn" title="Logout">
-                        <i data-lucide="log-out" class="w-4 h-4 text-gray-400"></i>
-                    </button>
-                </div>
-            </div>
-        </div>
+                        <!-- Messages Body -->
+                        <div id="messages-container" class="flex-grow p-4 overflow-y-auto" style="display: block;">
+                            <!-- Messages will be rendered here by renderMessages -->
+                        </div>
 
-
-        <div class="flex-1 discord-chat flex flex-col">
-            <div class="h-12 px-4 flex items-center justify-between border-b border-gray-600 bg-gray-800">
-                <div class="flex items-center space-x-2">
-                    <i data-lucide="hash" class="w-5 h-5 text-gray-400" id="chat-icon"></i>
-                    <span class="font-semibold text-white" id="chat-title">Welcome</span>
-                </div>
-                <div class="flex items-center space-x-2">
-                    <button class="p-2 hover:bg-gray-700 rounded" id="add-friend-btn" title="Add Friend">
-                        <i data-lucide="user-plus" class="w-5 h-5 text-gray-400"></i>
-                    </button>
-                    <button class="p-2 hover:bg-gray-700 rounded" id="search-btn" title="Search">
-                        <i data-lucide="search" class="w-5 h-5 text-gray-400"></i>
-                    </button>
-                </div>
-            </div>
-
-
-            <div id="messages-container" class="flex-1 overflow-y-auto custom-scrollbar p-4">
-                <div class="text-center py-8">
-                    <div class="w-16 h-16 bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <i data-lucide="message-circle" class="w-8 h-8 text-gray-400"></i>
-                    </div>
-                    <h3 class="text-xl font-bold text-white mb-2">Welcome to FURY!</h3>
-                    <p class="text-gray-400">This is the beginning of your legendary conversations.</p>
-                </div>
-            </div>
-
-
-            <div class="p-4">
-                <div class="relative">
-                    <input type="text" id="message-input" placeholder="Message..." 
-                            class="w-full px-4 py-3 pr-12 bg-gray-700 border-none rounded-lg text-white placeholder-gray-400 focus:outline-none">
-                    <div class="absolute right-3 top-3 flex space-x-1">
-                        <button class="p-1 hover:bg-gray-600 rounded" id="emoji-btn" title="Emoji">
-                            <i data-lucide="smile" class="w-5 h-5 text-gray-400"></i>
-                        </button>
-                        <button class="p-1 hover:bg-gray-600 rounded" id="attach-btn" title="Attach">
-                            <i data-lucide="paperclip" class="w-5 h-5 text-gray-400"></i>
-                        </button>
+                        <!-- Input Area -->
+                        <form id="chat-form" class="p-4 border-t border-gray-700 bg-gray-800">
+                            <div class="flex items-center space-x-3">
+                                <input
+                                    type="text"
+                                    id="message-input"
+                                    placeholder="Message #global-fury-chat"
+                                    class="flex-grow bg-gray-700 text-white p-3 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none transition duration-150"
+                                >
+                                <button
+                                    type="submit"
+                                    class="bg-indigo-600 hover:bg-indigo-700 text-white p-3 rounded-xl transition duration-150 shadow-lg disabled:opacity-50"
+                                >
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
-            </div>
-        </div>
-
-    </div>
-
-
-    <div id="add-friend-modal" class="fixed inset-0 modal-backdrop flex items-center justify-center z-50" style="display: none;">
-        <div class="bg-gray-800 rounded-lg p-6 w-96 max-w-md mx-4">
-            <h3 class="text-xl font-bold mb-4">Add Friend</h3>
-            <p class="text-gray-400 text-sm mb-4">You can add friends with their FURY User ID.</p>
-            <form id="add-friend-form">
-                <input type="text" id="friend-userid-input" placeholder="Enter a User ID (@username)" 
-                        class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 mb-4">
-                <div class="flex justify-end space-x-3">
-                    <button type="button" id="cancel-add-friend" class="px-4 py-2 text-gray-400 hover:text-white">Cancel</button>
-                    <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white">Send Friend Request</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-
-    <div id="create-server-modal" class="fixed inset-0 modal-backdrop flex items-center justify-center z-50" style="display: none;">
-        <div class="bg-gray-800 rounded-lg p-6 w-96 max-w-md mx-4">
-            <h3 class="text-xl font-bold mb-4">Create Your Server</h3>
-            <p class="text-gray-400 text-sm mb-4">Give your new server a personality with a name and an icon.</p>
-            <form id="create-server-form">
-                <div class="mb-4">
-                    <label class="block text-sm font-medium text-gray-300 mb-2">SERVER NAME</label>
-                    <input type="text" id="server-name-input" placeholder="My Awesome Server" 
-                            class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500">
-                </div>
-                <div class="flex justify-end space-x-3">
-                    <button type="button" id="cancel-create-server" class="px-4 py-2 text-gray-400 hover:text-white">Cancel</button>
-                    <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white">Create</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-
-    <div id="profile-modal" class="fixed inset-0 modal-backdrop flex items-center justify-center z-50" style="display: none;">
-        <div class="bg-gray-800 rounded-lg w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
-            <div class="profile-banner relative">
-                <button class="absolute top-4 right-4 p-2 bg-black bg-opacity-50 rounded-full hover:bg-opacity-70" id="edit-banner-btn">
-                    <i data-lucide="camera" class="w-4 h-4 text-white"></i>
-                </button>
-                <input type="file" id="banner-upload" accept="image/*,.gif" style="display: none;">
-            </div>
+            `;
             
-            <div class="p-6 -mt-16 relative">
-                <div class="flex items-end space-x-4 mb-6">
-                    <div class="relative">
-                        <img id="profile-avatar" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Crect width='80' height='80' fill='%236366f1'/%3E%3Ctext x='40' y='50' text-anchor='middle' fill='white' font-size='32'%3E👤%3C/text%3E%3C/svg%3E" 
-                                class="w-20 h-20 rounded-full border-4 border-gray-800" alt="Avatar">
-                        <button class="absolute -bottom-1 -right-1 p-1 bg-gray-700 rounded-full hover:bg-gray-600" id="edit-avatar-btn">
-                            <i data-lucide="camera" class="w-3 h-3 text-white"></i>
-                        </button>
-                        <input type="file" id="avatar-upload" accept="image/*,.gif" style="display: none;">
-                    </div>
-                    <div class="flex-1">
-                        <h2 class="text-2xl font-bold text-white" id="profile-display-name">User</h2>
-                        <p class="text-gray-400" id="profile-user-id">@user</p>
-                    </div>
-                    <button class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white" id="edit-profile-btn">Edit Profile</button>
-                </div>
+            // Setup Event Listeners
+            document.getElementById('signout-btn').addEventListener('click', handleSignOut);
+            document.getElementById('chat-form').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const input = document.getElementById('message-input');
+                sendMessage(input.value);
+            });
 
-
-                <form id="profile-form" class="space-y-4" style="display: none;">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-300 mb-2">DISPLAY NAME</label>
-                        <input type="text" id="profile-name-input" 
-                                class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-300 mb-2">ABOUT ME</label>
-                        <textarea id="profile-bio-input" rows="3" 
-                                    class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500" 
-                                    placeholder="Tell us about yourself..."></textarea>
-                    </div>
-                    <div class="flex justify-end space-x-3">
-                        <button type="button" id="cancel-profile-edit" class="px-4 py-2 text-gray-400 hover:text-white">Cancel</button>
-                        <button type="submit" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-white">Save Changes</button>
-                    </div>
-                </form>
-
-
-                <div class="mt-6">
-                    <button class="w-full py-2 text-left text-red-400 hover:text-red-300" id="close-profile-modal">Close</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-
-    <div id="emoji-picker" class="absolute bottom-16 right-4 emoji-picker p-4 z-40" style="display: none;">
-        <div class="grid grid-cols-8 gap-2">
-            <button class="p-2 hover:bg-gray-600 rounded text-lg" data-emoji="😀">😀</button>
-            <button class="p-2 hover:bg-gray-600 rounded text-lg" data-emoji="😂">😂</button>
-            <button class="p-2 hover:bg-gray-600 rounded text-lg" data-emoji="😍">😍</button>
-            <button class="p-2 hover:bg-gray-600 rounded text-lg" data-emoji="🤔">🤔</button>
-            <button class="p-2 hover:bg-gray-600 rounded text-lg" data-emoji="😎">😎</button>
-            <button class="p-2 hover:bg-gray-600 rounded text-lg" data-emoji="😭">😭</button>
-            <button class="p-2 hover:bg-gray-600 rounded text-lg" data-emoji="😡">😡</button>
-            <button class="p-2 hover:bg-gray-600 rounded text-lg" data-emoji="🥺">🥺</button>
-            <button class="p-2 hover:bg-gray-600 rounded text-lg" data-emoji="👍">👍</button>
-            <button class="p-2 hover:bg-gray-600 rounded text-lg" data-emoji="👎">👎</button>
-            <button class="p-2 hover:bg-gray-600 rounded text-lg" data-emoji="❤️">❤️</button>
-            <button class="p-2 hover:bg-gray-600 rounded text-lg" data-emoji="💯">💯</button>
-            <button class="p-2 hover:bg-gray-600 rounded text-lg" data-emoji="🔥">🔥</button>
-            <button class="p-2 hover:bg-gray-600 rounded text-lg" data-emoji="⚡">⚡</button>
-            <button class="p-2 hover:bg-gray-600 rounded text-lg" data-emoji="🎉">🎉</button>
-            <button class="p-2 hover:bg-gray-600 rounded text-lg" data-emoji="🚀">🚀</button>
-        </div>
-    </div>
-
-
-    <script>
-        // Initialize Lucide icons
-        lucide.createIcons();
-
-        // Global state
-        let currentUser = null;
-        let currentChat = null;
-        let servers = [];
-        let friends = [];
-        let friendRequests = [];
-        let dms = [];
-        let messages = {};
-        let currentView = 'friends';
-
-        // --- DOM ELEMENTS ---
-        const loginScreen = document.getElementById('login-screen');
-        const setupScreen = document.getElementById('setup-screen');
-        const mainApp = document.getElementById('main-app');
-
-
-        // Initialize app
-        document.addEventListener('DOMContentLoaded', () => {
-            lucide.createIcons();
-            initializeAuth();
-        });
-
-
-        // --- UI SWITCHING FUNCTIONS (NEW) ---
-        function showLoginScreen() {
-            loginScreen.style.display = 'flex';
-            setupScreen.style.display = 'none';
-            mainApp.style.display = 'none';
-        }
-
-        function showSetupScreen() {
-            loginScreen.style.display = 'none';
-            setupScreen.style.display = 'flex';
-            mainApp.style.display = 'none';
-        }
-
-        function showMainApp(user) {
-            currentUser = user; // Set the global user object
-            // You'll need to fetch the user's custom profile data (like @username) here
-            // For now, use the Firebase user object data (displayName, photoURL)
-            document.getElementById('user-display-name').textContent = user.displayName || 'New User';
-            document.getElementById('user-id-display').textContent = '@' + (user.email ? user.email.split('@')[0] : 'user');
-            if (user.photoURL) {
-                document.getElementById('user-avatar').src = user.photoURL;
-            }
-
-            loginScreen.style.display = 'none';
-            setupScreen.style.display = 'none';
-            mainApp.style.display = 'flex';
-            
-            // Re-render icons after changing display property
-            lucide.createIcons(); 
-        }
-
-        async function checkUserProfile(user) {
-            const userDocRef = window.doc(window.firebaseDb, 'users', user.uid);
-            const userDoc = await window.getDoc(userDocRef);
-
-            if (userDoc.exists()) {
-                // Profile is complete, go to main app
-                showMainApp(user); 
-                // You would typically load the user's custom data from userDoc.data() here
-            } else {
-                // Profile is NOT complete, show setup screen
-                showSetupScreen();
-                // If the user signed in with Google but needs a custom @username, they go here
-            }
+            // Start all listeners
+            startChatListeners();
+            startUserCountListener();
         }
         
-        // --- AUTHENTICATION SYSTEM ---
-        function initializeAuth() {
-            const loginForm = document.getElementById('login-form');
-            const setupForm = document.getElementById('setup-form');
-            const googleSignupBtn = document.getElementById('google-signup-button');
+        // --- Initialization ---
 
+        /**
+         * Initializes Firebase and sets up the main authentication listener.
+         */
+        function initializeAppAndAuth() {
+            if (!firebaseConfig.apiKey) {
+                console.error("Firebase config is missing.");
+                return renderLoading("Error: Firebase configuration missing.");
+            }
 
-            // *** AUTH STATE CHANGE HANDLER (THE FIX) ***
-            window.onAuthStateChanged(window.firebaseAuth, (user) => {
+            try {
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                setLogLevel('debug'); 
+            } catch (e) {
+                console.error("Failed to initialize Firebase:", e);
+                return renderLoading("Error initializing Firebase. Check your configuration values.");
+            }
+
+            renderLoading("Authenticating...");
+
+            // Set up Authentication Listener
+            onAuthStateChanged(auth, async (user) => {
+                isAuthReady = true; // Mark Auth listener as ready after the initial check completes
+
                 if (user) {
-                    // User is signed in, check if profile is complete
-                    checkUserProfile(user);
+                    userId = user.uid;
+                    
+                    // 1. Ensure/update the user profile in the public collection
+                    await ensureUserProfileExistsNew(userId); 
+                    
+                    // 2. The profile listener (inside ensureUserProfileExistsNew) will call renderChatUI() 
+                    // once currentUserProfile is fetched/updated.
+
                 } else {
-                    // User is signed out, show login screen
-                    showLoginScreen();
+                    // User is null (not signed in), show the Google Sign-in screen.
+                    userId = null;
+                    currentUserProfile = null;
+                    renderSignIn();
                 }
             });
 
+            // If a custom token exists from the environment, try to use it first
+            async function initialSignIn() {
+                 if (initialAuthToken) {
+                     try {
+                         await signInWithCustomToken(auth, initialAuthToken);
+                     } catch (e) {
+                         console.error("Custom token sign-in failed. User must sign in manually.", e);
+                     }
+                 }
+            }
 
-            // Existing user login
-            loginForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const userId = document.getElementById('login-userid').value.trim();
-                const password = document.getElementById('login-password').value.trim();
-                const errorDiv = document.getElementById('login-error');
-                
-                errorDiv.style.display = 'none';
-                
-                if (userId && password) {
-                    try {
-                        // Check if user exists in Firestore (You must use the email linked to the userId for sign-in)
-                        const userQuery = window.query(
-                            window.collection(window.firebaseDb, 'users'),
-                            window.where('userId', '==', userId.startsWith('@') ? userId : '@' + userId)
-                        );
-                        const querySnapshot = await window.getDocs(userQuery);
-                        
-                        if (querySnapshot.empty) {
-                            // User doesn't exist
-                            errorDiv.style.display = 'block';
-                            return;
-                        }
-                        
-                        // Get user data (assuming the email is stored in the Firestore user document)
-                        const userData = querySnapshot.docs[0].data();
-                        
-                        // Sign in with email and password
-                        await window.signInWithEmailAndPassword(window.firebaseAuth, userData.email, password);
-                        // onAuthStateChanged handler above will take over
-                        
-                    } catch (error) {
-                        console.error('Login error:', error);
-                        errorDiv.querySelector('p').textContent = error.message.includes('auth/invalid-credential') ? 
-                            "Invalid credentials or password. Please try again." : 
-                            "An unexpected error occurred during login. Check the console.";
-                        errorDiv.style.display = 'block';
-                    }
-                }
-            });
-
-
-            // Google Sign Up/Login (Completed the try/catch block)
-            googleSignupBtn.addEventListener('click', async () => {
-                const errorDiv = document.getElementById('google-error');
-                errorDiv.style.display = 'none';
-                
-                try {
-                    await window.signInWithPopup(window.firebaseAuth, window.provider); // Use window.provider
-                    // onAuthStateChanged handler above will take over
-                } catch (error) {
-                    console.error('Google Sign-in Error:', error);
-                    let message = "Google Sign-in Failed. Check your console for details, or verify your configuration.";
-
-                    if (error.code === 'auth/popup-closed-by-user') {
-                        message = "Sign-in cancelled. Please click 'Continue with Google' again to proceed.";
-                    } else if (error.code === 'auth/unauthorized-domain') {
-                        message = "Configuration Error: Your domain is not authorized. See Google Cloud Console and Firebase Auth settings.";
-                    }
-                    
-                    errorDiv.querySelector('p').textContent = message;
-                    errorDiv.style.display = 'block';
-                }
-            });
-            
-            // Logout Button
-            document.getElementById('logout-btn').addEventListener('click', async () => {
-                try {
-                    await window.signOut(window.firebaseAuth);
-                    // onAuthStateChanged handles the return to the login screen
-                } catch(error) {
-                    console.error("Logout failed:", error);
-                }
-            });
-
-
-            // --- PROFILE SETUP FORM (AFTER GOOGLE SIGN-IN) ---
-            setupForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const setupUserId = document.getElementById('setup-userid').value.trim();
-                const setupPassword = document.getElementById('setup-password').value.trim();
-                const setupConfirmPassword = document.getElementById('setup-confirm-password').value.trim();
-                const errorDiv = document.getElementById('setup-error');
-                const successDiv = document.getElementById('setup-success');
-                errorDiv.style.display = 'none';
-                successDiv.style.display = 'none';
-
-                if (setupPassword !== setupConfirmPassword) {
-                    document.getElementById('setup-error-message').textContent = "Passwords do not match.";
-                    errorDiv.style.display = 'block';
-                    return;
-                }
-                
-                const user = window.firebaseAuth.currentUser;
-                if (!user) {
-                    document.getElementById('setup-error-message').textContent = "Authentication expired. Please sign in again.";
-                    errorDiv.style.display = 'block';
-                    return;
-                }
-                
-                try {
-                    // 1. Update password for Firebase Auth object (for users who signed in with Google but need a password for email login)
-                    // NOTE: The Firebase SDK doesn't allow updating the password of a Google-linked account directly without re-authentication.
-                    // Since this is just setting up a profile, we'll focus on storing the data and will assume the primary sign-in method (Google) is used.
-                    // For now, we'll skip the password update logic here to simplify the fix, but you'll need to handle it if you want email/password login too.
-
-                    // 2. Save user profile data to Firestore
-                    const userDocRef = window.doc(window.firebaseDb, 'users', user.uid);
-                    await window.setDoc(userDocRef, {
-                        uid: user.uid,
-                        email: user.email,
-                        displayName: user.displayName || setupUserId,
-                        userId: '@' + setupUserId.toLowerCase(),
-                        avatarUrl: user.photoURL,
-                        createdAt: new Date().toISOString()
-                    }, { merge: true });
-
-                    successDiv.style.display = 'block';
-                    
-                    // Delay slightly before showing the main app to allow Firestore to sync
-                    setTimeout(() => showMainApp(user), 1500);
-
-                } catch (error) {
-                    console.error("Profile setup failed:", error);
-                    document.getElementById('setup-error-message').textContent = error.message;
-                    errorDiv.style.display = 'block';
-                }
-            });
-
-
-            // Placeholder for other app event listeners (like chat, modals, etc.)
-            
-            // Modal controls (simple show/hide placeholders)
-            document.getElementById('add-friend-btn').addEventListener('click', () => {
-                document.getElementById('add-friend-modal').style.display = 'flex';
-            });
-            document.getElementById('cancel-add-friend').addEventListener('click', () => {
-                document.getElementById('add-friend-modal').style.display = 'none';
-            });
-            document.getElementById('add-server-btn').addEventListener('click', () => {
-                document.getElementById('create-server-modal').style.display = 'flex';
-            });
-            document.getElementById('cancel-create-server').addEventListener('click', () => {
-                document.getElementById('create-server-modal').style.display = 'none';
-            });
-            document.getElementById('settings-btn').addEventListener('click', () => {
-                document.getElementById('profile-modal').style.display = 'flex';
-            });
-            document.getElementById('close-profile-modal').addEventListener('click', () => {
-                document.getElementById('profile-modal').style.display = 'none';
-            });
+            initialSignIn();
         }
-        
+
+        // Start the whole application on window load
+        window.onload = initializeAppAndAuth;
     </script>
 </body>
 </html>
