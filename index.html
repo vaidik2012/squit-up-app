@@ -284,18 +284,19 @@
         async function ensureUserProfileExistsNew(uid) {
             // Path to the public collection where all user profiles are stored for global access/counting
             const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'user_profiles', uid);
+            const user = auth.currentUser;
+            
+            // Determine a display name based on provider
+            let display = user?.displayName;
+            if (!display) {
+                // For Email/Password users, use the start of the email as a placeholder display name
+                const emailPart = user?.email ? user.email.split('@')[0] : `user_${uid.substring(0, 8)}`;
+                display = emailPart;
+            }
+
             try {
                 const docSnap = await getDoc(userDocRef);
-                const user = auth.currentUser;
                 
-                // Determine a display name based on provider
-                let display = user?.displayName;
-                if (!display) {
-                    // For Email/Password users, use the start of the email as a placeholder display name
-                    const emailPart = user?.email ? user.email.split('@')[0] : `user_${uid.substring(0, 8)}`;
-                    display = emailPart;
-                }
-
                 if (!docSnap.exists()) {
                     // Create the profile document
                     await setDoc(userDocRef, {
@@ -314,21 +315,32 @@
                     }, { merge: true });
                 }
             } catch (error) {
-                console.error("Error ensuring user profile document (Public Path):", error.message);
+                // IMPORTANT FIX: If the setDoc/getDoc fails (e.g., due to security rules), 
+                // we still want to log the error but proceed to setup the listener 
+                // so the user isn't stuck on the loading screen.
+                console.error("Error creating/updating user profile document (Public Path):", error.message);
             }
             
             // Set up listener for the current user's profile
             onSnapshot(userDocRef, (docSnap) => {
                 if (docSnap.exists()) {
                     currentUserProfile = docSnap.data();
-                    renderChatUI(); // Re-render to update the user info bar and load chat
+                    // FIX: Ensure userId is set before calling renderChatUI 
+                    // (it should be, but this makes it safer)
+                    if (userId) {
+                        renderChatUI(); 
+                    }
                 } else if (isAuthReady) {
-                    console.warn("User profile missing for logged-in user.");
-                    renderLoading("Profile data missing. Please sign out and sign in again.");
+                    // IMPORTANT FIX: If the profile is missing AND we are authenticated, 
+                    // we can't load the chat, so we show a clear error and suggest action.
+                    console.warn("User profile missing for logged-in user. Firestore rules may prevent reading.");
+                    renderLoading("Profile loading failed (Rule Error?). Please try refreshing or signing out.");
                 }
             }, (error) => {
-                console.error("Error listening to user's public profile:", error.message);
-                renderLoading("Error loading profile. Check permissions.");
+                // IMPORTANT FIX: Catch listener errors (often security rule violations) 
+                // and display a clear message instead of silently failing.
+                console.error("Error listening to user's public profile (Likely Rules Issue):", error.message);
+                renderLoading("FATAL: Failed to load profile data. Check Firestore Security Rules.");
             });
         }
 
