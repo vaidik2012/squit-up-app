@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FURY - Realtime Chat</title>
+    <title>FURY - Discord-like Platform</title>
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -13,26 +13,34 @@
             margin: 0;
             overflow: hidden; /* Prevent body scroll */
         }
+        .sidebar {
+            width: 72px; /* Fixed width for Server/DM column */
+            flex-shrink: 0;
+        }
+        .channel-list {
+            width: 240px; /* Width for Channels/DM list */
+            flex-shrink: 0;
+        }
         /* Custom scrollbar for chat box */
         #messages-container::-webkit-scrollbar {
             width: 8px;
         }
         #messages-container::-webkit-scrollbar-thumb {
-            background-color: #4a5568; /* gray-600 */
+            background-color: #4a5568;
             border-radius: 4px;
         }
         #messages-container::-webkit-scrollbar-track {
-            background-color: #1f2937; /* gray-800 */
+            background-color: #1f2937;
         }
-        /* Custom scrollbar for sidebar */
-        #users-list::-webkit-scrollbar {
+        /* Custom scrollbar for side panels */
+        .custom-scrollbar::-webkit-scrollbar {
             width: 6px;
         }
-        #users-list::-webkit-scrollbar-thumb {
-            background-color: #374151; /* gray-700 */
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: #374151;
             border-radius: 3px;
         }
-        #users-list::-webkit-scrollbar-track {
+        .custom-scrollbar::-webkit-scrollbar-track {
             background-color: transparent;
         }
     </style>
@@ -44,18 +52,28 @@
         <!-- Content will be injected here -->
     </div>
 
+    <!-- Modals (Outside app-container) -->
+    <div id="modal-container"></div>
+
+
     <!-- Firebase and Application Logic -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInWithCustomToken, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, signInWithEmailAndPassword, updateProfile, updatePassword } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, onSnapshot, collection, query, addDoc, serverTimestamp, getDoc, setDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInWithCustomToken, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, updateProfile, updatePassword } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot, collection, query, addDoc, serverTimestamp, getDoc, setDoc, setLogLevel, where, deleteDoc, runTransaction } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Global Firebase instances
         let app, db, auth;
         let userId = null;
-        let currentUserProfile = null; // Store fetched user profile data
+        let currentUserProfile = null;
         let isAuthReady = false; 
-        let totalUserCount = 0; 
+        
+        // State Management
+        let currentView = { type: 'global', id: 'global_fury_chat', displayName: 'Global FURY Chat' }; // 'global', 'dm', or 'server'
+        let messages = [];
+        let directMessages = [];
+        let friends = []; // { userId, displayName, onlineStatus, friendId }
+        let friendRequests = []; // { senderId, senderDisplayName, requestId }
 
         // --- GLOBAL VARIABLES (Provided by environment or manually configured) ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
@@ -71,14 +89,41 @@
             appId: "1:586918898443:web:c5a56eb24cd4f183d8600e",
             measurementId: "G-K4LHFHSNJC"
         };
-        // -------------------------------------------------------------------------------
-
         // Use the environment configuration if available, otherwise use the custom config.
         const firebaseConfig = typeof __firebase_config !== 'undefined' 
             ? JSON.parse(__firebase_config) 
             : customFirebaseConfig;
         
         // --- UTILITY FUNCTIONS ---
+
+        /** Renders a simple custom modal for alerts/confirmations. */
+        function renderModal(title, message, type = 'alert', onConfirm = null) {
+            const container = document.getElementById('modal-container');
+            container.innerHTML = `
+                <div class="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4">
+                    <div class="bg-gray-800 rounded-xl shadow-2xl p-6 w-full max-w-sm border border-gray-700">
+                        <h3 class="text-xl font-bold text-white mb-3">${title}</h3>
+                        <p class="text-gray-300 mb-6">${message}</p>
+                        <div class="flex justify-end space-x-3">
+                            ${type === 'confirm' ? `<button id="modal-cancel" class="bg-gray-600 hover:bg-gray-500 text-white font-semibold py-2 px-4 rounded-lg transition">Cancel</button>` : ''}
+                            <button id="modal-confirm" class="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg transition">${type === 'alert' ? 'Close' : 'Confirm'}</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            const closeModal = () => container.innerHTML = '';
+            
+            document.getElementById('modal-confirm').addEventListener('click', () => {
+                if (type === 'confirm' && onConfirm) {
+                    onConfirm();
+                }
+                closeModal();
+            });
+            
+            if (type === 'confirm') {
+                document.getElementById('modal-cancel').addEventListener('click', closeModal);
+            }
+        }
 
         /**
          * Generic function to retry an async function with exponential backoff.
@@ -90,16 +135,14 @@
                 } catch (error) {
                     if (error.code && error.code.includes('api-key-not-valid') && i < maxRetries - 1) {
                         await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, i)));
-                        continue; 
+                        continue;
                     }
-                    throw error; 
+                    throw error;
                 }
             }
         }
 
-        /**
-         * Renders the loading spinner into the app container.
-         */
+        /** Renders the loading spinner. */
         function renderLoading(message = "Connecting...") {
             const container = document.getElementById('app-container');
             container.innerHTML = `
@@ -112,10 +155,9 @@
             `;
         }
         
-        /**
-         * Renders the Sign-In screen with Email/Password and Google options.
-         */
+        /** Renders the Sign-In screen. */
         function renderSignIn(errorMessage = '') {
+            // ... (Sign In HTML content remains the same as previous step, for brevity it's omitted here) ...
             const container = document.getElementById('app-container');
             container.innerHTML = `
                 <div class="h-full flex items-center justify-center bg-gray-900">
@@ -167,14 +209,11 @@
                     </div>
                 </div>
             `;
-            // Attach event listeners after rendering
             document.getElementById('google-signin-btn').addEventListener('click', signInWithGoogle);
             document.getElementById('email-password-form').addEventListener('submit', handleEmailPasswordSignIn);
         }
 
-        /**
-         * Renders the Profile Setup screen for new Google users.
-         */
+        /** Renders the Profile Setup screen. */
         function renderProfileSetup(errorMessage = '') {
             const user = auth.currentUser;
             const container = document.getElementById('app-container');
@@ -216,22 +255,41 @@
                         </form>
                         
                         ${errorMessage ? `<p id="error-message" class="text-sm text-red-400 mt-4 font-semibold p-2 bg-gray-900 rounded-lg">${errorMessage}</p>` : ''}
+                        
+                        <!-- Added Logout button for the fix -->
+                        <button id="setup-logout-btn" class="text-sm text-gray-500 hover:text-red-500 mt-4 underline">
+                            Cancel / Log Out
+                        </button>
+
                     </div>
                 </div>
             `;
-            // Attach event listener after rendering
             document.getElementById('profile-setup-form').addEventListener('submit', handleProfileSetup);
+            document.getElementById('setup-logout-btn').addEventListener('click', handleSignOut);
         }
 
-        /**
-         * Handles the profile setup: sets display name and password.
-         */
+        // --- AUTHENTICATION HANDLERS ---
+
+        /** Signs out the current user and sets their status to 'offline'. */
+        async function handleSignOut() {
+            try {
+                if (userId) {
+                    const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'user_profiles', userId);
+                    setDoc(userDocRef, { onlineStatus: 'offline' }, { merge: true }).catch(e => console.error("Error setting offline status:", e));
+                }
+                await signOut(auth);
+                // After sign out, the onAuthStateChanged listener will call renderSignIn()
+            } catch (error) {
+                console.error("Error during sign out:", error);
+            }
+        }
+
+        /** Handles Profile Setup: Fixes credential issue and updates profile. */
         async function handleProfileSetup(e) {
             e.preventDefault();
             const user = auth.currentUser;
             if (!user) {
-                renderSignIn("Session expired. Please sign in again.");
-                return;
+                return renderModal("Error", "Session expired. Please sign in again.");
             }
 
             const userIdInput = document.getElementById('user-id-input').value.trim();
@@ -240,7 +298,6 @@
             if (newPassword.length < 6) {
                 return renderProfileSetup('Password must be at least 6 characters long.');
             }
-
             if (!userIdInput.match(/^@[a-zA-Z0-9_]{3,15}$/)) {
                 return renderProfileSetup('Invalid @user_id format. Must start with @ and contain 3-15 letters, numbers, or underscores.');
             }
@@ -248,13 +305,13 @@
             renderLoading("Setting up profile...");
 
             try {
-                // 1. Update the user's display name in Firebase Auth
+                // 1. Update the user's display name
                 await updateProfile(user, { displayName: userIdInput });
 
-                // 2. Set the password for this account (allows non-Google login later)
+                // 2. Set the password
                 await updatePassword(user, newPassword);
 
-                // 3. Update the Firestore profile to mark setup as complete and use the new display name
+                // 3. Update the Firestore profile
                 const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'user_profiles', user.uid);
                 await setDoc(userDocRef, {
                     displayName: userIdInput,
@@ -262,285 +319,34 @@
                     lastActive: serverTimestamp(),
                 }, { merge: true });
 
-                // Success: Manually update profile state and render chat UI to ensure immediate transition
+                // Success: Manually update profile state and render chat UI
                 currentUserProfile = { ...currentUserProfile, displayName: userIdInput, isSetupComplete: true };
-                renderChatUI(); 
+                currentView = { type: 'global', id: 'global_fury_chat', displayName: 'Global FURY Chat' };
+                renderDashboard();
             } catch (error) {
                 console.error("Profile Setup failed:", error);
                 let message = 'Profile setup failed. Please try again.';
+                
                 if (error.code === 'auth/weak-password') {
                     message = 'Password is too weak. Choose a stronger one.';
-                } else if (error.code === 'auth/requires-recent-login') {
-                    message = 'Please log out and log back in before completing setup.';
-                } else if (error.code === 'auth/credential-too-old') {
-                    message = 'Please log out and log back in before completing setup (credential too old).';
+                } else if (error.code === 'auth/requires-recent-login' || error.code === 'auth/credential-too-old') {
+                    // CRITICAL FIX: Prompt sign out/in and re-render the sign-in page with a clear message.
+                    handleSignOut().then(() => {
+                        renderSignIn('Security check failed. Please sign in again immediately to complete your profile.');
+                    });
+                    return; // Stop execution here
                 }
                 renderProfileSetup(message);
             }
         }
         
-        /**
-         * Parses Firebase errors for user-friendly display.
-         */
-        function getAuthErrorMessage(errorCode) {
-            switch (errorCode) {
-                case 'auth/invalid-email':
-                    return 'Invalid email format.';
-                case 'auth/user-not-found':
-                case 'auth/wrong-password':
-                    return 'Invalid email or password.';
-                case 'auth/popup-closed-by-user':
-                    return 'Sign-in window was closed. Please try again.';
-                case 'auth/unauthorized-domain':
-                    return 'Error: Unauthorized domain. Check your Firebase settings.';
-                case 'auth/api-key-not-valid':
-                    return 'Configuration Error: Invalid Firebase API Key.';
-                case 'auth/email-already-in-use':
-                    return 'Email is already registered. Try logging in manually.';
-                default:
-                    return `Authentication failed: ${errorCode}. Check console.`;
-            }
-        }
+        // --- CHAT AND DASHBOARD LOGIC (Simplified/Refactored) ---
 
-        /**
-         * Email/Password Sign-In handler.
-         */
-        async function handleEmailPasswordSignIn(e) {
-            e.preventDefault();
-            const input = document.getElementById('email-input').value; 
-            const password = document.getElementById('password-input').value;
-            
-            // Simplified logic: Assume input is email if it contains '@', otherwise append a placeholder domain.
-            const email = input.includes('@') ? input : input + '@furychat.com'; 
-
-            if (!email || !password) {
-                 return renderSignIn('Please enter both email and password.');
-            }
-
-            renderLoading("Logging in...");
-
-            try {
-                await signInWithEmailAndPassword(auth, email, password);
-                // AuthStateChanged listener will handle the rest (rendering chat UI)
-
-            } catch (error) {
-                console.error("Email/Password Sign-In failed:", error);
-                
-                const userFriendlyMessage = getAuthErrorMessage(error.code);
-                renderSignIn(userFriendlyMessage); 
-            }
-        }
-
-        /**
-         * Google Sign-In handler with Exponential Backoff.
-         */
-        async function signInWithGoogle() {
-            renderLoading("Opening Google Sign-In...");
-            
-            try {
-                const provider = new GoogleAuthProvider();
-                await fetchWithExponentialBackoff(async () => {
-                    return await signInWithPopup(auth, provider);
-                });
-                // AuthStateChanged listener will be triggered upon success
-            } catch (error) {
-                console.error("Google Sign-In failed:", error);
-                
-                let userFriendlyMessage = getAuthErrorMessage(error.code);
-                renderSignIn(userFriendlyMessage); 
-            }
-        }
-
-        /**
-         * Signs out the current user and sets their status to 'offline'.
-         */
-        async function handleSignOut() {
-            try {
-                if (userId) {
-                    const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'user_profiles', userId);
-                    // Do not wait for this update to complete to ensure fast sign-out
-                    setDoc(userDocRef, { onlineStatus: 'offline' }, { merge: true }).catch(e => console.error("Error setting offline status:", e));
-                }
-                await signOut(auth);
-            } catch (error) {
-                console.error("Error during sign out:", error);
-            }
-        }
-
-        /**
-         * CRITICAL: Ensures the profile exists and determines whether to render Setup or Chat UI immediately.
-         */
-        async function initializeUserProfileAndRenderUI(uid) {
-            renderLoading("Loading profile data...");
-            const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'user_profiles', uid);
-            const user = auth.currentUser;
-            const defaultDisplay = user?.email ? user.email.split('@')[0] : `user_${uid.substring(0, 8)}`;
-            let isSetupComplete = false;
-
-            try {
-                const docSnap = await getDoc(userDocRef);
-                
-                if (!docSnap.exists()) {
-                    // Profile does not exist, create it with setup incomplete
-                    await setDoc(userDocRef, {
-                        userId: uid,
-                        displayName: user.displayName || defaultDisplay,
-                        email: user?.email || '',
-                        onlineStatus: 'online', 
-                        isSetupComplete: false, 
-                        lastActive: serverTimestamp(),
-                        createdAt: serverTimestamp(),
-                    });
-                    currentUserProfile = { displayName: user.displayName || defaultDisplay, isSetupComplete: false, onlineStatus: 'online' };
-
-                } else {
-                    // Profile exists, update status and check setup state
-                    currentUserProfile = docSnap.data();
-                    isSetupComplete = currentUserProfile.isSetupComplete === true;
-                    
-                    await setDoc(userDocRef, {
-                        onlineStatus: 'online',
-                        lastActive: serverTimestamp(),
-                    }, { merge: true });
-                }
-            } catch (error) {
-                console.error("Error creating/updating user profile document (Public Path):", error.message);
-                // Set to incomplete as a fallback if Firestore operation fails
-                currentUserProfile = currentUserProfile || { displayName: defaultDisplay, isSetupComplete: false, onlineStatus: 'online' };
-            }
-            
-            // --- IMMEDIATE RENDERING LOGIC (The Fix) ---
-            if (currentUserProfile.isSetupComplete === true) {
-                renderChatUI(); 
-            } else if (user && user.providerData.some(p => p.providerId === GoogleAuthProvider.PROVIDER_ID)) {
-                // Only prompt setup for Google users who are incomplete
-                renderProfileSetup();
-            } else {
-                // If the user signed in with email/password (and somehow profile is incomplete), go straight to chat.
-                // NOTE: Real-world app would enforce completeness, but for robustness here, we render chat.
-                 renderChatUI(); 
-            }
-            
-            // Start the real-time listener for subsequent updates (e.g., status changes by other users)
-            onSnapshot(userDocRef, (docSnap) => {
-                if (docSnap.exists()) {
-                    currentUserProfile = docSnap.data();
-                    // We only re-render the chat if the profile became complete OR if status changed
-                    if (document.getElementById('messages-container')) {
-                         // Only update UI elements if we are already in the chat view
-                         updateSidebarUserCount(totalUserCount);
-                    }
-                }
-            }, (error) => {
-                console.error("Error listening to user's public profile:", error.message);
-            });
-        }
-
-
-        // --- USER COUNTING LOGIC ---
-
-        /**
-         * Listens to ALL user profiles (in the public collection) to get the total count and list of active users.
-         */
-        function startUserCountListener() {
-            if (!db) return; // Ensure DB is initialized
-            const publicProfilesRef = collection(db, 'artifacts', appId, 'public', 'data', 'user_profiles');
-            
-            onSnapshot(publicProfilesRef, (snapshot) => {
-                const onlineUsers = [];
-                snapshot.forEach(doc => {
-                    const profile = doc.data();
-                    
-                    if (profile.onlineStatus === 'online') {
-                        onlineUsers.push(profile);
-                    }
-                });
-
-                totalUserCount = snapshot.size; 
-                
-                updateSidebarUserCount(totalUserCount);
-                renderOnlineUsersList(onlineUsers);
-
-            }, (error) => {
-                console.error("Error listening to public user profiles:", error.message);
-            });
-        }
-        
-        /**
-         * Renders the total user count in the sidebar.
-         */
-        function updateSidebarUserCount(count) {
-            const countElement = document.getElementById('user-count');
-            if (countElement) {
-                countElement.textContent = `Registered Users (${count})`;
-            }
-        }
-        
-        /**
-         * Renders the list of online users in the sidebar.
-         */
-        function renderOnlineUsersList(users) {
-            const listContainer = document.getElementById('users-list');
-            if (!listContainer) return;
-
-            listContainer.innerHTML = '';
-            
-            const activeUsers = users.filter(user => user.userId !== userId);
-
-            if (activeUsers.length === 0) {
-                 listContainer.innerHTML = `<li class="text-sm text-gray-500 p-2">No other users currently active.</li>`;
-                return;
-            }
-
-            activeUsers.forEach(user => {
-                const statusColor = 'bg-green-500'; 
-                
-                const listItem = document.createElement('li');
-                listItem.className = "flex items-center p-2 rounded-lg hover:bg-gray-700 transition duration-150 cursor-pointer";
-                listItem.innerHTML = `
-                    <div class="flex-shrink-0 w-2 h-2 rounded-full mr-2 ${statusColor}"></div>
-                    <span class="text-sm text-gray-300 font-medium">${user.displayName}</span>
-                `;
-                listContainer.appendChild(listItem);
-            });
-        }
-
-
-        // --- CHAT LOGIC ---
-
-        /**
-         * Listens to the global chat for messages and updates the UI.
-         */
-        function startChatListeners() {
-            if (!userId || !isAuthReady || !db) return;
-
-            const globalChatRef = doc(db, 'artifacts', appId, 'public', 'data', 'chats', 'global_fury_chat');
-            const messagesRef = collection(globalChatRef, 'messages');
-            
-            const q = query(messagesRef);
-
-            onSnapshot(q, (snapshot) => {
-                const msgs = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data(),
-                    timestamp: doc.data().timestamp?.toDate() || new Date()
-                }));
-
-                msgs.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-                renderMessages(msgs);
-            }, (error) => {
-                console.error("Error listening to global chat messages:", error.message);
-            });
-        }
-        
-        /**
-         * Renders all messages into the chat body.
-         */
-        function renderMessages(messages) {
+        /** Renders a single message into the messages container. */
+        function renderMessages() {
             const container = document.getElementById('messages-container');
             if (!container) return;
             
-            // Check if user is near the bottom before clearing content
             const shouldScroll = container.scrollHeight - container.clientHeight <= container.scrollTop + 1;
 
             container.innerHTML = ''; 
@@ -548,15 +354,10 @@
             if (messages.length === 0) {
                 container.innerHTML = `
                     <div class="text-center text-gray-500 py-10 flex-grow flex items-center justify-center">
-                        Say hello! Be the first to send a message to **#global-fury-chat**.
+                        Say hello! Be the first to send a message to **#${currentView.displayName}**.
                     </div>
                 `;
-                container.style.display = 'flex';
-                container.style.flexDirection = 'column-reverse';
-                container.style.justifyContent = 'center';
                 return;
-            } else {
-                container.style.display = 'block'; 
             }
 
             const fragment = document.createDocumentFragment();
@@ -589,100 +390,238 @@
             
             container.appendChild(fragment);
 
-            // Auto-scroll to the bottom if the user was already near the bottom
             if (shouldScroll) {
                container.scrollTop = container.scrollHeight;
             }
         }
 
-        /**
-         * Sends a message to the global chat room.
-         */
+        /** Sends a message to the currently selected view (global or DM). */
         async function sendMessage(text) {
-            if (!userId || !text.trim() || !isAuthReady || !currentUserProfile || !db) return;
+            if (!userId || !text.trim() || !db) return;
 
             try {
-                const globalChatRef = doc(db, 'artifacts', appId, 'public', 'data', 'chats', 'global_fury_chat');
-                const messagesCollectionRef = collection(globalChatRef, 'messages');
+                let collectionRef;
+                let chatTitle;
+
+                if (currentView.type === 'global' || currentView.type === 'server') {
+                    // Global/Server messages
+                    const chatDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'chats', currentView.id);
+                    collectionRef = collection(chatDocRef, 'messages');
+                    chatTitle = currentView.displayName;
+                } else if (currentView.type === 'dm') {
+                    // DM messages
+                    const dmId = currentView.id; 
+                    const dmDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'dms', dmId);
+                    collectionRef = collection(dmDocRef, 'messages');
+                    chatTitle = `DM with ${currentView.displayName}`;
+                } else {
+                    return; // Should not happen
+                }
                 
-                await addDoc(messagesCollectionRef, {
+                await addDoc(collectionRef, {
                     senderId: userId,
                     displayName: currentUserProfile.displayName, 
                     text: text.trim(),
                     timestamp: serverTimestamp(),
-                    type: 'text',
                 });
                 document.getElementById('message-input').value = '';
             } catch (error) {
+                renderModal("Send Error", "Failed to send message. Please check console for details.");
                 console.error("Error sending message:", error.message);
             }
         }
 
+        /** Sets up the listener for the currently selected chat view. */
+        function setupChatListener() {
+            if (!userId || !db) return;
+            
+            // Clear any previous listener
+            if (window.unsubscribeMessages) {
+                window.unsubscribeMessages();
+                window.unsubscribeMessages = null;
+            }
 
-        /**
-         * Renders the main chat UI after successful login and profile load.
-         */
-        function renderChatUI() {
+            let messagesCollectionRef;
+
+            if (currentView.type === 'global' || currentView.type === 'server') {
+                const chatDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'chats', currentView.id);
+                messagesCollectionRef = collection(chatDocRef, 'messages');
+            } else if (currentView.type === 'dm') {
+                 const dmDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'dms', currentView.id);
+                 messagesCollectionRef = collection(dmDocRef, 'messages');
+            } else {
+                return;
+            }
+            
+            const q = query(messagesCollectionRef);
+
+            window.unsubscribeMessages = onSnapshot(q, (snapshot) => {
+                messages = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data(),
+                    timestamp: doc.data().timestamp?.toDate() || new Date()
+                }));
+
+                messages.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+                renderMessages(); 
+            }, (error) => {
+                console.error("Error listening to chat messages:", error.message);
+            });
+        }
+        
+        /** Renders the list of Direct Messages in the sidebar. */
+        function renderDMsList() {
+             const dmListContainer = document.getElementById('dm-list');
+             if (!dmListContainer) return;
+
+             dmListContainer.innerHTML = '';
+             
+             directMessages.forEach(dm => {
+                 const isActive = currentView.type === 'dm' && currentView.id === dm.dmId;
+                 const statusColor = dm.onlineStatus === 'online' ? 'bg-green-500' : 'bg-gray-500';
+
+                 const listItem = document.createElement('li');
+                 listItem.className = 'my-1';
+                 listItem.innerHTML = `
+                     <button data-id="${dm.dmId}" data-type="dm" data-name="${dm.displayName}"
+                         class="w-full flex items-center p-2 rounded-lg transition duration-150 ${isActive ? 'bg-gray-700' : 'hover:bg-gray-700/50'}">
+                         <div class="relative flex-shrink-0 mr-3">
+                             <span class="inline-block w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-sm font-bold text-white">${dm.displayName.charAt(1).toUpperCase()}</span>
+                             <span class="absolute right-0 bottom-0 block w-3 h-3 rounded-full ring-2 ring-gray-900 ${statusColor}"></span>
+                         </div>
+                         <span class="text-sm font-medium text-gray-300 whitespace-nowrap overflow-hidden text-ellipsis">${dm.displayName}</span>
+                     </button>
+                 `;
+                 dmListContainer.appendChild(listItem);
+             });
+        }
+
+        /** Listener for Direct Messages and Friend System. */
+        function setupFriendsAndDmsListener() {
+            if (!userId || !db) return;
+
+            // 1. Listen for current user's friends list
+            const friendsRef = collection(db, 'artifacts', appId, 'public', 'data', 'friends', userId, 'list');
+            
+            // NOTE: Firestore queries often require indexes if using 'where' and 'orderBy'. 
+            // We fetch the friend list (which is small) and then fetch friend details.
+            
+            onSnapshot(friendsRef, async (snapshot) => {
+                const friendIds = snapshot.docs.map(doc => doc.id);
+                
+                const newFriends = [];
+                const newDMs = [];
+
+                for (const friendId of friendIds) {
+                    // Fetch friend's profile to get displayName and status
+                    const friendProfileRef = doc(db, 'artifacts', appId, 'public', 'data', 'user_profiles', friendId);
+                    const profileSnap = await getDoc(friendProfileRef);
+
+                    if (profileSnap.exists()) {
+                        const profile = profileSnap.data();
+                        const dmId = [userId, friendId].sort().join('_'); // Consistent DM ID
+                        
+                        newFriends.push({
+                            userId: friendId,
+                            displayName: profile.displayName,
+                            onlineStatus: profile.onlineStatus,
+                        });
+
+                        newDMs.push({
+                            dmId: dmId,
+                            displayName: profile.displayName,
+                            onlineStatus: profile.onlineStatus,
+                            recipientId: friendId,
+                        });
+                    }
+                }
+                
+                friends = newFriends;
+                directMessages = newDMs;
+                renderDMsList();
+
+            }, (error) => {
+                console.error("Error listening to friends list:", error.message);
+            });
+
+            // 2. Listen for incoming friend requests
+            const requestsRef = collection(db, 'artifacts', appId, 'public', 'data', 'requests', userId, 'incoming');
+            onSnapshot(requestsRef, (snapshot) => {
+                friendRequests = snapshot.docs.map(doc => ({
+                    requestId: doc.id,
+                    ...doc.data()
+                }));
+                updateFriendRequestButton();
+            }, (error) => {
+                console.error("Error listening to friend requests:", error.message);
+            });
+        }
+
+        // --- DASHBOARD RENDERING ---
+
+        /** Renders the main dashboard layout. */
+        function renderDashboard() {
             const userDisplayId = currentUserProfile?.displayName || `@user_${userId.substring(0, 8)}`;
-            const onlineStatus = currentUserProfile?.onlineStatus || 'offline';
-            const statusColor = onlineStatus === 'online' ? 'bg-green-500' : 'bg-gray-500';
-
             const container = document.getElementById('app-container');
+            
             container.innerHTML = `
                 <div class="flex h-full text-white bg-gray-900 antialiased">
                     
-                    <!-- Sidebar (Left) -->
-                    <div class="w-64 bg-gray-800 flex flex-col border-r border-gray-700">
-                        <div class="p-4 border-b border-gray-700 flex items-center justify-between">
-                            <h1 class="text-xl font-extrabold text-red-500">FURY</h1>
-                            <button id="signout-btn" class="text-gray-400 hover:text-white transition duration-150" title="Sign Out">
-                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                    <!-- Column 1: Server/DM Switcher (Small Fixed Bar) -->
+                    <div class="sidebar bg-gray-900 flex flex-col items-center py-3 space-y-2 border-r border-gray-800">
+                        <button id="signout-btn" class="group relative w-12 h-12 flex items-center justify-center rounded-2xl bg-gray-800 hover:bg-red-600 transition duration-200" title="Sign Out">
+                             <svg class="w-6 h-6 text-red-500 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                            </svg>
+                        </button>
+
+                        <div class="w-10 border-t border-gray-700"></div>
+
+                        <!-- Global Chat Icon -->
+                        <button data-id="global_fury_chat" data-type="global" data-name="Global FURY Chat" class="server-switch-btn w-12 h-12 flex items-center justify-center rounded-3xl bg-red-600 text-white font-bold transition duration-200 hover:rounded-2xl shadow-xl hover:shadow-red-600/30">
+                            F
+                        </button>
+                    </div>
+
+                    <!-- Column 2: DM/Channel List Sidebar -->
+                    <div class="channel-list bg-gray-800 flex flex-col border-r border-gray-700">
+                        <!-- Top Header (App Name / Search) -->
+                        <div class="p-3 border-b border-gray-700 flex items-center justify-between">
+                            <span class="text-xl font-bold text-white">Direct Messages</span>
+                            <button id="add-friend-btn" class="text-gray-400 hover:text-green-500 transition duration-150 relative p-1 rounded-full hover:bg-gray-700" title="Add Friend">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path></svg>
+                                <span id="friend-request-indicator" class="hidden absolute top-0 right-0 block h-3 w-3 rounded-full bg-red-500 ring-2 ring-gray-800"></span>
                             </button>
                         </div>
                         
-                        <!-- Channels and User List -->
-                        <div class="flex-grow flex flex-col p-4 overflow-y-auto" style="min-height: 0;">
-                            <!-- Channels List -->
-                            <div class="mb-6">
-                                <h2 class="text-xs font-semibold uppercase text-gray-400 mb-2">Global Channels</h2>
-                                <ul class="space-y-1">
-                                    <li>
-                                        <button class="w-full text-left p-2 rounded-lg transition duration-150 bg-red-600 hover:bg-red-500 text-white">
-                                            #global-fury-chat
-                                        </button>
-                                    </li>
-                                </ul>
-                            </div>
-
-                            <!-- User Count and List -->
-                            <div class="flex-grow flex flex-col overflow-hidden">
-                                <h2 id="user-count" class="text-xs font-semibold uppercase text-gray-400 mb-2">Registered Users (0)</h2>
-                                <ul id="users-list" class="space-y-1 overflow-y-auto">
-                                    <!-- Online users will be rendered here -->
-                                </ul>
-                            </div>
+                        <!-- DM List -->
+                        <div class="flex-grow p-2 overflow-y-auto custom-scrollbar">
+                             <h2 class="text-xs font-semibold uppercase text-gray-400 my-2 px-2">Direct Messages</h2>
+                             <ul id="dm-list" class="space-y-1">
+                                 <!-- DM list items will be rendered here -->
+                             </ul>
                         </div>
 
                         <!-- User Info Bar -->
-                        <div class="p-4 bg-gray-700 border-t border-gray-700 flex items-center">
-                            <div class="flex-shrink-0 w-3 h-3 rounded-full mr-3 ${statusColor} border-2 border-gray-700"></div>
+                        <div class="p-3 bg-gray-900 border-t border-gray-700 flex items-center">
                             <div class="flex flex-col overflow-hidden">
-                                <span class="text-sm font-semibold whitespace-nowrap overflow-hidden text-ellipsis">${userDisplayId}</span>
-                                <span class="text-xs text-gray-400 capitalize">${onlineStatus} (Email: ${auth.currentUser.email || 'N/A'})</span>
+                                <span class="text-sm font-semibold whitespace-nowrap overflow-hidden text-ellipsis text-red-400">${userDisplayId}</span>
+                                <span class="text-xs text-gray-500">${auth.currentUser.email || 'N/A'}</span>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Chat Area (Right) -->
+                    <!-- Column 3: Chat Area -->
                     <div class="flex-grow flex flex-col">
                         <!-- Header -->
-                        <header class="p-4 border-b border-gray-700 bg-gray-800 flex items-center">
-                            <h2 class="text-xl font-bold"># global-fury-chat</h2>
+                        <header class="p-4 border-b border-gray-700 bg-gray-800 flex items-center justify-between">
+                            <h2 id="chat-header-name" class="text-xl font-bold"># ${currentView.displayName}</h2>
+                            <div class="text-sm text-gray-400">Your User ID: <span class="font-mono text-xs p-1 bg-gray-700 rounded-md select-all">${userId}</span></div>
                         </header>
 
                         <!-- Messages Body -->
-                        <div id="messages-container" class="flex-grow p-4 overflow-y-auto" style="display: block;">
-                            <!-- Messages will be rendered here by renderMessages -->
+                        <div id="messages-container" class="flex-grow p-4 overflow-y-auto custom-scrollbar">
+                            <!-- Messages will be rendered here -->
                         </div>
 
                         <!-- Input Area -->
@@ -691,7 +630,7 @@
                                 <input
                                     type="text"
                                     id="message-input"
-                                    placeholder="Message #global-fury-chat"
+                                    placeholder="Message # ${currentView.displayName}"
                                     class="flex-grow bg-gray-700 text-white p-3 rounded-xl focus:ring-2 focus:ring-red-500 focus:outline-none transition duration-150"
                                 >
                                 <button
@@ -706,24 +645,363 @@
                 </div>
             `;
             
-            // Setup Event Listeners
+            // Event Listeners for new UI elements
             document.getElementById('signout-btn').addEventListener('click', handleSignOut);
             document.getElementById('chat-form').addEventListener('submit', (e) => {
                 e.preventDefault();
                 const input = document.getElementById('message-input');
                 sendMessage(input.value);
             });
+            document.getElementById('add-friend-btn').addEventListener('click', renderFriendModal);
+            
+            document.querySelectorAll('.server-switch-btn').forEach(button => {
+                button.addEventListener('click', handleViewChange);
+            });
+            
+            // Setup initial listeners
+            setupChatListener(); // Start listening to the initial 'global' chat
+            setupFriendsAndDmsListener(); // Start listening to friend list and requests
+        }
 
-            // Start all listeners
-            startChatListeners();
-            startUserCountListener();
+        /** Handles switching between chat views (Global, DM). */
+        function handleViewChange(e) {
+            const button = e.currentTarget;
+            const id = button.getAttribute('data-id');
+            const type = button.getAttribute('data-type');
+            const name = button.getAttribute('data-name');
+            
+            currentView = { id, type, displayName: name };
+
+            const header = document.getElementById('chat-header-name');
+            const input = document.getElementById('message-input');
+
+            if (header) header.textContent = `# ${name}`;
+            if (input) input.placeholder = `Message # ${name}`;
+
+            // Re-render DM list to highlight active chat
+            renderDMsList(); 
+            // Restart chat listener for the new view
+            setupChatListener(); 
+        }
+
+        /** Renders the Friend/DM management modal. */
+        function renderFriendModal() {
+            const container = document.getElementById('modal-container');
+            container.innerHTML = `
+                <div class="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4">
+                    <div class="bg-gray-800 rounded-xl shadow-2xl p-6 w-full max-w-lg border border-gray-700">
+                        <h3 class="text-2xl font-bold text-white mb-6">Friends & Requests</h3>
+                        
+                        <!-- Add Friend Section -->
+                        <div class="mb-6 border-b border-gray-700 pb-4">
+                            <h4 class="text-lg font-semibold text-red-400 mb-3">Send Friend Request (Use User ID)</h4>
+                            <form id="send-request-form" class="flex space-x-2">
+                                <input 
+                                    type="text" 
+                                    id="recipient-id-input" 
+                                    placeholder="Enter full User ID to add"
+                                    required 
+                                    class="flex-grow bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                                >
+                                <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg transition duration-200">
+                                    Send
+                                </button>
+                            </form>
+                            <p id="request-message" class="text-sm mt-2 text-gray-400"></p>
+                        </div>
+                        
+                        <!-- Friend Requests (Incoming) -->
+                        <div class="mb-6 border-b border-gray-700 pb-4">
+                            <h4 class="text-lg font-semibold text-white mb-3">Incoming Requests (${friendRequests.length})</h4>
+                            <ul id="requests-list" class="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
+                                ${friendRequests.length === 0 ? '<li class="text-sm text-gray-500">No pending friend requests.</li>' : ''}
+                                <!-- Requests rendered here -->
+                            </ul>
+                        </div>
+                        
+                        <!-- Friends List -->
+                        <div class="mb-6">
+                            <h4 class="text-lg font-semibold text-white mb-3">Friends List (${friends.length})</h4>
+                            <ul id="friends-list" class="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
+                                ${friends.length === 0 ? '<li class="text-sm text-gray-500">You have no friends yet.</li>' : ''}
+                                <!-- Friends rendered here -->
+                            </ul>
+                        </div>
+
+                        <button id="modal-close" class="w-full bg-gray-600 hover:bg-gray-500 text-white font-semibold py-3 px-4 rounded-xl transition">Close</button>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('modal-close').addEventListener('click', () => container.innerHTML = '');
+            document.getElementById('send-request-form').addEventListener('submit', handleSendFriendRequest);
+            
+            // Render Requests
+            const requestsList = document.getElementById('requests-list');
+            if (friendRequests.length > 0) {
+                requestsList.innerHTML = '';
+                friendRequests.forEach(req => {
+                    const listItem = document.createElement('li');
+                    listItem.className = 'flex items-center justify-between p-2 bg-gray-700 rounded-lg';
+                    listItem.innerHTML = `
+                        <span class="text-sm font-medium text-red-300">${req.senderDisplayName}</span>
+                        <div class="space-x-2">
+                            <button data-id="${req.requestId}" data-sender="${req.senderId}" data-name="${req.senderDisplayName}" class="accept-btn text-green-400 hover:text-green-300 font-semibold text-sm">Accept</button>
+                            <button data-id="${req.requestId}" class="reject-btn text-red-400 hover:text-red-300 font-semibold text-sm">Reject</button>
+                        </div>
+                    `;
+                    requestsList.appendChild(listItem);
+                });
+
+                document.querySelectorAll('.accept-btn').forEach(btn => btn.addEventListener('click', handleAcceptRequest));
+                document.querySelectorAll('.reject-btn').forEach(btn => btn.addEventListener('click', handleRejectRequest));
+            }
+
+            // Render Friends
+            const friendsList = document.getElementById('friends-list');
+            if (friends.length > 0) {
+                 friendsList.innerHTML = '';
+                 friends.forEach(friend => {
+                     const statusColor = friend.onlineStatus === 'online' ? 'bg-green-500' : 'bg-gray-500';
+                     const listItem = document.createElement('li');
+                     listItem.className = 'flex items-center justify-between p-2 bg-gray-700 rounded-lg';
+                     listItem.innerHTML = `
+                         <div class="flex items-center">
+                              <div class="w-2 h-2 rounded-full mr-2 ${statusColor}"></div>
+                              <span class="text-sm font-medium text-gray-300">${friend.displayName}</span>
+                         </div>
+                         <button data-id="${friend.userId}" data-name="${friend.displayName}" class="dm-friend-btn bg-red-600 hover:bg-red-700 text-white px-3 py-1 text-xs rounded-lg transition">DM</button>
+                     `;
+                     friendsList.appendChild(listItem);
+                 });
+                 
+                 document.querySelectorAll('.dm-friend-btn').forEach(btn => btn.addEventListener('click', (e) => {
+                     // Close modal, switch view to DM
+                     container.innerHTML = '';
+                     const friendId = e.currentTarget.getAttribute('data-id');
+                     const friendName = e.currentTarget.getAttribute('data-name');
+                     const dmId = [userId, friendId].sort().join('_');
+                     
+                     currentView = { id: dmId, type: 'dm', displayName: friendName };
+                     handleViewChange({ currentTarget: { getAttribute: (key) => key === 'id' ? dmId : key === 'type' ? 'dm' : friendName } });
+                     
+                     // Manually update the header since handleViewChange needs a DOM element
+                     const header = document.getElementById('chat-header-name');
+                     if (header) header.textContent = `@ ${friendName}`;
+                     const input = document.getElementById('message-input');
+                     if (input) input.placeholder = `Message @ ${friendName}`;
+                 }));
+            }
+
+            updateFriendRequestButton(); // Ensure the indicator is correct
         }
         
-        // --- Initialization ---
+        /** Sends a friend request. */
+        async function handleSendFriendRequest(e) {
+            e.preventDefault();
+            const recipientId = document.getElementById('recipient-id-input').value.trim();
+            const messageEl = document.getElementById('request-message');
+            messageEl.className = 'text-sm mt-2 text-gray-400';
 
-        /**
-         * Initializes Firebase and sets up the main authentication listener.
-         */
+            if (recipientId === userId) {
+                return messageEl.textContent = 'You cannot send a request to yourself.';
+            }
+
+            try {
+                // 1. Check if recipient exists
+                const recipientProfileRef = doc(db, 'artifacts', appId, 'public', 'data', 'user_profiles', recipientId);
+                const recipientSnap = await getDoc(recipientProfileRef);
+
+                if (!recipientSnap.exists() || recipientSnap.data().isSetupComplete !== true) {
+                    messageEl.textContent = 'User ID not found or profile not complete.';
+                    messageEl.classList.add('text-yellow-400');
+                    return;
+                }
+                
+                // 2. Check if already friends
+                const friendCheckRef = doc(db, 'artifacts', appId, 'public', 'data', 'friends', userId, 'list', recipientId);
+                const friendCheckSnap = await getDoc(friendCheckRef);
+                if (friendCheckSnap.exists()) {
+                    messageEl.textContent = `${recipientSnap.data().displayName} is already your friend.`;
+                    messageEl.classList.add('text-green-400');
+                    return;
+                }
+                
+                // 3. Check for pending request (sent or received)
+                const outgoingRef = doc(db, 'artifacts', appId, 'public', 'data', 'requests', userId, 'outgoing', recipientId);
+                const outgoingSnap = await getDoc(outgoingRef);
+                if (outgoingSnap.exists()) {
+                    messageEl.textContent = 'Request already sent and pending.';
+                    messageEl.classList.add('text-yellow-400');
+                    return;
+                }
+
+                // 4. Send the request (add to recipient's incoming list)
+                const incomingRef = collection(db, 'artifacts', appId, 'public', 'data', 'requests', recipientId, 'incoming');
+                await setDoc(doc(incomingRef, userId), { 
+                    senderId: userId,
+                    senderDisplayName: currentUserProfile.displayName,
+                    timestamp: serverTimestamp()
+                });
+                
+                // 5. Log the request (add to sender's outgoing list)
+                await setDoc(outgoingRef, { 
+                    recipientId: recipientId,
+                    recipientDisplayName: recipientSnap.data().displayName,
+                    timestamp: serverTimestamp()
+                });
+
+                messageEl.textContent = `Request sent to ${recipientSnap.data().displayName}!`;
+                messageEl.classList.add('text-green-400');
+                document.getElementById('recipient-id-input').value = '';
+
+            } catch (error) {
+                console.error("Error sending request:", error);
+                messageEl.textContent = 'Error sending request. Please check console.';
+                messageEl.classList.add('text-red-400');
+            }
+        }
+
+        /** Handles accepting a friend request. */
+        async function handleAcceptRequest(e) {
+            const senderId = e.currentTarget.getAttribute('data-sender');
+            const senderName = e.currentTarget.getAttribute('data-name');
+            const requestId = e.currentTarget.getAttribute('data-id');
+
+            try {
+                await runTransaction(db, async (transaction) => {
+                    // 1. Add sender to current user's friend list
+                    const myFriendRef = doc(db, 'artifacts', appId, 'public', 'data', 'friends', userId, 'list', senderId);
+                    transaction.set(myFriendRef, { 
+                        displayName: senderName,
+                        friendshipEstablished: serverTimestamp() 
+                    });
+
+                    // 2. Add current user to sender's friend list
+                    const senderFriendRef = doc(db, 'artifacts', appId, 'public', 'data', 'friends', senderId, 'list', userId);
+                    transaction.set(senderFriendRef, { 
+                        displayName: currentUserProfile.displayName,
+                        friendshipEstablished: serverTimestamp() 
+                    });
+
+                    // 3. Delete the incoming request
+                    const incomingRef = doc(db, 'artifacts', appId, 'public', 'data', 'requests', userId, 'incoming', requestId);
+                    transaction.delete(incomingRef);
+
+                    // 4. Delete the sender's outgoing request
+                    const outgoingRef = doc(db, 'artifacts', appId, 'public', 'data', 'requests', senderId, 'outgoing', userId);
+                    transaction.delete(outgoingRef);
+                });
+                
+                renderFriendModal(); // Re-render modal to reflect changes
+            } catch (error) {
+                console.error("Transaction failed (Accept Request):", error);
+                renderModal("Error", "Failed to accept request. Please try again.");
+            }
+        }
+
+        /** Handles rejecting a friend request. */
+        async function handleRejectRequest(e) {
+             const senderId = e.currentTarget.closest('li').querySelector('.accept-btn').getAttribute('data-sender');
+             const requestId = e.currentTarget.getAttribute('data-id');
+             
+             try {
+                 // Delete the incoming request
+                 const incomingRef = doc(db, 'artifacts', appId, 'public', 'data', 'requests', userId, 'incoming', requestId);
+                 await deleteDoc(incomingRef);
+
+                 // Delete the sender's outgoing request
+                 const outgoingRef = doc(db, 'artifacts', appId, 'public', 'data', 'requests', senderId, 'outgoing', userId);
+                 await deleteDoc(outgoingRef);
+                 
+                 renderFriendModal(); // Re-render modal
+             } catch (error) {
+                 console.error("Error rejecting request:", error);
+                 renderModal("Error", "Failed to reject request.");
+             }
+        }
+        
+        /** Updates the friend request indicator dot. */
+        function updateFriendRequestButton() {
+            const indicator = document.getElementById('friend-request-indicator');
+            if (indicator) {
+                if (friendRequests.length > 0) {
+                    indicator.classList.remove('hidden');
+                } else {
+                    indicator.classList.add('hidden');
+                }
+            }
+        }
+
+
+        // --- FIREBASE CORE INITIALIZATION ---
+
+        /** CRITICAL: Ensures the profile exists and determines whether to render Setup or Dashboard. */
+        async function initializeUserProfileAndRenderUI(uid) {
+            renderLoading("Loading profile data...");
+            const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'user_profiles', uid);
+            const user = auth.currentUser;
+            const defaultDisplay = user?.email ? `@${user.email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '')}` : `@user_${uid.substring(0, 8)}`;
+            let isSetupComplete = false;
+
+            try {
+                const docSnap = await getDoc(userDocRef);
+                
+                if (!docSnap.exists()) {
+                    // Profile does not exist, create it with setup incomplete
+                    await setDoc(userDocRef, {
+                        userId: uid,
+                        displayName: user.displayName || defaultDisplay,
+                        email: user?.email || '',
+                        onlineStatus: 'online', 
+                        isSetupComplete: false, 
+                        lastActive: serverTimestamp(),
+                        createdAt: serverTimestamp(),
+                    });
+                    currentUserProfile = { displayName: user.displayName || defaultDisplay, isSetupComplete: false, onlineStatus: 'online' };
+
+                } else {
+                    // Profile exists, update status and check setup state
+                    currentUserProfile = docSnap.data();
+                    isSetupComplete = currentUserProfile.isSetupComplete === true;
+                    
+                    await setDoc(userDocRef, {
+                        onlineStatus: 'online',
+                        lastActive: serverTimestamp(),
+                    }, { merge: true });
+                }
+            } catch (error) {
+                console.error("Error creating/updating user profile document (Public Path):", error.message);
+                currentUserProfile = currentUserProfile || { displayName: defaultDisplay, isSetupComplete: false, onlineStatus: 'online' };
+            }
+            
+            // --- IMMEDIATE RENDERING LOGIC ---
+            if (currentUserProfile.isSetupComplete === true) {
+                currentView = { type: 'global', id: 'global_fury_chat', displayName: 'Global FURY Chat' };
+                renderDashboard(); 
+            } else if (user && user.providerData.some(p => p.providerId === GoogleAuthProvider.PROVIDER_ID) && !user.isAnonymous) {
+                // Only prompt setup for Google users who are incomplete
+                renderProfileSetup();
+            } else {
+                 // For robustness, if not a Google user, assume ready for chat if authenticated.
+                 currentView = { type: 'global', id: 'global_fury_chat', displayName: 'Global FURY Chat' };
+                 renderDashboard(); 
+            }
+            
+            // Start the real-time listener for user profile (for friend system)
+            onSnapshot(userDocRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    currentUserProfile = docSnap.data();
+                    if (document.getElementById('chat-header-name')) {
+                         // Small UI update logic can go here if needed (e.g., status changes)
+                    }
+                }
+            }, (error) => {
+                console.error("Error listening to user's public profile:", error.message);
+            });
+        }
+
+        /** Initializes Firebase and sets up the main authentication listener. */
         function initializeAppAndAuth() {
             if (!firebaseConfig.apiKey) {
                 console.error("Firebase config is missing.");
@@ -748,17 +1026,18 @@
 
                 if (user) {
                     userId = user.uid;
-                    // FIX: This function now handles loading the profile and rendering the correct UI immediately.
                     await initializeUserProfileAndRenderUI(userId); 
                 } else {
-                    // User is null (not signed in), show the Sign-in screen.
                     userId = null;
                     currentUserProfile = null;
+                    // Stop all listeners when logged out
+                    if (window.unsubscribeMessages) window.unsubscribeMessages();
+                    // Render the sign in screen
                     renderSignIn();
                 }
             });
 
-            // If a custom token exists from the environment, try to use it first
+            // Attempt initial sign-in with custom token
             async function initialSignIn() {
                  if (initialAuthToken) {
                      try {
