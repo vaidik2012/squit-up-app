@@ -3,351 +3,337 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FURY - Real-Time Chat</title>
+    <title>FURY - Real-Time Global Chat</title>
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Load Lucide Icons for nice, clean icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Configure Tailwind to use the 'Inter' font and enable custom colors -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        'primary-dark': '#111827',
+                        'secondary-dark': '#1F2937',
+                        'accent-red': '#EF4444',
+                        'accent-orange': '#F97316',
+                        'fury-start': '#FF4500', // Deep Orange-Red
+                        'fury-end': '#7FFF00',   // Chartreuse Green
+                    }
+                }
+            }
+        }
+    </script>
     <style>
-        /* Custom styles for dark theme and typography */
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
+        /* Custom styles for the gradient text effect */
+        .fury-gradient-text {
+            background-image: linear-gradient(90deg, var(--tw-color-fury-start) 0%, var(--tw-color-fury-end) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-fill-color: transparent;
+            filter: drop-shadow(0 4px 6px rgba(255, 69, 0, 0.4));
+        }
+
+        /* Basic container styling for the background */
         body {
+            background-color: #0d0d0d;
             font-family: 'Inter', sans-serif;
-            background: #111; /* Extremely dark background */
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 1rem;
         }
-        .loading-screen {
-            background: #1e1e1e;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-            max-width: 400px;
-            width: 100%;
-        }
-        .chat-card {
-            background: #1e1e1e;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-            max-width: 800px;
-            width: 100%;
-            height: 80vh;
-            display: none; /* Hidden by default, shown after auth */
-            flex-direction: column;
-        }
-        .message-bubble {
-            max-width: 75%;
-            word-wrap: break-word;
-        }
-        /* Custom scrollbar for message area */
+
+        /* Custom scrollbar for message list */
         #messages-container::-webkit-scrollbar {
             width: 8px;
         }
+
         #messages-container::-webkit-scrollbar-thumb {
-            background: #4a4a4a;
+            background-color: #4B5563; /* Gray-600 */
             border-radius: 4px;
         }
+
         #messages-container::-webkit-scrollbar-track {
-            background: #1e1e1e;
+            background-color: #1F2937; /* Secondary-dark */
         }
     </style>
 </head>
-<body class="text-white">
+<body class="flex items-center justify-center min-h-screen p-4">
 
-    <!-- Main Title -->
-    <header class="text-center mb-10">
-        <h1 class="text-6xl font-extrabold" style="
-            background: linear-gradient(90deg, #ff416c, #ff4b2b, #ff7e5f, #ffa585);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        ">
-            FURY
-        </h1>
-        <p class="text-gray-400 font-light text-xl">Connect with friends instantly.</p>
-    </header>
+    <!-- Main Container -->
+    <div id="app-container" class="w-full max-w-4xl h-[90vh] bg-secondary-dark shadow-2xl rounded-2xl flex flex-col transition-opacity duration-300">
 
-    <!-- Loading Screen (Displayed while authentication is running) -->
-    <main id="loading-screen" class="loading-card p-10 rounded-2xl text-center flex items-center justify-center space-x-3 transition-opacity duration-500">
-        <svg class="animate-spin h-5 w-5 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-        </svg>
-        <p class="text-lg text-gray-400">Connecting to FURY...</p>
-    </main>
+        <!-- 1. Loading Screen (Initial State) -->
+        <div id="loading-screen" class="absolute inset-0 flex flex-col items-center justify-center bg-secondary-dark rounded-2xl z-20 transition-opacity duration-300">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-accent-orange mb-4"></div>
+            <p class="text-gray-400">Loading FURY...</p>
+        </div>
 
-    <!-- Chat Screen -->
-    <section id="chat-screen" class="chat-card rounded-xl">
-        
-        <!-- Chat Header -->
-        <div class="p-4 flex justify-between items-center border-b border-gray-700">
-            <h2 class="text-xl font-semibold text-white flex items-center space-x-2">
-                <i data-lucide="zap" class="w-5 h-5 text-yellow-400"></i>
-                <span>Global FURY Chat</span>
-            </h2>
-            <div id="user-info" class="text-xs text-gray-400 flex items-center space-x-2">
-                <p>User ID: <span id="display-user-id" class="font-mono text-red-400 text-sm">...</span></p>
-                <button id="sign-out-button" 
-                        class="p-2 rounded-full text-sm text-gray-400 hover:text-white hover:bg-gray-700 transition duration-150"
-                        title="Sign Out"
-                >
-                    <i data-lucide="log-out" class="w-5 h-5"></i>
-                </button>
+        <!-- 2. Chat Screen (Authenticated State) -->
+        <div id="chat-screen" class="flex-1 flex flex-col h-full hidden">
+            <!-- Header -->
+            <header class="p-4 border-b border-gray-700 flex justify-between items-center rounded-t-2xl bg-gray-800">
+                <h1 class="text-3xl font-extrabold fury-gradient-text">FURY Chat</h1>
+                <div class="flex items-center space-x-3">
+                    <span id="user-display" class="text-sm font-semibold text-gray-300 bg-gray-700 py-1 px-3 rounded-full truncate max-w-[150px] sm:max-w-full"></span>
+                    <button id="sign-out-button" class="px-4 py-2 bg-accent-red text-white text-sm font-medium rounded-xl hover:bg-red-600 transition duration-150 shadow-lg">Sign Out</button>
+                </div>
+            </header>
+
+            <!-- Messages Container -->
+            <div id="messages-container" class="flex-1 p-4 overflow-y-auto space-y-4 bg-primary-dark">
+                <!-- Messages will be injected here -->
             </div>
-        </div>
 
-        <!-- Messages Container -->
-        <div id="messages-container" class="flex-1 overflow-y-auto p-4 space-y-4">
-            <!-- Messages will be injected here -->
-            <div class="text-center text-gray-500 italic pt-20">Starting chat...</div>
-        </div>
-
-        <!-- Message Input -->
-        <div class="p-4 border-t border-gray-700">
-            <form id="message-form" class="flex space-x-3">
+            <!-- Message Input Form -->
+            <form id="message-form" class="p-4 border-t border-gray-700 bg-gray-800 rounded-b-2xl flex space-x-3">
                 <input type="text" id="message-input" placeholder="Type a message..." required
-                       class="flex-1 p-3 rounded-xl bg-gray-800 border border-gray-700 focus:outline-none focus:border-red-500 text-white placeholder-gray-400 transition duration-150"
-                >
-                <button type="submit" 
-                        class="p-3 rounded-xl font-bold transition duration-300 transform hover:scale-[1.02] active:scale-[0.99] flex items-center justify-center"
-                        style="background: linear-gradient(90deg, #ff416c, #ff7e5f); box-shadow: 0 4px 10px rgba(255, 65, 108, 0.3);"
-                >
-                    <i data-lucide="send" class="w-5 h-5 text-white"></i>
+                       class="flex-1 p-3 bg-gray-700 text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-orange placeholder-gray-400 border border-transparent focus:border-accent-orange transition duration-150"
+                       autocomplete="off">
+                <button type="submit"
+                        class="px-6 py-3 bg-fury-start text-white font-bold rounded-xl shadow-lg hover:bg-fury-end hover:shadow-xl transition-all duration-300">
+                    Send
                 </button>
             </form>
         </div>
-    </section>
 
-    <!-- Modal for displaying custom messages/errors (replaces alert/confirm) -->
-    <div id="message-modal" class="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center hidden">
-        <div class="bg-gray-800 p-6 rounded-lg shadow-xl max-w-sm w-full text-center">
-            <p id="modal-text" class="text-white text-lg mb-4"></p>
-            <button id="modal-close-button" class="px-4 py-2 bg-red-500 rounded-lg text-white font-semibold hover:bg-red-600 transition duration-150">
-                Close
-            </button>
+        <!-- 3. Custom Modal for Errors/Messages -->
+        <div id="custom-modal" class="fixed inset-0 bg-black bg-opacity-70 z-30 hidden items-center justify-center">
+            <div class="bg-secondary-dark p-6 rounded-xl shadow-2xl max-w-sm w-full border border-gray-700 transform scale-90 transition-transform duration-300">
+                <h3 id="modal-title" class="text-xl font-bold text-white mb-3">Alert</h3>
+                <p id="modal-message" class="text-gray-300 mb-6"></p>
+                <div class="flex justify-end space-x-3">
+                    <button id="modal-cancel" class="px-4 py-2 bg-gray-600 text-white rounded-xl hover:bg-gray-700 transition duration-150 hidden">Cancel</button>
+                    <button id="modal-ok" class="px-4 py-2 bg-accent-red text-white font-medium rounded-xl hover:bg-red-600 transition duration-150">OK</button>
+                </div>
+            </div>
         </div>
+
     </div>
 
-
+    <!-- Firebase SDK Imports -->
     <script type="module">
-        // --- FIREBASE IMPORTS ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, query, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, query, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
-        setLogLevel('Debug'); // Enable debug logging for better troubleshooting
-        
-        // --- ENVIRONMENT VARIABLES & INITIALIZATION ---
+        // --- Custom Modal Functions ---
+        const customAlert = (title, message) => {
+            const modal = document.getElementById('custom-modal');
+            document.getElementById('modal-title').textContent = title;
+            document.getElementById('modal-message').textContent = message;
+            document.getElementById('modal-cancel').classList.add('hidden');
+            document.getElementById('modal-ok').onclick = () => {
+                modal.classList.add('hidden');
+            };
+            modal.classList.remove('hidden');
+        };
 
+        // --- Firebase Initialization ---
+        
+        // This is the fallback configuration based on your uploaded screenshot (Screenshot 2025-10-10 131846.png)
+        // If the environment variable __firebase_config is not set, we use this directly to prevent the "config missing" error.
+        const FALLBACK_FIREBASE_CONFIG = {
+            apiKey: "AIzaSyCkp-U_L1NBy7dopqu3MA10Z1L3aTqsOPI",
+            authDomain: "squit-up-auth.firebaseapp.com",
+            projectId: "squit-up-auth",
+            storageBucket: "squit-up-auth.appspot.com",
+            messagingSenderId: "585918898443",
+            appId: "1:585918898443:web:c5a39e824e4f1d3e8990e",
+            measurementId: "G-K4LH9H5NJD"
+        };
+        
         // Safely access environment variables provided by the canvas
+        // If the variable is not set by the environment, we use the fallback config.
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-fury-app';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-        if (!firebaseConfig) {
-            console.error("Firebase configuration not found. Cannot initialize app.");
-            document.getElementById('loading-screen').innerHTML = '<p class="text-red-500">Error: Firebase config missing.</p>';
-            throw new Error("Firebase config missing.");
+        let firebaseConfig = FALLBACK_FIREBASE_CONFIG; 
+        
+        try {
+            if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+                firebaseConfig = JSON.parse(__firebase_config);
+            }
+        } catch (e) {
+            console.error("Error parsing __firebase_config JSON:", e);
+            customAlert("Configuration Error", "Could not parse Firebase configuration. Check console for details.");
+            document.getElementById('loading-screen').classList.add('hidden');
+            document.getElementById('app-container').classList.remove('h-[90vh]');
+            return;
         }
 
         // Initialize Firebase
         const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
         const db = getFirestore(app);
+        const auth = getAuth(app);
         
-        let currentUserId = null;
-
-        // --- DOM ELEMENTS ---
+        // Global variables for UI elements
         const loadingScreen = document.getElementById('loading-screen');
         const chatScreen = document.getElementById('chat-screen');
+        const userDisplay = document.getElementById('user-display');
         const signOutButton = document.getElementById('sign-out-button');
         const messageForm = document.getElementById('message-form');
         const messageInput = document.getElementById('message-input');
         const messagesContainer = document.getElementById('messages-container');
-        const displayUserId = document.getElementById('display-user-id');
-        const messageModal = document.getElementById('message-modal');
-        const modalText = document.getElementById('modal-text');
-        const modalCloseButton = document.getElementById('modal-close-button');
 
-        // --- UTILITY FUNCTIONS ---
+        let currentUserId = null;
+        let currentUserName = 'Anonymous';
 
-        /** Displays a custom modal message instead of using alert() */
-        function showCustomAlert(message) {
-            modalText.textContent = message;
-            messageModal.classList.remove('hidden');
-        }
-
-        modalCloseButton.addEventListener('click', () => {
-            messageModal.classList.add('hidden');
-        });
-
-
-        /** Renders a list of messages into the container */
-        function renderMessages(messages) {
-            // Sort messages locally by createdAt to ensure correct order
-            const sortedMessages = messages.sort((a, b) => {
-                const timeA = a.createdAt ? (a.createdAt.seconds * 1000 + a.createdAt.nanoseconds / 1000000) : 0;
-                const timeB = b.createdAt ? (b.createdAt.seconds * 1000 + b.createdAt.nanoseconds / 1000000) : 0;
-                return timeA - timeB;
-            }); 
-
-            messagesContainer.innerHTML = '';
+        // --- Core Functions ---
+        
+        // Function to render messages in the container
+        const renderMessages = (messages) => {
+            messagesContainer.innerHTML = ''; // Clear previous messages
             
-            if (sortedMessages.length === 0) {
-                 messagesContainer.innerHTML = '<div class="text-center text-gray-500 italic pt-20">Start the conversation! Be the first to send a message.</div>';
-                 return;
-            }
+            // Sort messages locally by timestamp (descending) before display
+            messages.sort((a, b) => (a.createdAt?.toMillis() || 0) - (b.createdAt?.toMillis() || 0));
 
-            sortedMessages.forEach(msg => {
+            messages.forEach(msg => {
                 const isMine = msg.userId === currentUserId;
-                const messageHtml = `
-                    <div class="flex ${isMine ? 'justify-end' : 'justify-start'}">
-                        <div class="message-bubble p-3 rounded-xl text-sm ${isMine ? 'bg-red-600 text-white rounded-br-none' : 'bg-gray-700 text-white rounded-tl-none'} shadow-md">
-                            <p class="font-semibold ${isMine ? 'hidden' : 'block text-red-300'}">${msg.userName || 'Anonymous'}</p>
-                            <p>${msg.text}</p>
-                            <span class="text-xs ${isMine ? 'text-red-300' : 'text-gray-400'} block text-right mt-1">${formatTime(msg.createdAt)}</span>
-                        </div>
-                    </div>
-                `;
-                messagesContainer.insertAdjacentHTML('beforeend', messageHtml);
-            });
-            // Scroll to the bottom of the message container
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        }
-
-        /** Formats Firestore timestamp to a readable time string */
-        function formatTime(timestamp) {
-            if (!timestamp || !timestamp.toDate) return '';
-            try {
-                const date = timestamp.toDate();
-                return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            } catch (e) {
-                console.error("Failed to convert timestamp:", e);
-                return 'N/A';
-            }
-        }
-
-
-        // --- FIREBASE CHAT LOGIC ---
-
-        /** Sets up the real-time listener for chat messages */
-        function setupMessageListener() {
-            // Define the collection path for public data
-            const messagesCollectionPath = `artifacts/${appId}/public/data/messages`;
-            const messagesRef = collection(db, messagesCollectionPath);
-
-            // Fetch all messages (no orderBy to avoid needing indexes)
-            const q = query(messagesRef); 
-
-            // Set up real-time listener (onSnapshot)
-            onSnapshot(q, (snapshot) => {
-                const messages = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                }));
-                renderMessages(messages);
-            }, (error) => {
-                console.error("Error fetching messages:", error);
-                showCustomAlert("Failed to load chat messages.");
-            });
-        }
-
-
-        async function handleMessageSubmit(event) {
-            event.preventDefault();
-            
-            if (!currentUserId) {
-                showCustomAlert("Authentication is not complete. Please wait a moment.");
-                return;
-            }
-
-            const text = messageInput.value.trim();
-            if (text === "") return;
-
-            try {
-                const messagesCollectionPath = `artifacts/${appId}/public/data/messages`;
                 
-                // Get user info from the authenticated user object
-                const user = auth.currentUser;
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `flex ${isMine ? 'justify-end' : 'justify-start'}`;
 
-                await addDoc(collection(db, messagesCollectionPath), {
-                    text: text,
-                    createdAt: serverTimestamp(),
-                    userId: currentUserId,
-                    userName: user.displayName || user.email || 'Anonymous',
-                    userPhoto: user.photoURL || null
-                });
+                const contentDiv = document.createElement('div');
+                contentDiv.className = `max-w-xs sm:max-w-md p-3 rounded-xl shadow-md ${
+                    isMine 
+                    ? 'bg-accent-red text-white rounded-br-none' 
+                    : 'bg-gray-700 text-gray-100 rounded-tl-none'
+                }`;
+                
+                // Display the sender's name if it's not the current user
+                if (!isMine) {
+                    const nameSpan = document.createElement('span');
+                    nameSpan.textContent = msg.userName || 'Anonymous';
+                    nameSpan.className = 'block text-xs font-semibold mb-1 text-accent-orange';
+                    contentDiv.appendChild(nameSpan);
+                }
 
-                messageInput.value = ''; // Clear input on success
-            } catch (error) {
-                console.error("Error sending message:", error);
-                showCustomAlert("Failed to send message: " + error.message);
+                const textP = document.createElement('p');
+                textP.textContent = msg.text;
+                textP.className = 'break-words';
+                contentDiv.appendChild(textP);
+
+                messageDiv.appendChild(contentDiv);
+                messagesContainer.appendChild(messageDiv);
+            });
+
+            // Scroll to the bottom of the message list
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        };
+        
+        // Function to set up the real-time message listener
+        const setupMessageListener = (dbInstance) => {
+            if (!currentUserId) return;
+
+            // Path for public/global messages
+            const messagesRef = collection(dbInstance, `artifacts/${appId}/public/data/messages`);
+            const q = query(messagesRef);
+
+            // Set up real-time listener
+            onSnapshot(q, (snapshot) => {
+                try {
+                    const messages = [];
+                    snapshot.forEach((doc) => {
+                        messages.push({ id: doc.id, ...doc.data() });
+                    });
+                    renderMessages(messages);
+                } catch (e) {
+                    console.error("Error processing snapshot:", e);
+                    customAlert("Data Error", "Failed to load real-time messages.");
+                }
+            }, (error) => {
+                console.error("Firestore listen error:", error);
+                customAlert("Connection Error", `Failed to connect to chat stream: ${error.message}`);
+            });
+        };
+        
+        // Function to handle sending a new message
+        const handleMessageSubmit = async (e) => {
+            e.preventDefault();
+            const text = messageInput.value.trim();
+
+            if (text.length > 0 && currentUserId) {
+                try {
+                    const messagesRef = collection(db, `artifacts/${appId}/public/data/messages`);
+                    await addDoc(messagesRef, {
+                        text: text,
+                        userId: currentUserId,
+                        userName: currentUserName,
+                        createdAt: serverTimestamp()
+                    });
+                    messageInput.value = ''; // Clear input after sending
+                } catch (error) {
+                    console.error("Error sending message:", error);
+                    customAlert("Send Failed", "Could not send message. Check network and permissions.");
+                }
             }
-        }
+        };
 
-        // --- AUTHENTICATION FLOW (Environment Mandatory) ---
-        async function authenticateUser() {
+        // --- Event Listeners and Auth Flow ---
+        
+        // Listen for authentication state changes
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                // User is signed in
+                currentUserId = user.uid;
+                
+                // Use a simplified display name (e.g., first 8 chars of UID) or a provider name if available
+                currentUserName = user.isAnonymous ? 'Anonymous' : `User-${user.uid.substring(0, 8)}`;
+                userDisplay.textContent = currentUserName;
+
+                // Hide loading, show chat
+                loadingScreen.classList.add('hidden');
+                chatScreen.classList.remove('hidden');
+                
+                // Set up the real-time chat listener
+                setupMessageListener(db);
+                
+            } else {
+                // User is signed out or not authenticated yet
+                loadingScreen.classList.add('hidden');
+                chatScreen.classList.add('hidden');
+                customAlert("Signed Out", "You have been signed out. Please refresh to sign in again.");
+            }
+        });
+        
+        // Initial sign-in attempt (using custom token or anonymously)
+        (async () => {
             try {
+                const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                
                 if (initialAuthToken) {
+                    // 1. Try to sign in using the custom token provided by the environment
                     await signInWithCustomToken(auth, initialAuthToken);
                 } else {
-                    // Fallback to anonymous sign-in if token is missing (though it shouldn't be)
+                    // 2. If no token, sign in anonymously as a fallback for the shared environment
                     await signInAnonymously(auth);
                 }
             } catch (error) {
-                console.error("Authentication failed:", error);
-                loadingScreen.innerHTML = `<p class="text-red-500">Auth Error: ${error.code}. Check console for details.</p>`;
-                showCustomAlert("Authentication failed. Please check your network connection.");
+                console.error("Auth Error:", error);
+                // Display specific error for the user
+                loadingScreen.innerHTML = `
+                    <div class="text-center p-6 bg-secondary-dark rounded-xl shadow-lg">
+                        <p class="text-xl font-bold text-white mb-2">Welcome to FURY</p>
+                        <p class="text-gray-400 mb-4">Please sign in to continue.</p>
+                        <p class="text-red-500 text-sm">Auth Error: ${error.code}. Check console for details.</p>
+                    </div>
+                `;
             }
-        }
+        })();
 
-        async function handleSignOut() {
+        // Sign Out function
+        signOutButton.addEventListener('click', async () => {
             try {
-                // Since we are in the canvas environment, signing out usually just reloads the auth token.
                 await signOut(auth);
+                // onAuthStateChanged handler will deal with UI updates after sign out
             } catch (error) {
-                showCustomAlert("Error signing out: " + error.message);
+                console.error("Sign out error:", error);
+                customAlert("Sign Out Failed", "Could not sign out. Please try again.");
             }
-        }
-
-        // --- EVENT LISTENERS ---
-        signOutButton.addEventListener('click', handleSignOut);
-        messageForm.addEventListener('submit', handleMessageSubmit);
-
-        // --- AUTH STATE OBSERVER ---
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                // User is signed in (Show Chat UI)
-                currentUserId = user.uid;
-                loadingScreen.style.display = 'none';
-                chatScreen.style.display = 'flex';
-                displayUserId.textContent = user.uid; // Display the full UID
-                
-                // Initialize chat listener after successful sign-in
-                setupMessageListener();
-                console.log("User signed in:", user.uid);
-            } else {
-                // User is signed out or waiting for sign-in (Show Loading UI or trigger sign-in)
-                currentUserId = null;
-                chatScreen.style.display = 'none';
-                loadingScreen.style.display = 'block';
-
-                // Attempt to re-authenticate only if a known token is present
-                if (initialAuthToken) {
-                    authenticateUser();
-                } else {
-                    // If running outside the environment, this is where you'd redirect to a login page.
-                    loadingScreen.innerHTML = '<p class="text-yellow-400">Please sign in to start chatting.</p>';
-                }
-            }
-            // Re-create icons to ensure they are visible when screens switch
-            lucide.createIcons();
         });
-
-        // Start the authentication process on load
-        authenticateUser();
-
+        
+        // Message submission listener
+        messageForm.addEventListener('submit', handleMessageSubmit);
+        
     </script>
 </body>
 </html>
