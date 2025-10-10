@@ -71,8 +71,6 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { 
             getAuth, 
-            signInAnonymously, 
-            signInWithCustomToken, 
             onAuthStateChanged, 
             GoogleAuthProvider, 
             signInWithPopup,
@@ -93,19 +91,18 @@
 
         // --- GLOBAL STATE AND CONFIGURATION ---
         let auth, db, userProfile = {};
-        let isAuthReady = false;
         
         // Use provided global variables or fallback for local testing
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-fury-chat';
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            // NOTE: Replace this placeholder config with your actual Firebase config if testing locally
             apiKey: "AIzaSyAzY-L_W8V7dOqg3M-G6y2e4aP7i",
-            authDomain: "squit-up-auth.firebaseapp.com", // Keep this if using the existing project
-            projectId: "squit-up-auth", // Keep this if using the existing project
+            authDomain: "squit-up-auth.firebaseapp.com",
+            projectId: "squit-up-auth",
             storageBucket: "squit-up-auth.appspot.com",
             messagingSenderId: "58591888443",
             appId: "1:58591888443:web:2a3e5e24c6d4f1638b80e"
         };
-        const __initial_auth_token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         
         // --- UI Element References ---
         const authScreen = document.getElementById('auth-screen');
@@ -123,6 +120,8 @@
                 const app = initializeApp(firebaseConfig);
                 auth = getAuth(app);
                 db = getFirestore(app);
+                // Set Firestore logging to debug to catch errors during development
+                // setLogLevel('Debug');
             } catch (error) {
                 console.error("Firebase initialization failed:", error);
                 showMessage('Firebase initialization failed. Check console for details.', 'error');
@@ -132,11 +131,10 @@
             // Authentication listener to switch between screens
             onAuthStateChanged(auth, async (user) => {
                 if (user) {
+                    // User is signed in (either by custom token, Google, or anonymously)
                     userProfile.uid = user.uid;
-                    // Prefer displayName from Google/provider, fallback to UID
                     userProfile.name = user.displayName || 'Fury User ' + user.uid.substring(0, 4);
-                    // Use actual photoURL or simple placeholder
-                    userProfile.photoURL = user.photoURL || 'https://placehold.co/150x150/111111/ffffff?text=' + (userProfile.name[0] || '?');
+                    userProfile.photoURL = user.photoURL || `https://placehold.co/150x150/111111/ffffff?text=${userProfile.name[0] || '?'}`;
                     
                     userIdDisplay.textContent = `UID: ${user.uid}`;
 
@@ -144,43 +142,34 @@
                     usernameDisplay.textContent = userProfile.name;
                     showChatScreen();
                     
-                    // Fetch or set user data in Firestore (Private profile data)
+                    // Ensure user data is recorded in Firestore
                     await ensureUserProfileExists(user);
 
                 } else {
-                    // Sign-out or initial state
+                    // User is signed out
                     userProfile = {};
                     showAuthScreen();
-                    await initialSignIn();
+                    // We intentionally skip initial anonymous sign-in to force Google click
+                    console.log("Waiting for user to sign in via Google.");
                 }
-                isAuthReady = true;
             });
         });
-
-        async function initialSignIn() {
-            try {
-                if (__initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                    console.log("Signed in with custom token.");
-                } else {
-                    await signInAnonymously(auth);
-                    console.log("Signed in anonymously.");
-                }
-            } catch (error) {
-                console.error("Firebase Auth Error during initial sign-in:", error);
-            }
-        }
 
         // --- Google Sign-In (The ONLY method) ---
         window.handleGoogleSignIn = async () => {
             errorDisplay.textContent = ''; 
+            // 1. Check if Firebase is initialized before proceeding
+            if (!auth) {
+                showMessage("Firebase is still initializing. Please wait a moment.", 'info');
+                return;
+            }
+            
             try {
                 const provider = new GoogleAuthProvider();
-                // We use sign-in with redirect for GitHub Pages environments to avoid CORS/popup issues
-                // However, since we used popup successfully before, we'll keep that for simplicity unless errors occur.
                 await signInWithPopup(auth, provider);
                 // onAuthStateChanged listener handles the rest
             } catch (error) {
+                // Handle specific errors like popup blocked or unauthorized domain
                 handleAuthError(error);
             }
         };
@@ -218,18 +207,33 @@
 
             // Use a public collection for group chat
             const chatCollectionPath = `artifacts/${appId}/public/data/messages`;
-            // Order by timestamp to maintain chat order
-            const q = query(collection(db, chatCollectionPath), orderBy('timestamp', 'asc'));
+            
+            // NOTE: We rely on client-side sorting as orderBy requires special indices
+            const q = query(collection(db, chatCollectionPath)); 
 
             unsubscribeMessages = onSnapshot(q, (snapshot) => {
-                snapshot.docChanges().forEach((change) => {
-                    const message = change.doc.data();
-                    const messageId = change.doc.id;
-                    
-                    if (change.type === "added") {
-                        addMessageToUI(message, messageId);
+                // Clear and re-render all messages (simpler than managing changes, okay for small chats)
+                messagesContainer.innerHTML = '';
+                
+                const allMessages = [];
+                snapshot.docs.forEach(doc => {
+                    const data = doc.data();
+                    // Ensure message has a timestamp before attempting to add
+                    if (data.timestamp) {
+                         allMessages.push({ ...data, id: doc.id });
                     }
                 });
+
+                // Client-side sort by timestamp (Ascending)
+                allMessages.sort((a, b) => {
+                    if (a.timestamp && b.timestamp) {
+                        return a.timestamp.seconds - b.timestamp.seconds;
+                    }
+                    return 0; // Keep order if timestamps are missing
+                });
+
+                allMessages.forEach(message => addMessageToUI(message, message.id));
+
                 // Always scroll to the bottom when new messages arrive
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
             }, (error) => {
@@ -263,7 +267,7 @@
                 messageInput.focus();
             } catch (error) {
                 console.error("Error sending message:", error);
-                showMessage("Failed to send message.", 'error');
+                showMessage("Failed to send message. Check Firebase Rules.", 'error');
             }
         };
 
@@ -283,7 +287,12 @@
                 : 'bg-gray-900 text-white rounded-tl-none';
 
             // Format timestamp
-            const timeString = message.timestamp ? new Date(message.timestamp.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Sending...';
+            const timeObject = message.timestamp;
+            let timeString = 'Sending...';
+            if (timeObject && timeObject.seconds) {
+                 timeString = new Date(timeObject.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
+
 
             messageDiv.innerHTML = `
                 <div class="flex max-w-xs md:max-w-md ${isMe ? 'flex-row-reverse' : 'flex-row'}">
@@ -318,16 +327,22 @@
             try {
                 const docSnap = await getDoc(userDocRef);
 
+                const dataToSet = {
+                    email: user.email || 'N/A',
+                    name: user.displayName || 'Guest',
+                    photoURL: user.photoURL || '',
+                    lastLogin: serverTimestamp(),
+                };
+                
                 if (!docSnap.exists()) {
+                    // Create if it doesn't exist
                     await setDoc(userDocRef, {
-                        email: user.email || 'N/A',
-                        name: user.displayName || 'Guest',
-                        photoURL: user.photoURL || '',
+                        ...dataToSet,
                         createdAt: serverTimestamp(),
-                        lastLogin: serverTimestamp(),
                     });
                 } else {
-                    await setDoc(userDocRef, { lastLogin: serverTimestamp() }, { merge: true });
+                    // Update last login if it does exist
+                    await setDoc(userDocRef, dataToSet, { merge: true });
                 }
             } catch (error) {
                 console.error("Error managing user profile in Firestore:", error);
@@ -360,20 +375,25 @@
         
         function handleAuthError(error) {
             errorDisplay.textContent = '';
-            let message = "An unknown error occurred.";
+            let message = "An unknown error occurred during sign-in.";
 
             switch (error.code) {
                 case 'auth/popup-closed-by-user':
                     message = 'Google sign-in was canceled.';
                     break;
+                case 'auth/cancelled-popup-request':
+                    message = 'You blocked the sign-in popup. Try enabling pop-ups for this site.';
+                    break;
                 case 'auth/unauthorized-domain':
-                    message = 'Authorization blocked. Did you add fury.com to your Firebase Authorized Domains?';
+                    message = 'Authorization blocked. Did you add your domain (or fury.com) to Firebase Authorized Domains?';
                     break;
                 default:
                     message = `Auth Error: ${error.message}`;
                     console.error(error);
             }
             errorDisplay.textContent = message;
+            // Also show a general message box
+            showMessage(message, 'error');
         }
 
         // Allow pressing Enter key to send message
