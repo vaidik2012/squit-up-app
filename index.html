@@ -44,10 +44,28 @@
         let userId = null;
         let currentUserProfile = null; // Store fetched user profile data
 
-        // --- GLOBAL VARIABLES (Provided by environment) ---
+        // --- GLOBAL VARIABLES (Provided by environment or manually configured) ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        
+        // -------------------------------------------------------------------------------
+        // --- Custom Configuration (Provided by user) ---
+        // -------------------------------------------------------------------------------
+        const customFirebaseConfig = {
+            apiKey: "AIzaSyCkp-J_21Nb7qBquiMA90Zl13elfGesCPI",
+            authDomain: "squit-up-auth.firebaseapp.com",
+            projectId: "squit-up-auth",
+            storageBucket: "squit-up-auth.firebasestorage.app",
+            messagingSenderId: "503910898443",
+            appId: "1:503910898443:web:c5a56eb24cd4f183d8600e",
+            measurementId: "G-K4LHFHSNJC"
+        };
+        // -------------------------------------------------------------------------------
+
+        // Use the environment configuration if available, otherwise use the custom config.
+        const firebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config) 
+            : customFirebaseConfig;
         
         // --- UTILITY FUNCTIONS ---
 
@@ -103,7 +121,18 @@
                 await signInWithPopup(auth, provider);
             } catch (error) {
                 console.error("Google Sign-In failed:", error);
-                alert('Sign-in failed. Check the console for details.');
+                // Display error message to user
+                const container = document.getElementById('app-container');
+                const errorMessage = `
+                    <p class="text-sm text-red-400 mt-4">
+                        Auth Error: Firebase: Error (${error.code}). Please ensure Firebase Auth is configured correctly.
+                    </p>
+                `;
+                // Simple way to show error on the sign-in screen without re-rendering the whole page
+                const signInBox = container.querySelector('.text-center');
+                if (signInBox && !signInBox.querySelector('.text-red-400')) {
+                    signInBox.insertAdjacentHTML('beforeend', errorMessage);
+                }
             }
         }
 
@@ -184,6 +213,8 @@
             const container = document.getElementById('messages-container');
             if (!container) return;
             
+            // This is a simple, inefficient way to clear and redraw; optimize if needed
+            // But for a simple chat app, it's usually acceptable.
             container.innerHTML = '';
             
             if (messages.length === 0) {
@@ -194,6 +225,9 @@
                 `;
                 return;
             }
+
+            // Use DocumentFragment for performance when appending many elements
+            const fragment = document.createDocumentFragment();
 
             // Iterate in reverse to append to the top (which is reversed in CSS for scroll-to-bottom)
             messages.slice().reverse().forEach(message => {
@@ -210,19 +244,22 @@
                     ? message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
                     : '...';
 
-                const messageHTML = `
-                    <div class="flex flex-col mb-4 max-w-xs md:max-w-md ${isCurrentUser ? 'items-end' : 'items-start'}">
-                        <div class="text-xs text-gray-400 mb-1 px-3">
-                            ${senderDisplay}
-                        </div>
-                        <div class="p-3 shadow-md ${bubbleClass}">
-                            ${message.text}
-                            <span class="ml-4 text-xs opacity-70 block text-right mt-1">${timestampDisplay}</span>
-                        </div>
+                const messageElement = document.createElement('div');
+                messageElement.className = `flex flex-col mb-4 max-w-xs md:max-w-md ${isCurrentUser ? 'items-end' : 'items-start'}`;
+                messageElement.innerHTML = `
+                    <div class="text-xs text-gray-400 mb-1 px-3">
+                        ${senderDisplay}
+                    </div>
+                    <div class="p-3 shadow-md ${bubbleClass}">
+                        ${message.text}
+                        <span class="ml-4 text-xs opacity-70 block text-right mt-1">${timestampDisplay}</span>
                     </div>
                 `;
-                container.innerHTML += messageHTML;
+                fragment.appendChild(messageElement);
             });
+            
+            container.appendChild(fragment);
+
             // Auto-scroll to the bottom (since we used flex-col-reverse)
             container.scrollTop = container.scrollHeight;
         }
@@ -246,6 +283,7 @@
                 document.getElementById('message-input').value = '';
             } catch (error) {
                 console.error("Error sending message:", error.message);
+                // In a real app, show a modal here instead of console.log
             }
         }
 
@@ -287,9 +325,9 @@
 
                         <!-- User Info Bar -->
                         <div class="p-4 bg-gray-700 border-t border-gray-700 flex items-center">
-                            <div class="w-3 h-3 rounded-full mr-3 ${statusColor} border-2 border-gray-700"></div>
-                            <div class="flex flex-col">
-                                <span class="text-sm font-semibold">${userDisplayId}</span>
+                            <div class="flex-shrink-0 w-3 h-3 rounded-full mr-3 ${statusColor} border-2 border-gray-700"></div>
+                            <div class="flex flex-col overflow-hidden">
+                                <span class="text-sm font-semibold whitespace-nowrap overflow-hidden text-ellipsis">${userDisplayId}</span>
                                 <span class="text-xs text-gray-400 capitalize">${onlineStatus}</span>
                             </div>
                         </div>
@@ -344,9 +382,10 @@
          * Initializes Firebase and sets up the main authentication listener.
          */
         function initializeAppAndAuth() {
-            if (!firebaseConfig.apiKey) {
-                console.error("Firebase config missing. Cannot initialize app.");
-                return renderLoading("Error: Firebase configuration missing.");
+            // Check if Firebase config is valid (either provided by environment or custom)
+            if (!firebaseConfig.apiKey || firebaseConfig.apiKey.includes("{YOUR_")) {
+                console.error("Firebase config missing or incomplete. Please replace the placeholders.");
+                return renderLoading("Error: Firebase configuration missing. Please update the customFirebaseConfig block in index.html.");
             }
 
             try {
@@ -357,7 +396,7 @@
                 setLogLevel('debug'); // Enable detailed Firebase logging
             } catch (e) {
                 console.error("Failed to initialize Firebase:", e);
-                return renderLoading("Error initializing Firebase.");
+                return renderLoading("Error initializing Firebase. Check your configuration values.");
             }
 
             // Initial rendering state
@@ -367,8 +406,7 @@
             onAuthStateChanged(auth, async (user) => {
                 if (user) {
                     userId = user.uid;
-                    // --- STEP 1: CRITICAL FIX INTEGRATION ---
-                    // Ensure profile exists before trying to load the UI
+                    // --- STEP 1: CRITICAL FIX INTEGRATION (Ensures user doc exists) ---
                     await ensureUserProfileExists(userId); 
 
                     // --- STEP 2: Start listening for user profile data (needed for the UI) ---
@@ -379,8 +417,7 @@
                             // --- STEP 3: Render the app only after profile is loaded ---
                             renderChatUI();
                         } else {
-                            // Even if it fails, it means the profile hasn't been created yet.
-                            // The ensureUserProfileExists should have covered this.
+                            // This should not happen after the fix, but handle defensively
                             console.error("User profile still missing after attempted creation.");
                             renderLoading("Loading FURY... (Profile Fetching)");
                         }
