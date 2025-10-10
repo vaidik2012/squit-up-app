@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { 
     getAuth, signInAnonymously, signInWithCustomToken, 
@@ -7,19 +7,34 @@ import {
 } from 'firebase/auth';
 import { 
     getFirestore, doc, onSnapshot, collection, query, 
-    where, addDoc, serverTimestamp, setDoc, getDocs 
+    where, addDoc, serverTimestamp, setDoc, getDocs, updateDoc, arrayUnion, arrayRemove, deleteDoc
 } from 'firebase/firestore';
-import { Send, LogOut, MessageSquare, Plus, User } from 'lucide-react';
+import { Send, LogOut, MessageSquare, Plus, User, Users, Check, X, Clock, UserPlus } from 'lucide-react';
 
-// --- GLOBAL VARIABLES ---
-// IMPORTANT: These variables are provided by the canvas environment
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+// --- FIREBASE CONFIGURATION (ACTION REQUIRED) ---
+// IMPORTANT: If you are NOT running this code in the Canvas environment, 
+// you MUST replace the placeholder firebaseConfig object below with your actual 
+// Firebase Project configuration object (which contains your apiKey).
+// The __app_id and __initial_auth_token are only available in the Canvas.
+const APP_ID_FALLBACK = 'default-app-id'; 
+const FIREBASE_CONFIG_PLACEHOLDER = {
+    apiKey: "YOUR_API_KEY", // <--- *** YOU MUST REPLACE THIS LINE ***
+    authDomain: "YOUR_AUTH_DOMAIN",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_STORAGE_BUCKET",
+    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+    appId: "YOUR_APP_ID" 
+};
+// --- END FIREBASE CONFIGURATION ---
+
+// --- GLOBAL VARIABLES SETUP ---
+// Prefer the variables provided by the canvas environment if they exist, otherwise use fallbacks/placeholders.
+const appId = typeof __app_id !== 'undefined' ? __app_id : APP_ID_FALLBACK;
+const firebaseConfig = typeof __firebase_config !== 'undefined' && Object.keys(__firebase_config).length > 0
+    ? JSON.parse(__firebase_config) 
+    : FIREBASE_CONFIG_PLACEHOLDER; // Use your hardcoded config if __firebase_config is empty or missing
 const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 // --- END GLOBAL VARIABLES ---
-
-// Utility function to handle exponential backoff for API calls (e.g., Gemini API)
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // --- FIREBASE INITIALIZATION AND HOOKS ---
 const useFirebase = () => {
@@ -27,9 +42,15 @@ const useFirebase = () => {
     const [auth, setAuth] = useState(null);
     const [userId, setUserId] = useState(null);
     const [isAuthReady, setIsAuthReady] = useState(false);
+    const [authError, setAuthError] = useState(null); // State to hold auth errors
 
     useEffect(() => {
-        if (!firebaseConfig.apiKey) return;
+        // Check if the essential API Key is missing from the configured object
+        if (!firebaseConfig.apiKey || firebaseConfig.apiKey === 'YOUR_API_KEY') {
+             setAuthError("Error: Firebase config missing or incomplete. Please check the FIREBASE_CONFIG_PLACEHOLDER block in the code.");
+             setIsAuthReady(true); // Stop loading, show error screen
+             return;
+        }
 
         try {
             const app = initializeApp(firebaseConfig);
@@ -45,16 +66,12 @@ const useFirebase = () => {
                     if (initialAuthToken) {
                         await signInWithCustomToken(firebaseAuth, initialAuthToken);
                     } else {
+                        // Attempt anonymous sign-in only if no custom token is available (for local testing)
                         await signInAnonymously(firebaseAuth);
                     }
                 } catch (error) {
                     console.error("Firebase authentication failed:", error);
-                    // Fallback to anonymous sign-in if custom token fails
-                    try {
-                        await signInAnonymously(firebaseAuth);
-                    } catch (anonError) {
-                        console.error("Anonymous sign-in also failed:", anonError);
-                    }
+                    // On failure, rely on onAuthStateChanged to either show the Google sign-in or handle the error.
                 }
             };
             authenticate();
@@ -63,9 +80,15 @@ const useFirebase = () => {
             const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
                 if (user) {
                     setUserId(user.uid);
+                    setAuthError(null); // Clear any previous auth errors
                 } else {
                     setUserId(null);
                 }
+                setIsAuthReady(true);
+            }, (error) => {
+                // Listener error handling
+                console.error("Auth state listener error:", error);
+                setAuthError(`Authentication Listener Error: ${error.message}`);
                 setIsAuthReady(true);
             });
 
@@ -73,45 +96,127 @@ const useFirebase = () => {
 
         } catch (error) {
             console.error("Failed to initialize Firebase:", error);
+            setAuthError(`Initialization Error: ${error.message}`);
+            setIsAuthReady(true);
         }
-    }, []);
+    }, [firebaseConfig.apiKey]); // Re-run effect if API key changes
 
-    return { db, auth, userId, isAuthReady };
+    return { db, auth, userId, isAuthReady, authError };
 };
+
+// --- FRIEND SYSTEM HOOK ---
+
+const useFriends = (db, currentUserId) => {
+    const [friends, setFriends] = useState([]);
+    const [incomingRequests, setIncomingRequests] = useState([]);
+    const [outgoingRequests, setOutgoingRequests] = useState([]);
+
+    useEffect(() => {
+        if (!currentUserId || !db) return;
+        
+        // Ensure user document exists to hold the 'friends' array
+        const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', currentUserId);
+        setDoc(userDocRef, { initialized: true, friends: [] }, { merge: true }).catch(e => console.error("Error ensuring user doc:", e));
+
+        const requestsRef = collection(db, 'artifacts', appId, 'public', 'data', 'friendRequests');
+
+        // 1. Listen for incoming requests (where I am the receiver)
+        const qIncoming = query(
+            requestsRef, 
+            where('receiverId', '==', currentUserId),
+            where('status', '==', 'pending')
+        );
+        const unsubscribeIncoming = onSnapshot(qIncoming, (snapshot) => {
+            setIncomingRequests(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        }, (error) => console.error("Error listening to incoming requests:", error));
+
+        // 2. Listen for outgoing requests (where I am the sender)
+        const qOutgoing = query(
+            requestsRef, 
+            where('senderId', '==', currentUserId),
+            where('status', '==', 'pending')
+        );
+        const unsubscribeOutgoing = onSnapshot(qOutgoing, (snapshot) => {
+            setOutgoingRequests(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        }, (error) => console.error("Error listening to outgoing requests:", error));
+
+        // 3. Listen for the user's accepted friend list
+        const unsubscribeFriends = onSnapshot(userDocRef, (docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                setFriends(data.friends || []);
+            } else {
+                setFriends([]);
+            }
+        }, (error) => console.error("Error listening to friend list:", error));
+
+        return () => {
+            unsubscribeIncoming();
+            unsubscribeOutgoing();
+            unsubscribeFriends();
+        };
+
+    }, [db, currentUserId]);
+
+    return { friends, incomingRequests, outgoingRequests };
+};
+
 
 // --- CHAT APP COMPONENTS ---
 
 const Header = ({ userId, auth }) => {
+    // Custom modal state for displaying alerts (instead of alert())
+    const [modal, setModal] = useState({ message: '', visible: false });
+
     const handleSignOut = async () => {
         if (auth) {
-            await signOut(auth);
+            try {
+                await signOut(auth);
+            } catch (error) {
+                setModal({ message: `Sign out failed: ${error.message}`, visible: true });
+            }
         }
     };
     
-    // Fallback display if userId is not available yet
     const displayId = userId ? `${userId.substring(0, 8)}...` : 'Connecting...';
 
     return (
-        <div className="flex justify-between items-center p-4 bg-indigo-700 shadow-lg text-white">
-            <h1 className="text-xl font-extrabold flex items-center">
-                <MessageSquare className="w-5 h-5 mr-2"/>
-                DirectChat
-            </h1>
-            <div className="flex items-center space-x-3">
-                <span className="text-sm font-medium opacity-80 flex items-center">
-                    <User className="w-4 h-4 mr-1"/> User ID: {userId ? displayId : 'Guest'}
-                </span>
-                {userId && (
-                    <button 
-                        onClick={handleSignOut}
-                        className="p-2 rounded-full bg-indigo-500 hover:bg-red-500 transition duration-150 shadow-md flex items-center"
-                        title="Sign Out"
-                    >
-                        <LogOut className="w-4 h-4"/>
-                    </button>
-                )}
+        <>
+            <div className="flex justify-between items-center p-4 bg-indigo-700 shadow-lg text-white">
+                <h1 className="text-xl font-extrabold flex items-center">
+                    <MessageSquare className="w-5 h-5 mr-2"/>
+                    DirectChat
+                </h1>
+                <div className="flex items-center space-x-3">
+                    <span className="text-sm font-medium opacity-80 flex items-center">
+                        <User className="w-4 h-4 mr-1"/> User ID: {userId ? displayId : 'Guest'}
+                    </span>
+                    {userId && (
+                        <button 
+                            onClick={handleSignOut}
+                            className="p-2 rounded-full bg-indigo-500 hover:bg-red-500 transition duration-150 shadow-md flex items-center"
+                            title="Sign Out"
+                        >
+                            <LogOut className="w-4 h-4"/>
+                        </button>
+                    )}
+                </div>
             </div>
-        </div>
+            {/* Custom Modal/Alert Box */}
+            {modal.visible && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full text-center">
+                        <p className="text-lg font-medium text-gray-800 mb-4">{modal.message}</p>
+                        <button 
+                            onClick={() => setModal({ message: '', visible: false })}
+                            className="w-full py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                        >
+                            Close
+                        </button>
+                    </div>
+                </div>
+            )}
+        </>
     );
 };
 
@@ -154,15 +259,21 @@ const MessageList = ({ db, currentUserId, selectedChatId }) => {
             return;
         }
 
-        // Use onSnapshot to listen for real-time updates
         const q = query(messagesRef);
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const newMessages = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
-            })).sort((a, b) => a.timestamp?.toMillis() - b.timestamp?.toMillis()); // Sort by timestamp
+            })).sort((a, b) => (a.timestamp?.toMillis() || 0) - (b.timestamp?.toMillis() || 0));
 
             setMessages(newMessages);
+            // Auto-scroll to the bottom after new messages load
+            setTimeout(() => {
+                const anchor = document.getElementById('scroll-bottom-anchor');
+                if (anchor) {
+                    anchor.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                }
+            }, 100); 
         }, (error) => {
             console.error("Error listening to messages:", error);
         });
@@ -173,7 +284,7 @@ const MessageList = ({ db, currentUserId, selectedChatId }) => {
     if (!selectedChatId) {
         return (
             <div className="flex-1 flex items-center justify-center text-gray-500 text-center p-8">
-                Select or start a new chat to begin messaging.
+                Select a friend on the left to start a direct message.
             </div>
         );
     }
@@ -183,7 +294,7 @@ const MessageList = ({ db, currentUserId, selectedChatId }) => {
             {messages.map(message => (
                 <ChatBubble key={message.id} message={message} currentUserId={currentUserId} />
             ))}
-            <div id="scroll-bottom-anchor"></div> {/* Anchor for auto-scrolling */}
+            <div id="scroll-bottom-anchor"></div>
         </div>
     );
 };
@@ -233,39 +344,120 @@ const MessageInput = ({ db, currentUserId, selectedChatId }) => {
 };
 
 const ChatSidebar = ({ db, currentUserId, setSelectedChatId }) => {
-    const [chats, setChats] = useState([]);
+    const [view, setView] = useState('chats'); // 'chats' or 'requests'
     const [newChatPartnerId, setNewChatPartnerId] = useState('');
+    const { friends, incomingRequests, outgoingRequests } = useFriends(db, currentUserId);
     const chatsRef = collection(db, 'artifacts', appId, 'public', 'data', 'chats');
+    const [chats, setChats] = useState([]);
+    const [modal, setModal] = useState({ message: '', visible: false });
 
-    // Listener for all chats the current user is a part of
+
     useEffect(() => {
-        if (!currentUserId || !db) return;
+        if (!currentUserId || !db || friends.length === 0) {
+            setChats([]);
+            return;
+        }
 
-        // Query for chats where the current user ID is in the 'participants' array
+        // Query for chats where the current user is a participant.
         const q = query(chatsRef, where('participants', 'array-contains', currentUserId));
         
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const newChats = snapshot.docs.map(doc => ({
+            const allChats = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
             }));
-            setChats(newChats);
+
+            // Filter chats to show only those with an accepted friend
+            const friendChats = allChats.filter(chat => {
+                const other = chat.participants.find(p => p !== currentUserId);
+                return friends.includes(other);
+            });
+            
+            setChats(friendChats);
         }, (error) => {
             console.error("Error listening to chats:", error);
         });
 
         return () => unsubscribe();
-    }, [currentUserId, db]);
+    }, [currentUserId, db, friends]);
 
-    const startNewChat = async (e) => {
+
+    // --- FRIEND REQUEST HANDLERS ---
+    
+    const sendFriendRequest = async (e) => {
         e.preventDefault();
-        if (!newChatPartnerId.trim() || newChatPartnerId === currentUserId) return;
-
-        // 1. Define the sorted participant list for consistent chat ID generation
-        const participants = [currentUserId, newChatPartnerId].sort();
+        const receiverId = newChatPartnerId.trim();
+        if (!receiverId || receiverId === currentUserId) return;
         
-        // 2. Check if chat already exists (optional, but good practice)
-        // For simplicity, we'll just check if a document with that ID exists (less efficient than the query above, but simpler for creation)
+        // 1. Check if already friend
+        if (friends.includes(receiverId)) {
+            setModal({ message: `You are already friends with ${receiverId.substring(0, 8)}...`, visible: true });
+            return;
+        }
+
+        // 2. Check if request already pending (outgoing or incoming)
+        const isOutgoingPending = outgoingRequests.some(req => req.receiverId === receiverId);
+        const isIncomingPending = incomingRequests.some(req => req.senderId === receiverId);
+        
+        if (isOutgoingPending) {
+            setModal({ message: `Request already sent to ${receiverId.substring(0, 8)}...`, visible: true });
+            return;
+        }
+        if (isIncomingPending) {
+            setModal({ message: `User ${receiverId.substring(0, 8)}... has already sent you a request. Check the 'Requests' tab.`, visible: true });
+            return;
+        }
+
+        // 3. Send the request
+        try {
+            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'friendRequests'), {
+                senderId: currentUserId,
+                receiverId: receiverId,
+                status: 'pending',
+                createdAt: serverTimestamp(),
+            });
+            setNewChatPartnerId('');
+            setModal({ message: "Friend request sent successfully!", visible: true });
+        } catch (error) {
+            console.error("Error sending friend request:", error);
+            setModal({ message: `Failed to send request: ${error.message}`, visible: true });
+        }
+    };
+
+    const handleAcceptRequest = async (request) => {
+        const friendId = request.senderId;
+        const requestDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'friendRequests', request.id);
+        const currentUserDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', currentUserId);
+        const friendUserDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', friendId);
+
+        try {
+            // 1. Delete the pending request
+            await deleteDoc(requestDocRef);
+
+            // 2. Add each user to the other's friends array (create user docs if they don't exist)
+            await setDoc(currentUserDocRef, { friends: arrayUnion(friendId) }, { merge: true });
+            await setDoc(friendUserDocRef, { friends: arrayUnion(currentUserId) }, { merge: true });
+
+            setModal({ message: `You are now friends with ${friendId.substring(0, 8)}!`, visible: true });
+        } catch (error) {
+            console.error("Error accepting request:", error);
+            setModal({ message: `Failed to accept request: ${error.message}`, visible: true });
+        }
+    };
+    
+    const handleRejectRequest = async (requestId) => {
+        try {
+            const requestDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'friendRequests', requestId);
+            await deleteDoc(requestDocRef);
+            setModal({ message: "Request rejected.", visible: true });
+        } catch (error) {
+            console.error("Error rejecting request:", error);
+            setModal({ message: `Failed to reject request: ${error.message}`, visible: true });
+        }
+    };
+
+    const startDM = async (friendId) => {
+        // 1. Check if a chat already exists
         const chatQuery = query(
             chatsRef, 
             where('participants', 'array-contains', currentUserId)
@@ -274,63 +466,74 @@ const ChatSidebar = ({ db, currentUserId, setSelectedChatId }) => {
 
         const existingChat = existingChats.docs.find(doc => {
             const data = doc.data();
-            return data.participants.includes(newChatPartnerId);
+            return data.participants.includes(friendId);
         });
 
         if (existingChat) {
             setSelectedChatId(existingChat.id);
-            setNewChatPartnerId('');
             return;
         }
 
-        // 3. Create a new chat document
+        // 2. Create a new chat document if none exists
         try {
+            const participants = [currentUserId, friendId].sort();
             const newChatData = {
                 participants: participants,
                 createdAt: serverTimestamp(),
-                // Display name for the chat (e.g., the other user's ID)
-                name: `Chat with ${newChatPartnerId.substring(0, 8)}...`
+                name: `DM with ${friendId.substring(0, 8)}...`
             };
 
-            const newChatRef = doc(chatsRef); // Let Firebase generate the ID
+            const newChatRef = doc(chatsRef);
             await setDoc(newChatRef, newChatData);
             
             setSelectedChatId(newChatRef.id);
-            setNewChatPartnerId('');
         } catch (error) {
             console.error("Error creating new chat:", error);
+            setModal({ message: `Failed to start DM: ${error.message}`, visible: true });
         }
     };
 
-    return (
-        <div className="w-full md:w-72 border-r border-gray-200 bg-white flex flex-col h-full">
+    // --- RENDER LOGIC ---
+
+    const renderChatList = () => (
+        <div className="flex-1 overflow-y-auto">
             <div className="p-4 border-b border-gray-200">
-                <form onSubmit={startNewChat} className="flex flex-col space-y-2">
-                    <input
-                        type="text"
-                        value={newChatPartnerId}
-                        onChange={(e) => setNewChatPartnerId(e.target.value)}
-                        placeholder="Enter partner's full user ID"
-                        className="p-2 border border-gray-300 rounded-lg text-sm focus:ring-indigo-500 focus:border-indigo-500"
-                    />
-                    <button
-                        type="submit"
-                        disabled={!newChatPartnerId.trim()}
-                        className="w-full p-2 bg-green-500 text-white rounded-lg shadow-md hover:bg-green-600 transition duration-150 disabled:bg-gray-300 flex items-center justify-center text-sm font-semibold"
-                    >
-                        <Plus className="w-4 h-4 mr-1"/> Start New Chat
-                    </button>
-                </form>
+                <h3 className="text-md font-bold text-gray-700 mb-2">Friends List ({friends.length})</h3>
+                <div className="space-y-2">
+                    {friends.length === 0 ? (
+                        <p className="text-xs text-gray-500 italic">No friends yet. Send a request!</p>
+                    ) : (
+                        friends.map(friendId => {
+                            const chatExists = chats.find(c => c.participants.includes(friendId));
+                            const displayId = friendId.substring(0, 8) + '...';
+                            
+                            return (
+                                <div 
+                                    key={friendId}
+                                    onClick={() => startDM(friendId)}
+                                    className="p-3 flex justify-between items-center bg-gray-50 rounded-lg cursor-pointer hover:bg-indigo-100 transition duration-150"
+                                >
+                                    <span className="font-medium text-sm text-gray-800 flex items-center">
+                                        <User className="w-4 h-4 mr-2 text-indigo-500"/>{displayId}
+                                    </span>
+                                    <span className="text-xs font-semibold text-green-600">
+                                        {chatExists ? 'Chat' : 'Start DM'}
+                                    </span>
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
             </div>
-            
+
             <div className="flex-1 overflow-y-auto">
+                <h3 className="text-md font-bold text-gray-700 p-4 pt-0">Active DMs</h3>
                 {chats.length === 0 ? (
-                    <p className="p-4 text-sm text-gray-500">No chats yet. Start one!</p>
+                    <p className="px-4 text-sm text-gray-500">Select a friend above or check the Requests tab.</p>
                 ) : (
                     chats.map(chat => {
-                        // Find the other participant's ID for display
                         const otherParticipant = chat.participants.find(id => id !== currentUserId);
-                        const chatDisplay = otherParticipant ? `Chat with ${otherParticipant.substring(0, 8)}...` : 'Self Chat';
+                        const chatDisplay = otherParticipant ? `DM: ${otherParticipant.substring(0, 8)}...` : 'Self Chat';
 
                         return (
                             <div 
@@ -339,7 +542,6 @@ const ChatSidebar = ({ db, currentUserId, setSelectedChatId }) => {
                                 className="p-3 border-b border-gray-100 cursor-pointer hover:bg-indigo-50 transition duration-150"
                             >
                                 <p className="font-medium text-sm text-gray-800">{chatDisplay}</p>
-                                <p className="text-xs text-gray-500 truncate">Tap to open...</p>
                             </div>
                         );
                     })
@@ -347,67 +549,204 @@ const ChatSidebar = ({ db, currentUserId, setSelectedChatId }) => {
             </div>
         </div>
     );
+    
+    const renderRequestsView = () => (
+        <div className="flex flex-col flex-1 overflow-y-auto">
+            
+            <div className="p-4 border-b border-gray-200 bg-white">
+                <h3 className="text-md font-bold text-gray-700 mb-2">Send Request</h3>
+                <form onSubmit={sendFriendRequest} className="flex flex-col space-y-2">
+                    <input
+                        type="text"
+                        value={newChatPartnerId}
+                        onChange={(e) => setNewChatPartnerId(e.target.value)}
+                        placeholder="Enter full user ID to add"
+                        className="p-2 border border-gray-300 rounded-lg text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                    />
+                    <button
+                        type="submit"
+                        disabled={!newChatPartnerId.trim()}
+                        className="w-full p-2 bg-green-500 text-white rounded-lg shadow-md hover:bg-green-600 transition duration-150 disabled:bg-gray-300 flex items-center justify-center text-sm font-semibold"
+                    >
+                        <UserPlus className="w-4 h-4 mr-1"/> Send Friend Request
+                    </button>
+                </form>
+            </div>
+            
+            <div className="p-4 flex-1 overflow-y-auto">
+                <h3 className="text-md font-bold text-gray-700 mb-3 flex items-center">
+                    <Users className="w-4 h-4 mr-2"/> Incoming ({incomingRequests.length})
+                </h3>
+                <div className="space-y-2">
+                    {incomingRequests.length === 0 ? (
+                        <p className="text-xs text-gray-500 italic">No pending requests.</p>
+                    ) : (
+                        incomingRequests.map(req => (
+                            <div key={req.id} className="flex justify-between items-center p-2 bg-yellow-50 rounded-lg border border-yellow-200">
+                                <span className="text-sm font-medium text-gray-700">
+                                    {req.senderId.substring(0, 8)}...
+                                </span>
+                                <div className="flex space-x-1">
+                                    <button onClick={() => handleAcceptRequest(req)} className="p-1 bg-green-500 text-white rounded-full hover:bg-green-600" title="Accept">
+                                        <Check className="w-4 h-4" />
+                                    </button>
+                                    <button onClick={() => handleRejectRequest(req.id)} className="p-1 bg-red-500 text-white rounded-full hover:bg-red-600" title="Reject">
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+
+                <h3 className="text-md font-bold text-gray-700 mt-6 mb-3 flex items-center">
+                    <Clock className="w-4 h-4 mr-2"/> Sent ({outgoingRequests.length})
+                </h3>
+                 <div className="space-y-2">
+                    {outgoingRequests.length === 0 ? (
+                        <p className="text-xs text-gray-500 italic">No sent requests.</p>
+                    ) : (
+                         outgoingRequests.map(req => (
+                            <div key={req.id} className="flex justify-between items-center p-2 bg-blue-50 rounded-lg border border-blue-200">
+                                <span className="text-sm font-medium text-gray-700">
+                                    To: {req.receiverId.substring(0, 8)}...
+                                </span>
+                                <span className="text-xs text-blue-500 font-semibold">Pending</span>
+                            </div>
+                        ))
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+    
+    return (
+        <>
+            <div className="w-full md:w-72 border-r border-gray-200 bg-white flex flex-col h-full">
+                <div className="p-4 border-b border-gray-200">
+                    <h2 className="text-xl font-bold text-indigo-700 mb-2">Connections</h2>
+                    <div className="flex space-x-2">
+                        <button
+                            onClick={() => setView('chats')}
+                            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition duration-150 ${
+                                view === 'chats' ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                            }`}
+                        >
+                            DMs
+                        </button>
+                        <button
+                            onClick={() => setView('requests')}
+                            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition duration-150 relative ${
+                                view === 'requests' ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                            }`}
+                        >
+                            Requests
+                            {incomingRequests.length > 0 && (
+                                <span className="absolute top-0 right-0 transform translate-x-1/2 -translate-y-1/2 bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                                    {incomingRequests.length}
+                                </span>
+                            )}
+                        </button>
+                    </div>
+                </div>
+                
+                {view === 'chats' ? renderChatList() : renderRequestsView()}
+            </div>
+             {/* Custom Modal/Alert Box */}
+            {modal.visible && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full text-center">
+                        <p className="text-lg font-medium text-gray-800 mb-4">{modal.message}</p>
+                        <button 
+                            onClick={() => setModal({ message: '', visible: false })}
+                            className="w-full py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                        >
+                            Close
+                        </button>
+                    </div>
+                </div>
+            )}
+        </>
+    );
 };
 
 // --- AUTH SCREEN ---
 
-const AuthScreen = ({ auth, setIsAuthReady }) => {
+const AuthScreen = ({ auth, authError }) => {
+    // Custom modal state for displaying alerts (instead of alert())
+    const [modal, setModal] = useState({ message: '', visible: false });
 
     const handleGoogleSignIn = async () => {
         if (!auth) return;
         const provider = new GoogleAuthProvider();
         try {
-            const result = await signInWithPopup(auth, provider);
-            console.log("Google Sign-In Successful:", result.user.uid);
-            // FIX: Since the onAuthStateChanged listener in useFirebase is handling 
-            // the state update (setting userId), we just need to ensure the popup 
-            // closes and the listener fires correctly. The listener will manage 
-            // the subsequent UI change. We call setIsAuthReady to force a potential re-check.
-            setIsAuthReady(true); 
-
+            // Note: onAuthStateChanged listener handles state update after successful sign-in
+            await signInWithPopup(auth, provider);
         } catch (error) {
-            // Handle errors, e.g., if the user closes the popup
             console.error("Google Sign-In Error:", error);
+            // Display friendly error message
+            setModal({ 
+                message: `Google Sign-In failed: ${error.message}. Please ensure Google Auth is enabled in your Firebase project and your domain is authorized.`, 
+                visible: true 
+            });
         }
     };
 
+    const displayError = authError || (modal.visible ? null : null);
+
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
-            <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-sm w-full text-center">
-                <h2 className="text-3xl font-bold mb-6 text-indigo-700">Welcome to DirectChat</h2>
-                <p className="text-gray-600 mb-8">Sign in to start messaging with other users.</p>
-                
-                <button
-                    onClick={handleGoogleSignIn}
-                    className="w-full py-3 px-4 bg-indigo-600 text-white font-semibold rounded-xl shadow-lg hover:bg-indigo-700 transition duration-300 transform hover:scale-[1.02] flex items-center justify-center space-x-2"
-                >
-                    <svg className="w-5 h-5" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.343c-1.157 3.179-4.343 6-9.343 6-5.406 0-9.761-4.356-9.761-9.761s4.355-9.761 9.761-9.761c2.815 0 5.341 1.137 7.273 2.907l5.657-5.657C34.046 6.883 29.388 4 24 4c-11.052 0-20 8.948-20 20s8.948 20 20 20c11.048 0 20-8.952 20-20 0-1.341-.138-2.65-.389-3.917z"/>
-                        <path fill="#FF3D00" d="M6.306 14.693l6.571 4.819C14.655 15.108 18.9 13 24 13c3.084 0 5.862 1.01 8.077 2.766l6.571-4.819C34.046 6.883 29.388 4 24 4 15.3 4 8.016 8.324 4 14.693h2.306z"/>
-                        <path fill="#4CAF50" d="M24 44c5.108 0 9.761-2.108 13.041-5.657l-6.571-4.819C28.281 35.881 26.21 36 24 36c-5.152 0-9.845-3.882-11.516-9.088l-6.571 4.819C8.016 39.676 15.3 44 24 44z"/>
-                        <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.343c-.875 2.569-2.583 4.887-4.851 6.368l6.571 4.819C40.919 36.882 44 32.518 44 28c0-1.341-.138-2.65-.389-3.917V20.083z"/>
-                    </svg>
-                    <span>Sign in with Google</span>
-                </button>
+        <>
+            <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
+                <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-sm w-full text-center">
+                    <h2 className="text-3xl font-bold mb-6 text-indigo-700">Welcome to DirectChat</h2>
+                    <p className="text-gray-600 mb-8">Sign in to start messaging with friends.</p>
+                    
+                    {displayError && (
+                        <div className="p-3 mb-4 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm font-medium">
+                            {displayError}
+                        </div>
+                    )}
+                    
+                    <button
+                        onClick={handleGoogleSignIn}
+                        disabled={!!displayError} // Disable if critical config error exists
+                        className="w-full py-3 px-4 bg-indigo-600 text-white font-semibold rounded-xl shadow-lg hover:bg-indigo-700 transition duration-300 transform hover:scale-[1.02] flex items-center justify-center space-x-2 disabled:bg-indigo-300"
+                    >
+                        <svg className="w-5 h-5" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.343c-1.157 3.179-4.343 6-9.343 6-5.406 0-9.761-4.356-9.761-9.761s4.355-9.761 9.761-9.761c2.815 0 5.341 1.137 7.273 2.907l5.657-5.657C34.046 6.883 29.388 4 24 4c-11.052 0-20 8.948-20 20s8.948 20 20 20c11.048 0 20-8.952 20-20 0-1.341-.138-2.65-.389-3.917z"/>
+                            <path fill="#FF3D00" d="M6.306 14.693l6.571 4.819C14.655 15.108 18.9 13 24 13c3.084 0 5.862 1.01 8.077 2.766l6.571-4.819C34.046 6.883 29.388 4 24 4 15.3 4 8.016 8.324 4 14.693h2.306z"/>
+                            <path fill="#4CAF50" d="M24 44c5.108 0 9.761-2.108 13.041-5.657l-6.571-4.819C28.281 35.881 26.21 36 24 36c-5.152 0-9.845-3.882-11.516-9.088l-6.571 4.819C8.016 39.676 15.3 44 24 44z"/>
+                            <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.343c-.875 2.569-2.583 4.887-4.851 6.368l6.571 4.819C40.919 36.882 44 32.518 44 28c0-1.341-.138-2.65-.389-3.917V20.083z"/>
+                        </svg>
+                        <span>Sign in with Google</span>
+                    </button>
+                </div>
             </div>
-        </div>
+            {/* Custom Modal/Alert Box for specific sign-in errors */}
+            {modal.visible && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full text-center">
+                        <p className="text-lg font-medium text-gray-800 mb-4">{modal.message}</p>
+                        <button 
+                            onClick={() => setModal({ message: '', visible: false })}
+                            className="w-full py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                        >
+                            Close
+                        </button>
+                    </div>
+                </div>
+            )}
+        </>
     );
 };
 
 // --- MAIN APP ---
 
 const App = () => {
-    const { db, auth, userId, isAuthReady } = useFirebase();
+    const { db, auth, userId, isAuthReady, authError } = useFirebase();
     const [selectedChatId, setSelectedChatId] = useState(null);
 
-    // Auto-scroll to the bottom of the message list whenever messages or chat ID change
-    useEffect(() => {
-        const anchor = document.getElementById('scroll-bottom-anchor');
-        if (anchor) {
-            anchor.scrollIntoView({ behavior: 'smooth' });
-        }
-    }, [selectedChatId, userId]); // Depend on userId to scroll after auth is ready
-
+    // Initial check and loading screen
     if (!isAuthReady) {
         return (
             <div className="min-h-screen flex items-center justify-center text-indigo-700 bg-gray-100">
@@ -416,9 +755,10 @@ const App = () => {
             </div>
         );
     }
-
-    if (!userId || !db || !auth) {
-        return <AuthScreen auth={auth} setIsAuthReady={setIsAuthReady} />;
+    
+    // Show Auth Screen if not logged in or if a configuration error exists
+    if (!userId || !db || !auth || authError) {
+        return <AuthScreen auth={auth} authError={authError} />;
     }
 
     return (
