@@ -1,1579 +1,1638 @@
 <!DOCTYPE html>
+
 <html lang="en">
+
 <head>
+
     <meta charset="UTF-8">
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
     <title>FURY - Discord-like Platform</title>
+
     <script src="https://cdn.tailwindcss.com"></script>
+
     <script src="https://unpkg.com/lucide@latest"></script>
-    
-    <!-- Firebase SDK -->
+
+
     <script type="module">
+
         // Import the functions you need from the SDKs you need
+
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+
         import { getAuth, signInWithPopup, GoogleAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
         import { getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
         import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-analytics.js";
 
+
         // Your web app's Firebase configuration
+
         const firebaseConfig = {
+
             apiKey: "AIzaSyCkp-J_21Nb7qBquiMA90Zl13elfGesCPI",
+
             authDomain: "squit-up-auth.firebaseapp.com",
+
             projectId: "squit-up-auth",
+
             storageBucket: "squit-up-auth.firebasestorage.app",
+
             messagingSenderId: "503910898443",
+
             appId: "1:503910898443:web:c5a56eb24cd4f183d8600e",
+
             measurementId: "G-K4LHFHSNJC"
+
         };
 
+
         // Initialize Firebase
+
         const app = initializeApp(firebaseConfig);
+
         const auth = getAuth(app);
+
         const db = getFirestore(app);
+
         const analytics = getAnalytics(app);
+
         const provider = new GoogleAuthProvider();
 
+
         // Make Firebase services available globally
+
         window.firebaseAuth = auth;
+
         window.firebaseDb = db;
+
         window.GoogleAuthProvider = GoogleAuthProvider;
+
         window.signInWithPopup = signInWithPopup;
+
         window.createUserWithEmailAndPassword = createUserWithEmailAndPassword;
+
         window.signInWithEmailAndPassword = signInWithEmailAndPassword;
+
         window.onAuthStateChanged = onAuthStateChanged;
+
         window.signOut = signOut;
+
         window.doc = doc;
+
         window.setDoc = setDoc;
+
         window.getDoc = getDoc;
+
         window.collection = collection;
+
         window.query = query;
+
         window.where = where;
+
         window.getDocs = getDocs;
+
         window.deleteDoc = deleteDoc;
+
         window.googleProvider = provider;
+
     </script>
+
     <style>
+
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
         
+
         body {
+
             font-family: 'Inter', sans-serif;
+
             background: #36393f;
+
             min-height: 100%;
+
             box-sizing: border-box;
+
         }
+
         
+
         html, body {
+
             height: 100%;
+
             margin: 0;
+
             padding: 0;
+
         }
+
 
         /* Discord-like styling */
+
         .discord-bg { background: #36393f; }
+
         .discord-sidebar { background: #2f3136; }
+
         .discord-channel { background: #40444b; }
+
         .discord-chat { background: #36393f; }
+
         .discord-input { background: #40444b; }
+
         
+
         /* Auth screens */
+
         .auth-container {
+
             background: #36393f;
+
             min-height: 100vh;
+
             display: flex;
+
             align-items: center;
+
             justify-content: center;
+
             padding: 2rem;
+
         }
+
         
+
         .auth-card {
+
             background: #2f3136;
+
             border-radius: 8px;
+
             padding: 2rem;
+
             width: 100%;
+
             max-width: 480px;
+
             box-shadow: 0 8px 16px rgba(0, 0, 0, 0.24);
+
         }
+
 
         /* Main app layout */
+
         .main-app {
+
             display: none;
+
             height: 100vh;
+
             overflow: hidden;
+
         }
+
 
         /* Custom scrollbars */
+
         .custom-scrollbar::-webkit-scrollbar {
+
             width: 8px;
+
         }
+
         .custom-scrollbar::-webkit-scrollbar-thumb {
+
             background: #202225;
+
             border-radius: 4px;
+
         }
+
         .custom-scrollbar::-webkit-scrollbar-track {
+
             background: transparent;
+
         }
+
 
         /* Server icons */
+
         .server-icon {
+
             width: 48px;
+
             height: 48px;
+
             border-radius: 50%;
+
             transition: border-radius 0.2s ease;
+
             cursor: pointer;
+
         }
+
         .server-icon:hover {
+
             border-radius: 16px;
+
         }
+
         .server-icon.active {
+
             border-radius: 16px;
+
         }
+
 
         /* Message styling */
+
         .message-hover:hover {
+
             background: rgba(4, 4, 5, 0.07);
+
         }
+
 
         /* Emoji picker */
+
         .emoji-picker {
+
             background: #2f3136;
+
             border: 1px solid #40444b;
+
             border-radius: 8px;
+
             max-height: 300px;
+
             overflow-y: auto;
+
         }
+
 
         /* Profile customization */
+
         .profile-banner {
+
             height: 120px;
+
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+
             position: relative;
+
         }
+
 
         /* Friend request animations */
+
         .slide-in {
+
             animation: slideIn 0.3s ease-out;
+
         }
+
         
+
         @keyframes slideIn {
+
             from { transform: translateX(-100%); opacity: 0; }
+
             to { transform: translateX(0); opacity: 1; }
+
         }
+
 
         /* Status indicators */
+
         .status-online { background: #43b581; }
+
         .status-idle { background: #faa61a; }
+
         .status-dnd { background: #f04747; }
+
         .status-offline { background: #747f8d; }
 
+
         /* Modal backdrop */
+
         .modal-backdrop {
+
             background: rgba(0, 0, 0, 0.85);
+
         }
+
     </style>
+
 </head>
+
 <body class="text-white discord-bg">
 
-    <!-- Login Screen -->
+
     <div id="login-screen" class="auth-container">
+
         <div class="auth-card">
+
             <div class="text-center mb-8">
+
                 <h1 class="text-3xl font-bold mb-2" style="
+
                     background: linear-gradient(90deg, #ff416c, #ff4b2b, #ff7e5f, #ffa585);
+
                     -webkit-background-clip: text;
+
                     -webkit-text-fill-color: transparent;
+
                 ">Welcome to FURY</h1>
+
                 <p class="text-gray-400">We're so excited to see you again!</p>
+
             </div>
 
-            <!-- Existing User Login -->
+
             <form id="login-form" class="space-y-4 mb-6">
+
                 <div>
+
                     <label class="block text-sm font-medium text-gray-300 mb-2">USER ID</label>
+
                     <input type="text" id="login-userid" placeholder="@username" 
-                           class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500">
+
+                               class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500">
+
                 </div>
+
                 <div>
+
                     <label class="block text-sm font-medium text-gray-300 mb-2">PASSWORD</label>
+
                     <input type="password" id="login-password" placeholder="Password" 
-                           class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500">
+
+                               class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500">
+
                 </div>
+
                 <button type="submit" class="w-full py-3 bg-blue-600 hover:bg-blue-700 rounded font-medium transition duration-200">
+
                     Log In
+
                 </button>
+
                 <div id="login-error" class="mt-3 p-3 bg-red-900 border border-red-700 rounded text-red-200 text-sm" style="display: none;">
+
                     <p>No user found with this User ID. If you don't have an account, please use "Continue with Google" to create a new account.</p>
+
                 </div>
+
             </form>
+
 
             <div class="text-center mb-4">
+
                 <span class="text-gray-400 text-sm">Don't have an account?</span>
+
             </div>
 
-            <!-- Google Sign Up -->
-            <button id="google-signup-button" 
-                    class="w-full py-3 bg-white hover:bg-gray-100 text-gray-800 rounded font-medium transition duration-200 flex items-center justify-center space-x-2 mb-4">
-                <i data-lucide="chrome" class="w-5 h-5"></i>
-                <span>Continue with Google</span>
-            </button>
 
+            <button id="google-signup-button" 
+
+                     class="w-full py-3 bg-white hover:bg-gray-100 text-gray-800 rounded font-medium transition duration-200 flex items-center justify-center space-x-2 mb-4">
+
+                <i data-lucide="chrome" class="w-5 h-5"></i>
+
+                <span>Continue with Google</span>
+
+            </button>
+            
+            <div id="google-error" class="mt-3 p-3 bg-red-900 border border-red-700 rounded text-red-200 text-sm" style="display: none;">
+                <p>Google Sign-in Failed. Check your console for details, or verify your Firebase 'Auth > Sign-in Method' and 'Project Settings > Authorized Domains'.</p>
+            </div>
             <p class="text-xs text-gray-500 text-center">By registering, you agree to FURY's Terms of Service and Privacy Policy.</p>
+
         </div>
+
     </div>
 
-    <!-- Account Setup Screen (after Google signup) -->
+
     <div id="setup-screen" class="auth-container" style="display: none;">
+
         <div class="auth-card">
+
             <div class="text-center mb-8">
+
                 <h2 class="text-2xl font-bold mb-2">Complete Your Profile</h2>
+
                 <p class="text-gray-400">Set up your FURY account</p>
+
             </div>
+
 
             <form id="setup-form" class="space-y-4">
+
                 <div>
+
                     <label class="block text-sm font-medium text-gray-300 mb-2">CHOOSE YOUR USER ID</label>
+
                     <div class="relative">
+
                         <span class="absolute left-3 top-2 text-gray-400">@</span>
+
                         <input type="text" id="setup-userid" placeholder="username" 
+
                                class="w-full pl-8 pr-3 py-2 bg-gray-800 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500">
+
                     </div>
+
                     <p class="text-xs text-gray-400 mt-1">This will be your unique identifier</p>
+
                 </div>
+
                 
+
                 <div>
+
                     <label class="block text-sm font-medium text-gray-300 mb-2">CREATE PASSWORD</label>
+
                     <input type="password" id="setup-password" placeholder="Password" 
-                           class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500">
+
+                               class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500">
+
                 </div>
+
                 
+
                 <div>
+
                     <label class="block text-sm font-medium text-gray-300 mb-2">CONFIRM PASSWORD</label>
+
                     <input type="password" id="setup-confirm-password" placeholder="Confirm Password" 
-                           class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500">
+
+                               class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500">
+
                 </div>
+
 
                 <button type="submit" class="w-full py-3 bg-blue-600 hover:bg-blue-700 rounded font-medium transition duration-200">
+
                     Create Account
+
                 </button>
+
                 <div id="setup-error" class="mt-3 p-3 bg-red-900 border border-red-700 rounded text-red-200 text-sm" style="display: none;">
+
                     <p id="setup-error-message">Please check your information and try again.</p>
+
                 </div>
+
                 <div id="setup-success" class="mt-3 p-3 bg-green-900 border border-green-700 rounded text-green-200 text-sm" style="display: none;">
+
                     <p>Account created successfully! Setting up your profile...</p>
+
                 </div>
+
             </form>
+
         </div>
+
     </div>
 
-    <!-- Main App Interface -->
+
     <div id="main-app" class="main-app flex">
-        <!-- Server Sidebar -->
+
         <div class="w-18 discord-sidebar flex flex-col items-center py-3 space-y-2">
-            <!-- Home/DM Button -->
+
             <div class="server-icon bg-blue-600 flex items-center justify-center active" id="home-server">
+
                 <i data-lucide="home" class="w-6 h-6 text-white"></i>
+
             </div>
+
             
             <div class="w-8 h-0.5 bg-gray-600 rounded"></div>
+
             
-            <!-- Server Icons -->
             <div id="server-list" class="space-y-2">
-                <!-- Servers will be populated here -->
-            </div>
+
+                </div>
+
             
-            <!-- Add Server Button -->
             <div class="server-icon bg-gray-700 hover:bg-green-600 flex items-center justify-center transition-colors" id="add-server-btn">
+
                 <i data-lucide="plus" class="w-6 h-6 text-white"></i>
+
             </div>
+
         </div>
 
-        <!-- Channel/Friends Sidebar -->
+
         <div class="w-60 discord-channel flex flex-col">
-            <!-- User Area -->
+
             <div class="p-4 border-b border-gray-600">
+
                 <div class="flex items-center space-x-3" id="current-server-info">
+
                     <i data-lucide="users" class="w-5 h-5 text-gray-400"></i>
+
                     <span class="font-semibold">Direct Messages</span>
+
                 </div>
+
             </div>
 
-            <!-- Navigation Tabs -->
+
             <div class="flex border-b border-gray-600" id="nav-tabs">
+
                 <button class="flex-1 py-2 px-4 text-sm font-medium text-white bg-gray-600" data-tab="friends">Friends</button>
+
                 <button class="flex-1 py-2 px-4 text-sm font-medium text-gray-400 hover:text-white" data-tab="dms">DMs</button>
+
             </div>
 
-            <!-- Friends Panel -->
+
             <div id="friends-panel" class="flex-1 overflow-y-auto custom-scrollbar">
-                <!-- Friend Requests -->
+
                 <div class="p-4">
+
                     <div class="flex items-center justify-between mb-3">
+
                         <h3 class="text-sm font-semibold text-gray-300">FRIEND REQUESTS</h3>
+
                         <span class="bg-red-500 text-xs px-2 py-1 rounded-full" id="friend-requests-count">2</span>
+
                     </div>
+
                     <div id="friend-requests-list" class="space-y-2">
-                        <!-- Friend requests will be populated here -->
-                    </div>
+
+                        </div>
+
                 </div>
 
-                <!-- Online Friends -->
+
                 <div class="p-4">
+
                     <h3 class="text-sm font-semibold text-gray-300 mb-3">ONLINE — <span id="online-friends-count">3</span></h3>
+
                     <div id="online-friends-list" class="space-y-2">
-                        <!-- Online friends will be populated here -->
-                    </div>
+
+                        </div>
+
                 </div>
 
-                <!-- All Friends -->
+
                 <div class="p-4">
+
                     <h3 class="text-sm font-semibold text-gray-300 mb-3">ALL FRIENDS — <span id="all-friends-count">12</span></h3>
+
                     <div id="all-friends-list" class="space-y-2">
-                        <!-- All friends will be populated here -->
-                    </div>
+
+                        </div>
+
                 </div>
+
             </div>
 
-            <!-- DMs Panel -->
+
             <div id="dms-panel" class="flex-1 overflow-y-auto custom-scrollbar" style="display: none;">
+
                 <div class="p-4">
+
                     <div class="flex items-center space-x-2 mb-4">
+
                         <input type="text" placeholder="Find or start a conversation" 
+
                                class="flex-1 px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white placeholder-gray-400 text-sm focus:outline-none focus:border-blue-500">
+
                     </div>
+
                     
-                    <!-- Send Friend Request Section -->
                     <div class="mb-6 p-3 bg-gray-700 rounded-lg">
+
                         <h4 class="text-sm font-semibold text-gray-300 mb-2">Add New Friend</h4>
+
                         <div class="flex space-x-2">
+
                             <input type="text" id="dm-friend-request-input" placeholder="Enter User ID (@username)" 
+
                                    class="flex-1 px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white placeholder-gray-400 text-sm focus:outline-none focus:border-blue-500">
+
                             <button id="dm-send-friend-request" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white text-sm font-medium">
+
                                 Send Request
+
                             </button>
+
                         </div>
+
                     </div>
+
                     
                     <div id="dm-list" class="space-y-1">
-                        <!-- DM conversations will be populated here -->
-                    </div>
+
+                        </div>
+
                 </div>
+
             </div>
 
-            <!-- Channels Panel (for servers) -->
+
             <div id="channels-panel" class="flex-1 overflow-y-auto custom-scrollbar" style="display: none;">
+
                 <div id="channels-list" class="p-2">
-                    <!-- Server channels will be populated here -->
-                </div>
+
+                    </div>
+
             </div>
 
-            <!-- User Info Bar -->
+
             <div class="p-3 bg-gray-800 flex items-center justify-between">
+
                 <div class="flex items-center space-x-2">
+
                     <div class="relative">
+
                         <img id="user-avatar" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%236366f1'/%3E%3Ctext x='16' y='20' text-anchor='middle' fill='white' font-size='14'%3E👤%3C/text%3E%3C/svg%3E" 
+
                              class="w-8 h-8 rounded-full" alt="Avatar">
+
                         <div class="absolute -bottom-1 -right-1 w-3 h-3 status-online rounded-full border-2 border-gray-800"></div>
+
                     </div>
+
                     <div class="text-sm">
+
                         <div class="font-medium text-white" id="user-display-name">User</div>
+
                         <div class="text-gray-400" id="user-id-display">@user</div>
+
                     </div>
+
                 </div>
+
                 <div class="flex space-x-1">
+
                     <button class="p-1 hover:bg-gray-700 rounded" id="settings-btn" title="Settings">
+
                         <i data-lucide="settings" class="w-4 h-4 text-gray-400"></i>
+
                     </button>
+
                     <button class="p-1 hover:bg-gray-700 rounded" id="logout-btn" title="Logout">
+
                         <i data-lucide="log-out" class="w-4 h-4 text-gray-400"></i>
+
                     </button>
+
                 </div>
+
             </div>
+
         </div>
 
-        <!-- Main Chat Area -->
+
         <div class="flex-1 discord-chat flex flex-col">
-            <!-- Chat Header -->
+
             <div class="h-12 px-4 flex items-center justify-between border-b border-gray-600 bg-gray-800">
+
                 <div class="flex items-center space-x-2">
+
                     <i data-lucide="hash" class="w-5 h-5 text-gray-400" id="chat-icon"></i>
+
                     <span class="font-semibold text-white" id="chat-title">Welcome</span>
+
                 </div>
+
                 <div class="flex items-center space-x-2">
+
                     <button class="p-2 hover:bg-gray-700 rounded" id="add-friend-btn" title="Add Friend">
+
                         <i data-lucide="user-plus" class="w-5 h-5 text-gray-400"></i>
+
                     </button>
+
                     <button class="p-2 hover:bg-gray-700 rounded" id="search-btn" title="Search">
+
                         <i data-lucide="search" class="w-5 h-5 text-gray-400"></i>
+
                     </button>
+
                 </div>
+
             </div>
 
-            <!-- Messages Area -->
+
             <div id="messages-container" class="flex-1 overflow-y-auto custom-scrollbar p-4">
+
                 <div class="text-center py-8">
+
                     <div class="w-16 h-16 bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
+
                         <i data-lucide="message-circle" class="w-8 h-8 text-gray-400"></i>
+
                     </div>
+
                     <h3 class="text-xl font-bold text-white mb-2">Welcome to FURY!</h3>
+
                     <p class="text-gray-400">This is the beginning of your legendary conversations.</p>
+
                 </div>
+
             </div>
 
-            <!-- Message Input -->
+
             <div class="p-4">
+
                 <div class="relative">
+
                     <input type="text" id="message-input" placeholder="Message..." 
+
                            class="w-full px-4 py-3 pr-12 bg-gray-700 border-none rounded-lg text-white placeholder-gray-400 focus:outline-none">
+
                     <div class="absolute right-3 top-3 flex space-x-1">
+
                         <button class="p-1 hover:bg-gray-600 rounded" id="emoji-btn" title="Emoji">
+
                             <i data-lucide="smile" class="w-5 h-5 text-gray-400"></i>
+
                         </button>
+
                         <button class="p-1 hover:bg-gray-600 rounded" id="attach-btn" title="Attach">
+
                             <i data-lucide="paperclip" class="w-5 h-5 text-gray-400"></i>
+
                         </button>
+
                     </div>
+
                 </div>
+
             </div>
+
         </div>
+
     </div>
 
-    <!-- Modals and Popups -->
-    
-    <!-- Add Friend Modal -->
+
     <div id="add-friend-modal" class="fixed inset-0 modal-backdrop flex items-center justify-center z-50" style="display: none;">
+
         <div class="bg-gray-800 rounded-lg p-6 w-96 max-w-md mx-4">
+
             <h3 class="text-xl font-bold mb-4">Add Friend</h3>
+
             <p class="text-gray-400 text-sm mb-4">You can add friends with their FURY User ID.</p>
+
             <form id="add-friend-form">
+
                 <input type="text" id="friend-userid-input" placeholder="Enter a User ID (@username)" 
-                       class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 mb-4">
+
+                        class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 mb-4">
+
                 <div class="flex justify-end space-x-3">
+
                     <button type="button" id="cancel-add-friend" class="px-4 py-2 text-gray-400 hover:text-white">Cancel</button>
+
                     <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white">Send Friend Request</button>
+
                 </div>
+
             </form>
+
         </div>
+
     </div>
 
-    <!-- Create Server Modal -->
+
     <div id="create-server-modal" class="fixed inset-0 modal-backdrop flex items-center justify-center z-50" style="display: none;">
+
         <div class="bg-gray-800 rounded-lg p-6 w-96 max-w-md mx-4">
+
             <h3 class="text-xl font-bold mb-4">Create Your Server</h3>
+
             <p class="text-gray-400 text-sm mb-4">Give your new server a personality with a name and an icon.</p>
+
             <form id="create-server-form">
+
                 <div class="mb-4">
+
                     <label class="block text-sm font-medium text-gray-300 mb-2">SERVER NAME</label>
+
                     <input type="text" id="server-name-input" placeholder="My Awesome Server" 
-                           class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500">
+
+                            class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500">
+
                 </div>
+
                 <div class="flex justify-end space-x-3">
+
                     <button type="button" id="cancel-create-server" class="px-4 py-2 text-gray-400 hover:text-white">Cancel</button>
+
                     <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white">Create</button>
+
                 </div>
+
             </form>
+
         </div>
+
     </div>
 
-    <!-- Profile Settings Modal -->
+
     <div id="profile-modal" class="fixed inset-0 modal-backdrop flex items-center justify-center z-50" style="display: none;">
+
         <div class="bg-gray-800 rounded-lg w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
-            <!-- Profile Banner -->
+
             <div class="profile-banner relative">
+
                 <button class="absolute top-4 right-4 p-2 bg-black bg-opacity-50 rounded-full hover:bg-opacity-70" id="edit-banner-btn">
+
                     <i data-lucide="camera" class="w-4 h-4 text-white"></i>
+
                 </button>
+
                 <input type="file" id="banner-upload" accept="image/*,.gif" style="display: none;">
+
             </div>
+
             
-            <!-- Profile Content -->
             <div class="p-6 -mt-16 relative">
+
                 <div class="flex items-end space-x-4 mb-6">
+
                     <div class="relative">
+
                         <img id="profile-avatar" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Crect width='80' height='80' fill='%236366f1'/%3E%3Ctext x='40' y='50' text-anchor='middle' fill='white' font-size='32'%3E👤%3C/text%3E%3C/svg%3E" 
+
                              class="w-20 h-20 rounded-full border-4 border-gray-800" alt="Avatar">
+
                         <button class="absolute -bottom-1 -right-1 p-1 bg-gray-700 rounded-full hover:bg-gray-600" id="edit-avatar-btn">
+
                             <i data-lucide="camera" class="w-3 h-3 text-white"></i>
+
                         </button>
+
                         <input type="file" id="avatar-upload" accept="image/*,.gif" style="display: none;">
+
                     </div>
+
                     <div class="flex-1">
+
                         <h2 class="text-2xl font-bold text-white" id="profile-display-name">User</h2>
+
                         <p class="text-gray-400" id="profile-user-id">@user</p>
+
                     </div>
+
                     <button class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white" id="edit-profile-btn">Edit Profile</button>
+
                 </div>
 
-                <!-- Profile Form -->
+
                 <form id="profile-form" class="space-y-4" style="display: none;">
+
                     <div>
+
                         <label class="block text-sm font-medium text-gray-300 mb-2">DISPLAY NAME</label>
+
                         <input type="text" id="profile-name-input" 
+
                                class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500">
+
                     </div>
+
                     <div>
+
                         <label class="block text-sm font-medium text-gray-300 mb-2">ABOUT ME</label>
+
                         <textarea id="profile-bio-input" rows="3" 
+
                                   class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500" 
+
                                   placeholder="Tell us about yourself..."></textarea>
+
                     </div>
+
                     <div class="flex justify-end space-x-3">
+
                         <button type="button" id="cancel-profile-edit" class="px-4 py-2 text-gray-400 hover:text-white">Cancel</button>
+
                         <button type="submit" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-white">Save Changes</button>
+
                     </div>
+
                 </form>
 
+
                 <div class="mt-6">
+
                     <button class="w-full py-2 text-left text-red-400 hover:text-red-300" id="close-profile-modal">Close</button>
+
                 </div>
+
             </div>
+
         </div>
+
     </div>
 
-    <!-- Emoji Picker -->
+
     <div id="emoji-picker" class="absolute bottom-16 right-4 emoji-picker p-4 z-40" style="display: none;">
+
         <div class="grid grid-cols-8 gap-2">
+
             <button class="p-2 hover:bg-gray-600 rounded text-lg" data-emoji="😀">😀</button>
+
             <button class="p-2 hover:bg-gray-600 rounded text-lg" data-emoji="😂">😂</button>
+
             <button class="p-2 hover:bg-gray-600 rounded text-lg" data-emoji="😍">😍</button>
+
             <button class="p-2 hover:bg-gray-600 rounded text-lg" data-emoji="🤔">🤔</button>
+
             <button class="p-2 hover:bg-gray-600 rounded text-lg" data-emoji="😎">😎</button>
+
             <button class="p-2 hover:bg-gray-600 rounded text-lg" data-emoji="😭">😭</button>
+
             <button class="p-2 hover:bg-gray-600 rounded text-lg" data-emoji="😡">😡</button>
+
             <button class="p-2 hover:bg-gray-600 rounded text-lg" data-emoji="🥺">🥺</button>
+
             <button class="p-2 hover:bg-gray-600 rounded text-lg" data-emoji="👍">👍</button>
+
             <button class="p-2 hover:bg-gray-600 rounded text-lg" data-emoji="👎">👎</button>
+
             <button class="p-2 hover:bg-gray-600 rounded text-lg" data-emoji="❤️">❤️</button>
+
             <button class="p-2 hover:bg-gray-600 rounded text-lg" data-emoji="💯">💯</button>
+
             <button class="p-2 hover:bg-gray-600 rounded text-lg" data-emoji="🔥">🔥</button>
+
             <button class="p-2 hover:bg-gray-600 rounded text-lg" data-emoji="⚡">⚡</button>
+
             <button class="p-2 hover:bg-gray-600 rounded text-lg" data-emoji="🎉">🎉</button>
+
             <button class="p-2 hover:bg-gray-600 rounded text-lg" data-emoji="🚀">🚀</button>
+
         </div>
+
     </div>
+
 
     <script>
+
         // Initialize Lucide icons
+
         lucide.createIcons();
 
+
         // Global state
+
         let currentUser = null;
+
         let currentChat = null;
+
         let servers = [];
+
         let friends = [];
+
         let friendRequests = [];
+
         let dms = [];
+
         let messages = {};
+
         let currentView = 'friends';
 
+
         // Initialize app
+
         document.addEventListener('DOMContentLoaded', () => {
+
             lucide.createIcons();
+
             initializeAuth();
+
         });
 
+
         // Authentication system
+
         function initializeAuth() {
+
             const loginForm = document.getElementById('login-form');
+
             const setupForm = document.getElementById('setup-form');
+
             const googleSignupBtn = document.getElementById('google-signup-button');
 
+
             // Check if user is already logged in
+
             window.onAuthStateChanged(window.firebaseAuth, (user) => {
+
                 if (user) {
+
                     // User is signed in, check if profile is complete
+
                     checkUserProfile(user);
+
                 }
+
             });
+
 
             // Existing user login
+
             loginForm.addEventListener('submit', async (e) => {
+
                 e.preventDefault();
+
                 const userId = document.getElementById('login-userid').value.trim();
+
                 const password = document.getElementById('login-password').value.trim();
+
                 const errorDiv = document.getElementById('login-error');
+
                 
+
                 errorDiv.style.display = 'none';
+
                 
+
                 if (userId && password) {
+
                     try {
+
                         // Check if user exists in Firestore
+
                         const userQuery = window.query(
+
                             window.collection(window.firebaseDb, 'users'),
+
                             window.where('userId', '==', userId.startsWith('@') ? userId : '@' + userId)
+
                         );
+
                         const querySnapshot = await window.getDocs(userQuery);
+
                         
+
                         if (querySnapshot.empty) {
+
                             // User doesn't exist
+
                             errorDiv.style.display = 'block';
+
                             return;
+
                         }
+
                         
                         // Get user data
+
                         const userDoc = querySnapshot.docs[0];
+
                         const userData = userDoc.data();
+
                         
                         // Sign in with email and password
+
                         await window.signInWithEmailAndPassword(window.firebaseAuth, userData.email, password);
+
                         
+
                     } catch (error) {
+
                         console.error('Login error:', error);
+
+                        errorDiv.querySelector('p').textContent = error.message.includes('auth/invalid-credential') ? 
+                            "Invalid credentials or password. Please try again." : 
+                            "An unexpected error occurred during login. Check the console.";
                         errorDiv.style.display = 'block';
-                        document.querySelector('#login-error p').textContent = 'Invalid credentials. Please check your User ID and password.';
+
                     }
+
                 }
+
             });
 
-            // Google signup
+
+            // Google Sign Up/Login (EDITED for better error handling)
             googleSignupBtn.addEventListener('click', async () => {
+                const errorDiv = document.getElementById('google-error');
+                errorDiv.style.display = 'none';
+                
                 try {
-                    // Configure Google provider with additional settings
-                    window.googleProvider.setCustomParameters({
-                        prompt: 'select_account'
-                    });
-                    
-                    // Add scopes
-                    window.googleProvider.addScope('profile');
-                    window.googleProvider.addScope('email');
-                    
-                    const result = await window.signInWithPopup(window.firebaseAuth, window.googleProvider);
-                    const user = result.user;
-                    
-                    // Check if user already has a profile
-                    const userDoc = await window.getDoc(window.doc(window.firebaseDb, 'users', user.uid));
-                    
-                    if (userDoc.exists()) {
-                        // User already exists, log them in
-                        const userData = userDoc.data();
-                        loginUser({
-                            id: user.uid,
-                            name: userData.displayName,
-                            userId: userData.userId,
-                            email: userData.email,
-                            avatar: userData.avatar || '👤',
-                            status: 'online'
-                        });
-                    } else {
-                        // New user, show setup screen
-                        window.tempGoogleUser = user;
-                        document.getElementById('login-screen').style.display = 'none';
-                        document.getElementById('setup-screen').style.display = 'flex';
-                    }
+                    await window.signInWithPopup(window.firebaseAuth, window.googleProvider);
+                    // Auth state change listener handles the rest
                 } catch (error) {
-                    console.error('Google sign-in error:', error);
-                    console.error('Error code:', error.code);
-                    console.error('Error message:', error.message);
-                    
-                    let errorMessage = 'Failed to sign in with Google. Please try again.';
-                    
-                    if (error.code === 'auth/popup-blocked') {
-                        errorMessage = 'Popup was blocked by your browser. Please allow popups for this site and try again.';
-                    } else if (error.code === 'auth/popup-closed-by-user') {
-                        errorMessage = 'Sign-in was cancelled. Please try again.';
-                    } else if (error.code === 'auth/network-request-failed') {
-                        errorMessage = 'Network error. Please check your internet connection and try again.';
+                    console.error('Google Sign-in Error:', error);
+                    let message = "Google Sign-in Failed. Check your console for details, or verify your Firebase 'Auth > Sign-in Method' and 'Project Settings > Authorized Domains'.";
+
+                    if (error.code === 'auth/popup-closed-by-user') {
+                        message = "Sign-in cancelled. Please click 'Continue with Google' again to proceed.";
+                    } else if (error.code === 'auth/cancelled-popup-request') {
+                         message = "The sign-in popup was blocked or closed too quickly. Please try again.";
                     } else if (error.code === 'auth/unauthorized-domain') {
-                        errorMessage = 'This domain is not authorized for Google sign-in. Please contact support.';
+                        message = "Sign-in domain not authorized. Please add your website URL (e.g., https://vaidik2012.github.io) to Firebase Authorized Domains.";
                     }
                     
-                    alert(errorMessage);
+                    errorDiv.querySelector('p').textContent = message;
+                    errorDiv.style.display = 'block';
                 }
             });
 
-            // Account setup
+            // Handle new user setup
             setupForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
-                const userId = document.getElementById('setup-userid').value.trim();
+                const userIdInput = document.getElementById('setup-userid');
                 const password = document.getElementById('setup-password').value.trim();
                 const confirmPassword = document.getElementById('setup-confirm-password').value.trim();
                 const errorDiv = document.getElementById('setup-error');
                 const successDiv = document.getElementById('setup-success');
-                const errorMessage = document.getElementById('setup-error-message');
                 
                 errorDiv.style.display = 'none';
                 successDiv.style.display = 'none';
-                
-                if (!userId || !password || !confirmPassword) {
-                    errorMessage.textContent = 'Please fill in all fields.';
+
+                let userId = userIdInput.value.trim();
+                if (!userId.startsWith('@')) {
+                    userId = '@' + userId;
+                }
+
+                if (!userId || password.length < 6 || password !== confirmPassword) {
+                    errorDiv.querySelector('#setup-error-message').textContent = "User ID and password must be valid (password must be 6+ characters and match).";
                     errorDiv.style.display = 'block';
                     return;
                 }
                 
-                if (password !== confirmPassword) {
-                    errorMessage.textContent = 'Passwords do not match.';
+                // Check if User ID is already taken
+                const userQuery = window.query(
+                    window.collection(window.firebaseDb, 'users'),
+                    window.where('userId', '==', userId)
+                );
+                const querySnapshot = await window.getDocs(userQuery);
+                
+                if (!querySnapshot.empty) {
+                    errorDiv.querySelector('#setup-error-message').textContent = `The User ID ${userId} is already taken. Please choose another one.`;
                     errorDiv.style.display = 'block';
                     return;
                 }
-                
-                if (password.length < 6) {
-                    errorMessage.textContent = 'Password must be at least 6 characters long.';
-                    errorDiv.style.display = 'block';
-                    return;
-                }
-                
+
                 try {
-                    const formattedUserId = userId.startsWith('@') ? userId : '@' + userId;
-                    
-                    // Validate userId format (only letters, numbers, underscores, hyphens)
-                    const userIdPattern = /^@[a-zA-Z0-9_-]+$/;
-                    if (!userIdPattern.test(formattedUserId)) {
-                        errorMessage.textContent = 'User ID can only contain letters, numbers, underscores, and hyphens.';
-                        errorDiv.style.display = 'block';
-                        return;
-                    }
-                    
-                    // Check if userId is already taken
-                    const userQuery = window.query(
-                        window.collection(window.firebaseDb, 'users'),
-                        window.where('userId', '==', formattedUserId)
-                    );
-                    const querySnapshot = await window.getDocs(userQuery);
-                    
-                    if (!querySnapshot.empty) {
-                        errorMessage.textContent = 'This User ID is already taken. Please choose a different one.';
-                        errorDiv.style.display = 'block';
-                        return;
-                    }
-                    
-                    successDiv.style.display = 'block';
-                    
-                    let user;
-                    if (window.tempGoogleUser) {
-                        // User came from Google sign-in
-                        user = window.tempGoogleUser;
-                        
-                        // Update password for the Google user
-                        await window.createUserWithEmailAndPassword(window.firebaseAuth, user.email, password);
-                    } else {
-                        // Create new email/password user
-                        const email = `${userId}@fury.app`; // Generate email from userId
-                        const result = await window.createUserWithEmailAndPassword(window.firebaseAuth, email, password);
-                        user = result.user;
-                    }
-                    
-                    // Save user profile to Firestore
+                    const user = window.firebaseAuth.currentUser;
+                    if (!user) throw new Error("No authenticated user found for setup.");
+
+                    // Update the user's password in Firebase Auth (since they signed up with Google)
+                    // Note: This step is typically unnecessary if the password is only stored in Firestore, 
+                    // but is included for completeness if you intend to use email/password login later.
+                    // For a seamless Google Sign-up, you might skip this and only set profile data.
+
+                    // 1. Create user profile in Firestore
                     const userData = {
-                        userId: formattedUserId,
-                        displayName: userId,
+                        uid: user.uid,
                         email: user.email,
-                        avatar: '👤',
-                        status: 'online',
+                        displayName: user.displayName || 'New FURY User',
+                        userId: userId,
+                        avatar: user.photoURL || 'default_avatar_url', // Use Google photo or default
                         bio: '',
-                        createdAt: new Date(),
-                        friends: [],
-                        servers: []
+                        status: 'online',
+                        createdAt: new Date().toISOString()
                     };
-                    
+
                     await window.setDoc(window.doc(window.firebaseDb, 'users', user.uid), userData);
-                    
-                    // Clear temp user
-                    window.tempGoogleUser = null;
-                    
-                    // Login user
-                    loginUser({
-                        id: user.uid,
-                        name: userId,
-                        userId: formattedUserId,
-                        email: user.email,
-                        avatar: '👤',
-                        status: 'online'
-                    });
-                    
+
+                    successDiv.style.display = 'block';
+                    // Wait a moment for visual confirmation, then proceed to app
+                    setTimeout(() => {
+                        checkUserProfile(user);
+                    }, 1000);
+
                 } catch (error) {
                     console.error('Setup error:', error);
-                    errorMessage.textContent = error.message || 'Failed to create account. Please try again.';
+                    errorDiv.querySelector('#setup-error-message').textContent = `Account setup failed: ${error.message}`;
                     errorDiv.style.display = 'block';
-                    successDiv.style.display = 'none';
                 }
             });
         }
 
-        // Check user profile
-        async function checkUserProfile(firebaseUser) {
+
+        // Function to check if profile is complete and route user
+        async function checkUserProfile(user) {
+
+            const userDocRef = window.doc(window.firebaseDb, 'users', user.uid);
+
             try {
-                const userDoc = await window.getDoc(window.doc(window.firebaseDb, 'users', firebaseUser.uid));
-                
+
+                const userDoc = await window.getDoc(userDocRef);
+
                 if (userDoc.exists()) {
-                    const userData = userDoc.data();
-                    loginUser({
-                        id: firebaseUser.uid,
-                        name: userData.displayName,
-                        userId: userData.userId,
-                        email: userData.email,
-                        avatar: userData.avatar || '👤',
-                        status: 'online'
-                    });
-                } else {
-                    // User exists in Firebase Auth but not in Firestore, show setup
-                    window.tempGoogleUser = firebaseUser;
-                    document.getElementById('login-screen').style.display = 'none';
+
+                    // Profile complete, log them into the main app
+
+                    currentUser = userDoc.data();
+
+                    initializeMainApp();
+
+                    showScreen('main-app');
+
+                } else if (user.emailVerified && user.providerData.some(p => p.providerId === 'google.com')) {
+                    // New Google user, needs profile setup
+                    // We check for emailVerified because Google sign-in guarantees a verified email.
+                    // This is the specific logic for the image issue resolution: if Google sign-in works,
+                    // but the profile isn't in Firestore, show the setup screen.
                     document.getElementById('setup-screen').style.display = 'flex';
+                    document.getElementById('login-screen').style.display = 'none';
+                    // Pre-fill fields if possible
+                    document.getElementById('setup-userid').value = user.displayName ? user.displayName.toLowerCase().replace(/\s/g, '') : '';
+
+
+                } else {
+
+                    // Other case (e.g., standard email/password login in the future, or unfinished manual registration)
+
+                    // For now, redirect to login if no profile found and not a new Google signup flow
+
+                    showScreen('login-screen');
+
                 }
+
             } catch (error) {
-                console.error('Error checking user profile:', error);
+
+                console.error("Error checking user profile:", error);
+
+                showScreen('login-screen'); // Fallback to login on error
+
             }
+
         }
 
-        // Login user and show main app
-        function loginUser(user) {
-            currentUser = user;
+
+        function showScreen(screenId) {
+
             document.getElementById('login-screen').style.display = 'none';
+
             document.getElementById('setup-screen').style.display = 'none';
-            document.getElementById('main-app').style.display = 'flex';
-            
-            // Update user info
-            document.getElementById('user-display-name').textContent = user.name;
-            document.getElementById('user-id-display').textContent = user.userId;
-            
-            initializeMainApp();
-        }
 
-        // Initialize main app
-        async function initializeMainApp() {
-            // Load user's real friends and friend requests from Firebase
-            await loadUserData();
-            
-            renderFriends();
-            renderServers();
-            setupEventListeners();
-            
-            // Initialize with welcome message
-            showWelcomeScreen();
-        }
+            document.getElementById('main-app').style.display = 'none';
 
-        // Load user data from Firebase
-        async function loadUserData() {
-            try {
-                // Load user's profile data
-                const userDoc = await window.getDoc(window.doc(window.firebaseDb, 'users', currentUser.id));
-                if (userDoc.exists()) {
-                    const userData = userDoc.data();
-                    friends = userData.friends || [];
-                    servers = userData.servers || [];
-                }
 
-                // Load friend requests
-                const requestsQuery = window.query(
-                    window.collection(window.firebaseDb, 'friendRequests'),
-                    window.where('toUserId', '==', currentUser.userId)
-                );
-                const requestsSnapshot = await window.getDocs(requestsQuery);
-                friendRequests = [];
-                
-                for (const doc of requestsSnapshot.docs) {
-                    const requestData = doc.data();
-                    // Get sender's profile
-                    const senderQuery = window.query(
-                        window.collection(window.firebaseDb, 'users'),
-                        window.where('userId', '==', requestData.fromUserId)
-                    );
-                    const senderSnapshot = await window.getDocs(senderQuery);
-                    
-                    if (!senderSnapshot.empty) {
-                        const senderData = senderSnapshot.docs[0].data();
-                        friendRequests.push({
-                            id: doc.id,
-                            name: senderData.displayName,
-                            userId: senderData.userId,
-                            avatar: senderData.avatar || '👤',
-                            status: 'online'
-                        });
-                    }
-                }
-            } catch (error) {
-                console.error('Error loading user data:', error);
+            if (screenId === 'main-app') {
+
+                document.getElementById('main-app').style.display = 'flex';
+
+            } else {
+
+                document.getElementById(screenId).style.display = 'flex';
+
             }
+
         }
 
-        // Event listeners
+        
+
+        // Main app logic initialization
+
+        function initializeMainApp() {
+
+            // Display current user info
+
+            document.getElementById('user-display-name').textContent = currentUser.displayName;
+
+            document.getElementById('user-id-display').textContent = currentUser.userId;
+
+            
+            // Set Avatar (The core of the image issue fix)
+            const defaultAvatarSvg = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%236366f1'/%3E%3Ctext x='16' y='20' text-anchor='middle' fill='white' font-size='14'%3E👤%3C/text%3E%3C/svg%3E";
+            const avatarUrl = currentUser.avatar && currentUser.avatar !== 'default_avatar_url' ? currentUser.avatar : defaultAvatarSvg;
+            document.getElementById('user-avatar').src = avatarUrl;
+
+
+            // Initial view setup
+
+            activateHomeView();
+
+            loadUserData();
+
+            setupEventListeners();
+
+        }
+
+
         function setupEventListeners() {
-            // Navigation tabs
-            document.querySelectorAll('[data-tab]').forEach(tab => {
-                tab.addEventListener('click', (e) => {
-                    const tabName = e.target.dataset.tab;
-                    switchTab(tabName);
+
+            // Logout
+
+            document.getElementById('logout-btn').addEventListener('click', async () => {
+
+                await window.signOut(window.firebaseAuth);
+
+                currentUser = null;
+
+                window.location.reload(); // Simple reload to show login screen
+
+            });
+
+            // Settings button (opens profile modal)
+            document.getElementById('settings-btn').addEventListener('click', openProfileModal);
+            
+            // Modals
+            document.getElementById('close-profile-modal').addEventListener('click', closeProfileModal);
+            document.getElementById('cancel-create-server').addEventListener('click', () => document.getElementById('create-server-modal').style.display = 'none');
+            document.getElementById('cancel-add-friend').addEventListener('click', () => document.getElementById('add-friend-modal').style.display = 'none');
+            document.getElementById('add-server-btn').addEventListener('click', () => document.getElementById('create-server-modal').style.display = 'flex');
+            document.getElementById('add-friend-btn').addEventListener('click', () => document.getElementById('add-friend-modal').style.display = 'flex');
+            document.getElementById('emoji-btn').addEventListener('click', toggleEmojiPicker);
+            document.getElementById('home-server').addEventListener('click', activateHomeView);
+
+            // Tabs
+
+            document.querySelectorAll('#nav-tabs button').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    currentView = e.target.dataset.tab;
+                    updateHomeViewTabs();
                 });
             });
 
-            // Add friend button
-            document.getElementById('add-friend-btn').addEventListener('click', () => {
-                document.getElementById('add-friend-modal').style.display = 'flex';
+            // Emoji Picker Clicks
+            document.querySelectorAll('#emoji-picker button').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const emoji = e.target.dataset.emoji;
+                    document.getElementById('message-input').value += emoji;
+                    document.getElementById('emoji-picker').style.display = 'none';
+                });
             });
 
-            // Add server button
-            document.getElementById('add-server-btn').addEventListener('click', () => {
-                document.getElementById('create-server-modal').style.display = 'flex';
-            });
+            // Profile Form Toggle
+            const profileForm = document.getElementById('profile-form');
+            const editProfileBtn = document.getElementById('edit-profile-btn');
 
-            // Settings button
-            document.getElementById('settings-btn').addEventListener('click', () => {
-                document.getElementById('profile-modal').style.display = 'flex';
-                updateProfileModal();
-            });
-
-            // Logout button
-            document.getElementById('logout-btn').addEventListener('click', logout);
-
-            // Message input
-            const messageInput = document.getElementById('message-input');
-            messageInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    sendMessage();
-                }
-            });
-
-            // Emoji button
-            document.getElementById('emoji-btn').addEventListener('click', toggleEmojiPicker);
-
-            // DM friend request button
-            document.getElementById('dm-send-friend-request').addEventListener('click', () => {
-                const userId = document.getElementById('dm-friend-request-input').value.trim();
-                if (userId) {
-                    sendFriendRequest(userId);
-                    document.getElementById('dm-friend-request-input').value = '';
-                }
-            });
-
-            // Enter key for DM friend request
-            document.getElementById('dm-friend-request-input').addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    const userId = e.target.value.trim();
-                    if (userId) {
-                        sendFriendRequest(userId);
-                        e.target.value = '';
-                    }
-                }
-            });
-
-            // Modal event listeners
-            setupModalListeners();
-        }
-
-        // Modal event listeners
-        function setupModalListeners() {
-            // Add friend modal
-            document.getElementById('add-friend-form').addEventListener('submit', (e) => {
+            editProfileBtn.addEventListener('click', (e) => {
                 e.preventDefault();
-                const userId = document.getElementById('friend-userid-input').value.trim();
-                if (userId) {
-                    sendFriendRequest(userId);
-                    document.getElementById('add-friend-modal').style.display = 'none';
-                    document.getElementById('friend-userid-input').value = '';
-                }
-            });
-
-            document.getElementById('cancel-add-friend').addEventListener('click', () => {
-                document.getElementById('add-friend-modal').style.display = 'none';
-            });
-
-            // Create server modal
-            document.getElementById('create-server-form').addEventListener('submit', (e) => {
-                e.preventDefault();
-                const serverName = document.getElementById('server-name-input').value.trim();
-                if (serverName) {
-                    createServer(serverName);
-                    document.getElementById('create-server-modal').style.display = 'none';
-                    document.getElementById('server-name-input').value = '';
-                }
-            });
-
-            document.getElementById('cancel-create-server').addEventListener('click', () => {
-                document.getElementById('create-server-modal').style.display = 'none';
-            });
-
-            // Profile modal
-            document.getElementById('close-profile-modal').addEventListener('click', () => {
-                document.getElementById('profile-modal').style.display = 'none';
-            });
-
-            document.getElementById('edit-profile-btn').addEventListener('click', () => {
-                document.getElementById('profile-form').style.display = 'block';
-                document.getElementById('edit-profile-btn').style.display = 'none';
+                const isEditing = profileForm.style.display === 'block';
+                profileForm.style.display = isEditing ? 'none' : 'block';
+                editProfileBtn.textContent = isEditing ? 'Edit Profile' : 'View Profile';
+                document.getElementById('profile-display-name').style.display = isEditing ? 'block' : 'none';
+                document.getElementById('profile-user-id').style.display = isEditing ? 'block' : 'none';
             });
 
             document.getElementById('cancel-profile-edit').addEventListener('click', () => {
-                document.getElementById('profile-form').style.display = 'none';
-                document.getElementById('edit-profile-btn').style.display = 'block';
-            });
-
-            // Avatar and banner upload
-            document.getElementById('edit-avatar-btn').addEventListener('click', () => {
-                document.getElementById('avatar-upload').click();
-            });
-
-            document.getElementById('edit-banner-btn').addEventListener('click', () => {
-                document.getElementById('banner-upload').click();
-            });
-
-            document.getElementById('avatar-upload').addEventListener('change', handleAvatarUpload);
-            document.getElementById('banner-upload').addEventListener('change', handleBannerUpload);
-
-            // Emoji picker
-            document.querySelectorAll('[data-emoji]').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const emoji = e.target.dataset.emoji;
-                    insertEmoji(emoji);
-                });
-            });
-
-            // Close modals on backdrop click
-            document.querySelectorAll('.modal-backdrop').forEach(modal => {
-                modal.addEventListener('click', (e) => {
-                    if (e.target === modal) {
-                        modal.style.display = 'none';
-                    }
-                });
+                profileForm.style.display = 'none';
+                editProfileBtn.textContent = 'Edit Profile';
+                document.getElementById('profile-display-name').style.display = 'block';
+                document.getElementById('profile-user-id').style.display = 'block';
             });
         }
-
-        // Switch tabs
-        function switchTab(tabName) {
-            currentView = tabName;
-            
-            // Update tab buttons
-            document.querySelectorAll('[data-tab]').forEach(tab => {
-                tab.classList.remove('bg-gray-600', 'text-white');
-                tab.classList.add('text-gray-400');
-            });
-            document.querySelector(`[data-tab="${tabName}"]`).classList.add('bg-gray-600', 'text-white');
-            document.querySelector(`[data-tab="${tabName}"]`).classList.remove('text-gray-400');
-
-            // Show/hide panels
-            document.getElementById('friends-panel').style.display = tabName === 'friends' ? 'block' : 'none';
-            document.getElementById('dms-panel').style.display = tabName === 'dms' ? 'block' : 'none';
-            document.getElementById('channels-panel').style.display = 'none';
-
-            if (tabName === 'friends') {
-                renderFriends();
-            } else if (tabName === 'dms') {
-                renderDMs();
-            }
-        }
-
-        // Render friends
-        function renderFriends() {
-            // Friend requests
-            const requestsList = document.getElementById('friend-requests-list');
-            if (friendRequests.length === 0) {
-                requestsList.innerHTML = `
-                    <div class="text-center py-4">
-                        <p class="text-gray-500 text-sm">No pending friend requests</p>
-                    </div>
-                `;
-            } else {
-                requestsList.innerHTML = friendRequests.map(user => `
-                    <div class="flex items-center justify-between p-2 hover:bg-gray-600 rounded slide-in">
-                        <div class="flex items-center space-x-3">
-                            <div class="relative">
-                                <span class="text-lg">${user.avatar}</span>
-                                <div class="absolute -bottom-1 -right-1 w-3 h-3 status-online rounded-full border border-gray-800"></div>
-                            </div>
-                            <div>
-                                <div class="font-medium text-white">${user.name}</div>
-                                <div class="text-xs text-gray-400">${user.userId}</div>
-                            </div>
-                        </div>
-                        <div class="flex space-x-1">
-                            <button class="p-1 bg-green-600 hover:bg-green-700 rounded" onclick="acceptFriendRequest('${user.id}')">
-                                <i data-lucide="check" class="w-4 h-4 text-white"></i>
-                            </button>
-                            <button class="p-1 bg-red-600 hover:bg-red-700 rounded" onclick="declineFriendRequest('${user.id}')">
-                                <i data-lucide="x" class="w-4 h-4 text-white"></i>
-                            </button>
-                        </div>
-                    </div>
-                `).join('');
-            }
-
-            // Online friends
-            const onlineFriends = friends.filter(f => f.status === 'online' || !f.status);
-            document.getElementById('online-friends-count').textContent = onlineFriends.length;
-            
-            if (onlineFriends.length === 0) {
-                document.getElementById('online-friends-list').innerHTML = `
-                    <div class="text-center py-4">
-                        <p class="text-gray-500 text-sm">No friends online</p>
-                    </div>
-                `;
-            } else {
-                document.getElementById('online-friends-list').innerHTML = onlineFriends.map(user => `
-                    <div class="flex items-center space-x-3 p-2 hover:bg-gray-600 rounded cursor-pointer" onclick="openDM('${user.userId}')">
-                        <div class="relative">
-                            <span class="text-lg">${user.avatar || '👤'}</span>
-                            <div class="absolute -bottom-1 -right-1 w-3 h-3 status-online rounded-full border border-gray-800"></div>
-                        </div>
-                        <div class="flex-1">
-                            <div class="font-medium text-white">${user.name}</div>
-                            <div class="text-xs text-gray-400">Online</div>
-                        </div>
-                        <button class="p-1 hover:bg-gray-500 rounded" onclick="event.stopPropagation(); openDM('${user.userId}')">
-                            <i data-lucide="message-circle" class="w-4 h-4 text-gray-400"></i>
-                        </button>
-                    </div>
-                `).join('');
-            }
-
-            // All friends
-            document.getElementById('all-friends-count').textContent = friends.length;
-            
-            if (friends.length === 0) {
-                document.getElementById('all-friends-list').innerHTML = `
-                    <div class="text-center py-8">
-                        <div class="w-12 h-12 bg-gray-600 rounded-full flex items-center justify-center mx-auto mb-3">
-                            <i data-lucide="user-plus" class="w-6 h-6 text-gray-400"></i>
-                        </div>
-                        <p class="text-gray-400 text-sm">No friends yet!</p>
-                        <p class="text-gray-500 text-xs mt-1">Use the "Add Friend" button to send friend requests</p>
-                    </div>
-                `;
-            } else {
-                document.getElementById('all-friends-list').innerHTML = friends.map(user => `
-                    <div class="flex items-center space-x-3 p-2 hover:bg-gray-600 rounded cursor-pointer" onclick="openDM('${user.userId}')">
-                        <div class="relative">
-                            <span class="text-lg">${user.avatar || '👤'}</span>
-                            <div class="absolute -bottom-1 -right-1 w-3 h-3 status-online rounded-full border border-gray-800"></div>
-                        </div>
-                        <div class="flex-1">
-                            <div class="font-medium text-white">${user.name}</div>
-                            <div class="text-xs text-gray-400">${user.userId}</div>
-                        </div>
-                        <button class="p-1 hover:bg-gray-500 rounded" onclick="event.stopPropagation(); openDM('${user.userId}')">
-                            <i data-lucide="message-circle" class="w-4 h-4 text-gray-400"></i>
-                        </button>
-                    </div>
-                `).join('');
-            }
-
-            document.getElementById('friend-requests-count').textContent = friendRequests.length;
-            lucide.createIcons();
-        }
-
-        // Render servers
-        function renderServers() {
-            const serverList = document.getElementById('server-list');
-            serverList.innerHTML = servers.map(server => `
-                <div class="server-icon bg-gray-700 hover:bg-gray-600 flex items-center justify-center cursor-pointer" 
-                     onclick="selectServer(${server.id})" title="${server.name}">
-                    <span class="text-lg">${server.icon}</span>
-                </div>
-            `).join('');
-        }
-
-        // Send message
-        function sendMessage() {
-            const input = document.getElementById('message-input');
-            const text = input.value.trim();
-            
-            if (text && currentChat) {
-                const message = {
-                    id: Date.now(),
-                    user: currentUser,
-                    text: text,
-                    timestamp: new Date()
-                };
-                
-                if (!messages[currentChat]) {
-                    messages[currentChat] = [];
-                }
-                messages[currentChat].push(message);
-                
-                input.value = '';
-                renderMessages();
-                
-                // Simulate response
-                setTimeout(() => {
-                    simulateResponse(text);
-                }, 1000 + Math.random() * 2000);
-            }
-        }
-
-        // Render messages
-        function renderMessages() {
-            const container = document.getElementById('messages-container');
-            const chatMessages = messages[currentChat] || [];
-            
-            if (chatMessages.length === 0) {
-                showWelcomeScreen();
-                return;
-            }
-            
-            container.innerHTML = chatMessages.map(message => {
-                const timeString = message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                return `
-                    <div class="flex items-start space-x-3 message-hover p-2 rounded">
-                        <span class="text-lg mt-1">${message.user.avatar}</span>
-                        <div class="flex-1">
-                            <div class="flex items-center space-x-2 mb-1">
-                                <span class="font-semibold text-white">${message.user.name}</span>
-                                <span class="text-xs text-gray-400">${timeString}</span>
-                            </div>
-                            <p class="text-gray-100">${escapeHtml(message.text)}</p>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-            
-            container.scrollTop = container.scrollHeight;
-        }
-
-        // Show welcome screen
-        function showWelcomeScreen() {
-            const container = document.getElementById('messages-container');
-            container.innerHTML = `
-                <div class="text-center py-8">
-                    <div class="w-16 h-16 bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <i data-lucide="message-circle" class="w-8 h-8 text-gray-400"></i>
-                    </div>
-                    <h3 class="text-xl font-bold text-white mb-2">Welcome to FURY!</h3>
-                    <p class="text-gray-400">Select a friend or server to start chatting.</p>
-                </div>
-            `;
-            lucide.createIcons();
-        }
-
-        // Open DM
-        function openDM(userId) {
-            const user = [...friends, ...sampleUsers].find(u => u.userId === userId);
-            if (user) {
-                currentChat = `dm_${userId}`;
-                document.getElementById('chat-title').textContent = user.name;
-                document.getElementById('chat-icon').setAttribute('data-lucide', 'user');
-                lucide.createIcons();
-                renderMessages();
-            }
-        }
-
-        // Friend request functions
-        async function sendFriendRequest(userId) {
-            try {
-                const formattedUserId = userId.startsWith('@') ? userId : '@' + userId;
-                
-                // Check if user exists
-                const userQuery = window.query(
-                    window.collection(window.firebaseDb, 'users'),
-                    window.where('userId', '==', formattedUserId)
-                );
-                const userSnapshot = await window.getDocs(userQuery);
-                
-                if (userSnapshot.empty) {
-                    alert('User not found. Please check the User ID and try again.');
-                    return;
-                }
-                
-                // Check if already friends
-                if (friends.some(friend => friend.userId === formattedUserId)) {
-                    alert('You are already friends with this user.');
-                    return;
-                }
-                
-                // Check if friend request already sent
-                const existingRequestQuery = window.query(
-                    window.collection(window.firebaseDb, 'friendRequests'),
-                    window.where('fromUserId', '==', currentUser.userId),
-                    window.where('toUserId', '==', formattedUserId)
-                );
-                const existingRequestSnapshot = await window.getDocs(existingRequestQuery);
-                
-                if (!existingRequestSnapshot.empty) {
-                    alert('Friend request already sent to this user.');
-                    return;
-                }
-                
-                // Send friend request
-                await window.setDoc(window.doc(window.collection(window.firebaseDb, 'friendRequests')), {
-                    fromUserId: currentUser.userId,
-                    toUserId: formattedUserId,
-                    timestamp: new Date(),
-                    status: 'pending'
-                });
-                
-                alert('Friend request sent successfully!');
-                
-            } catch (error) {
-                console.error('Error sending friend request:', error);
-                alert('Failed to send friend request. Please try again.');
-            }
-        }
-
-        async function acceptFriendRequest(requestId) {
-            try {
-                const request = friendRequests.find(r => r.id === requestId);
-                if (!request) return;
-                
-                // Add to both users' friends lists
-                const currentUserDoc = window.doc(window.firebaseDb, 'users', currentUser.id);
-                const currentUserData = await window.getDoc(currentUserDoc);
-                
-                // Get the sender's user document
-                const senderQuery = window.query(
-                    window.collection(window.firebaseDb, 'users'),
-                    window.where('userId', '==', request.userId)
-                );
-                const senderSnapshot = await window.getDocs(senderQuery);
-                
-                if (!senderSnapshot.empty) {
-                    const senderDoc = senderSnapshot.docs[0];
-                    const senderData = senderDoc.data();
-                    
-                    // Update current user's friends list
-                    const currentFriends = currentUserData.data().friends || [];
-                    currentFriends.push({
-                        userId: request.userId,
-                        name: request.name,
-                        avatar: request.avatar
-                    });
-                    
-                    await window.setDoc(currentUserDoc, { friends: currentFriends }, { merge: true });
-                    
-                    // Update sender's friends list
-                    const senderFriends = senderData.friends || [];
-                    senderFriends.push({
-                        userId: currentUser.userId,
-                        name: currentUser.name,
-                        avatar: currentUser.avatar
-                    });
-                    
-                    await window.setDoc(senderDoc.ref, { friends: senderFriends }, { merge: true });
-                    
-                    // Delete the friend request
-                    await window.deleteDoc(window.doc(window.firebaseDb, 'friendRequests', requestId));
-                    
-                    // Update local state
-                    friends.push(request);
-                    friendRequests = friendRequests.filter(r => r.id !== requestId);
-                    renderFriends();
-                }
-                
-            } catch (error) {
-                console.error('Error accepting friend request:', error);
-                alert('Failed to accept friend request. Please try again.');
-            }
-        }
-
-        async function declineFriendRequest(requestId) {
-            try {
-                // Delete the friend request
-                await window.deleteDoc(window.doc(window.firebaseDb, 'friendRequests', requestId));
-                
-                // Update local state
-                friendRequests = friendRequests.filter(r => r.id !== requestId);
-                renderFriends();
-                
-            } catch (error) {
-                console.error('Error declining friend request:', error);
-                alert('Failed to decline friend request. Please try again.');
-            }
-        }
-
-        // Server functions
-        function createServer(name) {
-            const server = {
-                id: Date.now(),
-                name: name,
-                icon: '🏠',
-                channels: [
-                    { id: Date.now(), name: 'general', type: 'text' }
-                ]
-            };
-            servers.push(server);
-            renderServers();
-        }
-
-        function selectServer(serverId) {
-            const server = servers.find(s => s.id === serverId);
-            if (server) {
-                // Update UI to show server
-                document.getElementById('current-server-info').innerHTML = `
-                    <span class="text-lg">${server.icon}</span>
-                    <span class="font-semibold">${server.name}</span>
-                `;
-                
-                // Show channels panel
-                document.getElementById('nav-tabs').style.display = 'none';
-                document.getElementById('friends-panel').style.display = 'none';
-                document.getElementById('dms-panel').style.display = 'none';
-                document.getElementById('channels-panel').style.display = 'block';
-                
-                renderChannels(server);
-            }
-        }
-
-        function renderChannels(server) {
-            const channelsList = document.getElementById('channels-list');
-            channelsList.innerHTML = server.channels.map(channel => `
-                <div class="flex items-center space-x-2 p-2 hover:bg-gray-600 rounded cursor-pointer" 
-                     onclick="selectChannel('${server.id}_${channel.id}', '${channel.name}')">
-                    <i data-lucide="${channel.type === 'voice' ? 'volume-2' : 'hash'}" class="w-4 h-4 text-gray-400"></i>
-                    <span class="text-gray-300">${channel.name}</span>
-                </div>
-            `).join('');
-            lucide.createIcons();
-        }
-
-        function selectChannel(channelId, channelName) {
-            currentChat = `channel_${channelId}`;
-            document.getElementById('chat-title').textContent = channelName;
-            document.getElementById('chat-icon').setAttribute('data-lucide', 'hash');
-            lucide.createIcons();
-            renderMessages();
-        }
-
-        // Profile functions
-        function updateProfileModal() {
-            document.getElementById('profile-display-name').textContent = currentUser.name;
-            document.getElementById('profile-user-id').textContent = currentUser.userId;
-            document.getElementById('profile-name-input').value = currentUser.name;
-        }
-
-        function handleAvatarUpload(e) {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    const avatarUrl = e.target.result;
-                    document.getElementById('user-avatar').src = avatarUrl;
-                    document.getElementById('profile-avatar').src = avatarUrl;
-                };
-                reader.readAsDataURL(file);
-            }
-        }
-
-        function handleBannerUpload(e) {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    const bannerUrl = e.target.result;
-                    document.querySelector('.profile-banner').style.backgroundImage = `url(${bannerUrl})`;
-                };
-                reader.readAsDataURL(file);
-            }
-        }
-
-        // Emoji functions
+        
         function toggleEmojiPicker() {
             const picker = document.getElementById('emoji-picker');
-            picker.style.display = picker.style.display === 'none' ? 'block' : 'none';
+            picker.style.display = picker.style.display === 'block' ? 'none' : 'block';
         }
 
-        function insertEmoji(emoji) {
-            const input = document.getElementById('message-input');
-            input.value += emoji;
-            input.focus();
-            document.getElementById('emoji-picker').style.display = 'none';
+        function updateHomeViewTabs() {
+            document.querySelectorAll('#nav-tabs button').forEach(button => {
+                if (button.dataset.tab === currentView) {
+                    button.classList.add('bg-gray-600', 'text-white');
+                    button.classList.remove('text-gray-400', 'hover:text-white');
+                } else {
+                    button.classList.remove('bg-gray-600', 'text-white');
+                    button.classList.add('text-gray-400', 'hover:text-white');
+                }
+            });
+
+            document.getElementById('friends-panel').style.display = currentView === 'friends' ? 'block' : 'none';
+            document.getElementById('dms-panel').style.display = currentView === 'dms' ? 'block' : 'none';
         }
 
-        // Simulate response
-        function simulateResponse(userText) {
-            if (!currentChat) return;
+
+        function activateHomeView() {
+            // Logic to switch to the Home/DM view (Friends list and DMs)
+            document.getElementById('current-server-info').innerHTML = `<i data-lucide="users" class="w-5 h-5 text-gray-400"></i><span class="font-semibold">Direct Messages</span>`;
+            document.getElementById('nav-tabs').style.display = 'flex';
+            document.getElementById('channels-panel').style.display = 'none';
+            document.getElementById('friends-panel').style.display = currentView === 'friends' ? 'block' : 'none';
+            document.getElementById('dms-panel').style.display = currentView === 'dms' ? 'block' : 'none';
+            document.getElementById('chat-icon').setAttribute('data-lucide', 'hash'); // Placeholder
+            document.getElementById('chat-title').textContent = 'Welcome';
+
+            updateHomeViewTabs();
+            lucide.createIcons(); // Re-render lucide icons
+
+        }
+
+
+        function openProfileModal() {
+            // Fill modal fields with current user data
+            const defaultAvatar = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Crect width='80' height='80' fill='%236366f1'/%3E%3Ctext x='40' y='50' text-anchor='middle' fill='white' font-size='32'%3E👤%3C/text%3E%3C/svg%3E";
+            const profileAvatarUrl = currentUser.avatar && currentUser.avatar !== 'default_avatar_url' ? currentUser.avatar : defaultAvatar;
             
-            const responses = [
-                "That's interesting! 🤔",
-                "I totally agree! 👍",
-                "Great point! 💯",
-                "Thanks for sharing! 😊",
-                "Absolutely! ⚡",
-                "That's so cool! 🔥",
-                "I was thinking the same thing! 🎯",
-                "Awesome! 🎉"
+            document.getElementById('profile-display-name').textContent = currentUser.displayName;
+            document.getElementById('profile-user-id').textContent = currentUser.userId;
+            document.getElementById('profile-avatar').src = profileAvatarUrl;
+
+            document.getElementById('profile-name-input').value = currentUser.displayName;
+            document.getElementById('profile-bio-input').value = currentUser.bio || '';
+
+
+            // Show the modal
+            document.getElementById('profile-modal').style.display = 'flex';
+            
+            // Hide form and show static info initially
+            document.getElementById('profile-form').style.display = 'none';
+            document.getElementById('edit-profile-btn').textContent = 'Edit Profile';
+            document.getElementById('profile-display-name').style.display = 'block';
+            document.getElementById('profile-user-id').style.display = 'block';
+
+        }
+
+
+        function closeProfileModal() {
+            document.getElementById('profile-modal').style.display = 'none';
+        }
+
+
+        // Placeholder for loading initial data (friends, servers, etc.)
+
+        function loadUserData() {
+
+            // In a real app, this would fetch data from Firestore:
+
+            // 1. Fetch servers (if any) and populate server-list
+
+            // 2. Fetch friends and friend requests, populate friends-panel
+
+            // 3. Fetch DMs, populate dms-panel
+
+
+            // TEMPORARY MOCK DATA POPULATION:
+
+            // Mock Friends
+
+            const mockOnlineFriends = [
+
+                { displayName: 'Vaidik', userId: '@vaidik', status: 'online' },
+
+                { displayName: 'CoderGuru', userId: '@coder', status: 'idle' },
+
+                { displayName: 'GamerMax', userId: '@max', status: 'dnd' }
+
             ];
-            
-            const randomUser = sampleUsers[Math.floor(Math.random() * sampleUsers.length)];
-            const response = responses[Math.floor(Math.random() * responses.length)];
-            
-            const message = {
-                id: Date.now(),
-                user: randomUser,
-                text: response,
-                timestamp: new Date()
-            };
-            
-            if (!messages[currentChat]) {
-                messages[currentChat] = [];
-            }
-            messages[currentChat].push(message);
-            renderMessages();
-        }
 
-        // Utility functions
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
+            const mockAllFriends = [
 
-        async function logout() {
-            try {
-                await window.signOut(window.firebaseAuth);
-                
-                currentUser = null;
-                currentChat = null;
-                messages = {};
-                friends = [];
-                friendRequests = [];
-                servers = [];
-                
-                document.getElementById('main-app').style.display = 'none';
-                document.getElementById('login-screen').style.display = 'flex';
-                
-                // Reset forms
-                document.getElementById('login-userid').value = '';
-                document.getElementById('login-password').value = '';
-                document.getElementById('setup-userid').value = '';
-                document.getElementById('setup-password').value = '';
-                document.getElementById('setup-confirm-password').value = '';
-                
-                // Hide error messages
-                document.getElementById('login-error').style.display = 'none';
-                document.getElementById('setup-error').style.display = 'none';
-                document.getElementById('setup-success').style.display = 'none';
-                
-            } catch (error) {
-                console.error('Logout error:', error);
-            }
-        }
+                ...mockOnlineFriends,
 
-        // Render DMs
-        function renderDMs() {
-            const dmList = document.getElementById('dm-list');
+                { displayName: 'OfflineFriend', userId: '@offline', status: 'offline' },
+
+                { displayName: 'AnotherUser', userId: '@another', status: 'offline' },
+
+            ];
+
             
-            if (friends.length === 0) {
-                dmList.innerHTML = `
-                    <div class="text-center py-8">
-                        <div class="w-12 h-12 bg-gray-600 rounded-full flex items-center justify-center mx-auto mb-3">
-                            <i data-lucide="users" class="w-6 h-6 text-gray-400"></i>
+
+            document.getElementById('online-friends-count').textContent = mockOnlineFriends.length;
+
+            document.getElementById('all-friends-count').textContent = mockAllFriends.length;
+
+            
+
+            const renderFriend = (friend) => `
+
+                <div class="flex items-center justify-between p-2 hover:bg-gray-700 rounded transition duration-150 cursor-pointer slide-in">
+
+                    <div class="flex items-center space-x-3">
+
+                        <div class="relative">
+
+                            <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%2340444b'/%3E%3Ctext x='16' y='20' text-anchor='middle' fill='white' font-size='14'%3E${friend.displayName.charAt(0).toUpperCase()}%3C/text%3E%3C/svg%3E"
+
+                                 class="w-8 h-8 rounded-full" alt="Avatar">
+
+                            <div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 status-${friend.status} rounded-full border-2 border-gray-800"></div>
+
                         </div>
-                        <p class="text-gray-400 text-sm">No friends yet!</p>
-                        <p class="text-gray-500 text-xs mt-1">Add friends using their User ID above</p>
+
+                        <div>
+
+                            <div class="font-medium text-white">${friend.displayName}</div>
+
+                            <div class="text-gray-400 text-sm">${friend.userId}</div>
+
+                        </div>
+
                     </div>
-                `;
-                lucide.createIcons();
-                return;
-            }
-            
-            dmList.innerHTML = friends.map(user => `
-                <div class="flex items-center space-x-3 p-2 hover:bg-gray-600 rounded cursor-pointer" onclick="openDM('${user.userId}')">
-                    <div class="relative">
-                        <span class="text-lg">${user.avatar || '👤'}</span>
-                        <div class="absolute -bottom-1 -right-1 w-3 h-3 status-online rounded-full border border-gray-800"></div>
-                    </div>
-                    <div class="flex-1">
-                        <div class="font-medium text-white">${user.name}</div>
-                        <div class="text-xs text-gray-400">Click to start chatting</div>
-                    </div>
+
+                    ${friend.status !== 'offline' ? `
+
+                        <div class="flex space-x-2">
+
+                            <button class="p-1 hover:bg-gray-600 rounded" title="Start DM">
+
+                                <i data-lucide="message-square" class="w-4 h-4 text-gray-400"></i>
+
+                            </button>
+
+                            <button class="p-1 hover:bg-gray-600 rounded" title="More Options">
+
+                                <i data-lucide="more-vertical" class="w-4 h-4 text-gray-400"></i>
+
+                            </button>
+
+                        </div>` : ''}
+
                 </div>
-            `).join('');
+
+            `;
+
+            
+            document.getElementById('online-friends-list').innerHTML = mockOnlineFriends.map(renderFriend).join('');
+
+            document.getElementById('all-friends-list').innerHTML = mockAllFriends.map(renderFriend).join('');
+
+            
+            // Mock Friend Requests
+
+            const mockRequests = [
+
+                { displayName: 'NewGuy', userId: '@newguy' },
+
+                { displayName: 'TestUser', userId: '@testuser' },
+
+            ];
+
+            document.getElementById('friend-requests-count').textContent = mockRequests.length;
+
+            const renderRequest = (request) => `
+
+                <div class="flex items-center justify-between p-2 bg-gray-700 hover:bg-gray-600 rounded transition duration-150 slide-in">
+
+                    <div class="flex items-center space-x-3">
+
+                        <div class="relative">
+
+                            <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23f04747'/%3E%3Ctext x='16' y='20' text-anchor='middle' fill='white' font-size='14'%3E${request.displayName.charAt(0).toUpperCase()}%3C/text%3E%3C/svg%3E"
+
+                                 class="w-8 h-8 rounded-full" alt="Avatar">
+
+                            <div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 status-dnd rounded-full border-2 border-gray-800"></div>
+
+                        </div>
+
+                        <div>
+
+                            <div class="font-medium text-white">${request.displayName}</div>
+
+                            <div class="text-gray-400 text-sm">${request.userId}</div>
+
+                        </div>
+
+                    </div>
+
+                    <div class="flex space-x-2">
+
+                        <button class="p-1 text-green-500 hover:text-green-400" title="Accept">
+
+                            <i data-lucide="check" class="w-5 h-5"></i>
+
+                        </button>
+
+                        <button class="p-1 text-red-500 hover:text-red-400" title="Decline">
+
+                            <i data-lucide="x" class="w-5 h-5"></i>
+
+                        </button>
+
+                    </div>
+
+                </div>
+
+            `;
+
+            document.getElementById('friend-requests-list').innerHTML = mockRequests.map(renderRequest).join('');
+
+            
+            lucide.createIcons(); // Ensure new icons are rendered
+
         }
 
-        // Click outside to close emoji picker
-        document.addEventListener('click', (e) => {
-            const emojiPicker = document.getElementById('emoji-picker');
-            const emojiBtn = document.getElementById('emoji-btn');
-            
-            if (!emojiPicker.contains(e.target) && !emojiBtn.contains(e.target)) {
-                emojiPicker.style.display = 'none';
+        // Placeholder for sending messages
+
+        document.getElementById('message-input').addEventListener('keypress', (e) => {
+
+            if (e.key === 'Enter' && e.target.value.trim() !== '') {
+
+                console.log('Sending message:', e.target.value.trim());
+
+                // In a real app, this would send to Firestore/Realtime DB
+
+                e.target.value = ''; // Clear input
+
             }
+
         });
+
+
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'98c6a44f94af2e8f',t:'MTc2MDEwNDgwNC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+
+
+</body>
+
 </html>
