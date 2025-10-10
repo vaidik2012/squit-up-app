@@ -1,1226 +1,525 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FURY - Social Platform</title>
-    <!-- Load Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Load Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <style>
-        /* Custom styles for dark theme and typography */
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
-        body {
-            font-family: 'Inter', sans-serif;
-            background: #111;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0;
-            margin: 0;
-        }
-        #app-container {
-            width: 100vw;
-            height: 100vh;
-            display: flex;
-            background: #1e1e1e; /* Main background color */
-        }
-        .server-sidebar {
-            width: 80px;
-            background: #111111; /* Server list background */
-            flex-shrink: 0;
-            overflow-y: auto;
-        }
-        .channel-sidebar {
-            width: 240px;
-            background: #252525; /* Channel/DM list background */
-            flex-shrink: 0;
-        }
-        .chat-area {
-            flex-grow: 1;
-            background: #1e1e1e; /* Chat area background */
-            display: flex;
-            flex-direction: column;
-        }
-        .message-bubble {
-            max-width: 75%;
-            word-wrap: break-word;
-        }
-        /* Custom scrollbar */
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 6px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: #4a4a4a;
-            border-radius: 3px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: #252525;
-        }
-        .pfp-placeholder {
-            background: linear-gradient(135deg, #ff416c, #ff7e5f);
-            color: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            text-transform: uppercase;
-        }
-    </style>
-</head>
-<body class="text-white">
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, fetchSignInMethodsForEmail } from 'firebase/auth';
+import { getFirestore, doc, onSnapshot, collection, query, where, addDoc, serverTimestamp, getDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc, setDoc } from 'firebase/firestore';
 
-    <!-- Loading Screen -->
-    <div id="loading-screen" class="fixed inset-0 bg-black bg-opacity-90 z-[99] flex flex-col items-center justify-center">
-        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-red-500"></div>
-        <p class="mt-4 text-xl font-semibold text-gray-300">Loading FURY...</p>
-    </div>
+// --- GLOBAL VARIABLES (IMPORTANT: REPLACE THESE PLACEHOLDERS) ---
+// These variables are provided by the canvas environment, but if undefined, use fallbacks.
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
-    <!-- Auth Screen -->
-    <main id="auth-screen" class="fixed inset-0 bg-[#111] z-50 flex flex-col items-center justify-center p-4 hidden">
-        <div class="auth-card p-10 rounded-2xl text-center transition-opacity duration-500 bg-[#1e1e1e] shadow-2xl max-w-sm w-full">
-            <h1 class="text-6xl font-extrabold mb-2" style="
-                background: linear-gradient(90deg, #ff416c, #ff4b2b, #ff7e5f);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-            ">FURY</h1>
-            <p class="text-gray-400 mb-8">Sign in to connect with friends.</p>
+// Ensure your Firebase configuration has the necessary keys.
+if (!firebaseConfig.apiKey) {
+    console.error("CRITICAL ERROR: Firebase config missing or incomplete. Check the FIREBASE_CONFIG_PLACEHOLDER block in the code.");
+}
 
-            <button id="google-sign-in-button" 
-                    class="w-full py-4 rounded-xl text-lg font-bold transition duration-300 transform hover:scale-[1.02] active:scale-[0.99] flex items-center justify-center space-x-3"
-                    style="background-color: #db4437; box-shadow: 0 4px 15px rgba(219, 68, 55, 0.5);"
-            >
-                <i data-lucide="chrome" class="w-6 h-6"></i>
-                <span>Sign in with Google</span>
-            </button>
-            <p id="auth-error-message" class="text-red-400 mt-4 text-sm hidden">Authentication Error.</p>
-        </div>
-    </main>
+// --- FIREBASE INITIALIZATION AND HOOKS ---
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
-    <!-- Main App Container (Hidden until Auth/Profile complete) -->
-    <section id="app-container" class="hidden">
+// Helper function for exponential backoff on API calls
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-        <!-- 1. Server/DM Sidebar -->
-        <div class="server-sidebar p-3 flex flex-col items-center custom-scrollbar">
-            <div class="pfp-placeholder w-12 h-12 rounded-full mb-4 cursor-pointer hover:ring-2 hover:ring-red-500 transition duration-150" 
-                 id="user-pfp-icon" title="View Profile" data-user-id="self">
-                ?
-            </div>
+// Custom hook for Firebase Authentication and State
+const useAuth = () => {
+    const [user, setUser] = useState(null);
+    const [authReady, setAuthReady] = useState(false);
+    const [userId, setUserId] = useState(null);
+    const [isAuthReady, setIsAuthReady] = useState(false);
+    
+    // Auth Listener and Initial Sign-in
+    useEffect(() => {
+        let unsubscribe = () => {};
 
-            <div class="w-full h-px bg-gray-700 mb-4"></div>
+        const initializeAuth = async () => {
+            try {
+                // If a custom token is available, use it for direct sign-in.
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    // Otherwise, sign in anonymously (required for Firestore rules setup).
+                    await signInAnonymously(auth);
+                }
 
-            <!-- Server List -->
-            <div id="server-list" class="flex flex-col space-y-3 w-full">
-                <!-- Server icons go here -->
-            </div>
+                unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+                    if (currentUser) {
+                        setUser(currentUser);
+                        setUserId(currentUser.uid);
+                        
+                        // --- CRITICAL FIX: Ensure User Profile Exists ---
+                        await ensureUserProfile(currentUser.uid);
+                        
+                        setIsAuthReady(true);
+                        setAuthReady(true); // Redundant but kept for safety
+                    } else {
+                        setUser(null);
+                        setUserId(null);
+                        setIsAuthReady(true);
+                        setAuthReady(true); // Authentication state is known (logged out)
+                    }
+                });
+            } catch (error) {
+                console.error("Firebase authentication failed on startup:", error.message);
+                // Fallback: Still mark auth as ready to allow UI to proceed (maybe to sign-in page)
+                setAuthReady(true);
+                setIsAuthReady(true);
+            }
+        };
 
-            <!-- Create Server Button -->
-            <button id="create-server-button" title="Create Server" class="w-12 h-12 rounded-full bg-gray-700 text-white flex items-center justify-center hover:bg-red-600 transition duration-150 mt-4">
-                <i data-lucide="plus" class="w-6 h-6"></i>
-            </button>
-        </div>
+        initializeAuth();
+        
+        return () => unsubscribe();
+    }, []);
 
-        <!-- 2. Channel/DM List Sidebar -->
-        <div class="channel-sidebar flex flex-col">
-            <header class="p-4 border-b border-gray-700 flex justify-between items-center h-16">
-                <h2 class="text-xl font-semibold text-white truncate" id="current-sidebar-title">Direct Messages</h2>
-                <button id="add-friend-btn" title="Add Friend" class="p-1 rounded-full text-gray-400 hover:text-white hover:bg-gray-700 transition duration-150">
-                    <i data-lucide="user-plus" class="w-5 h-5"></i>
-                </button>
-            </header>
+    // Function to ensure the user's profile document exists
+    const ensureUserProfile = async (uid) => {
+        const userDocRef = doc(db, 'artifacts', appId, 'users', uid, 'user_profile', 'data');
+        try {
+            const docSnap = await getDoc(userDocRef);
+            if (!docSnap.exists()) {
+                // Document does not exist, create it with default data
+                await setDoc(userDocRef, {
+                    userId: uid,
+                    displayName: `user_${uid.substring(0, 8)}`,
+                    onlineStatus: 'online',
+                    createdAt: serverTimestamp(),
+                    // Add other necessary default profile fields here
+                });
+                console.log(`User profile created for: ${uid}`);
+            }
+        } catch (error) {
+            console.error("Error ensuring user profile document:", error.message);
+        }
+    };
+
+    const signInWithGoogle = async () => {
+        const provider = new GoogleAuthProvider();
+        try {
+            await signInWithPopup(auth, provider);
+        } catch (error) {
+            console.error("Google Sign-In failed:", error.message);
+            // Handle specific errors like 'auth/cancelled-popup-request' or 'auth/popup-closed-by-user'
+            if (error.code === 'auth/account-exists-with-different-credential') {
+                const pendingCred = error.credential;
+                const email = error.email;
+                const methods = await fetchSignInMethodsForEmail(auth, email);
+                // This is a complex flow requiring linking accounts, often simplified in a basic app.
+                console.error("Account exists with a different credential:", methods);
+                alert("This email is already associated with a different sign-in method. Please use that method.");
+            } else {
+                alert(`Google Sign-In failed. Please ensure Firebase Auth is configured correctly. Error: ${error.message}`);
+            }
+        }
+    };
+
+    const handleSignOut = async () => {
+        try {
+            await signOut(auth);
+            // Optionally, sign in anonymously after sign out if needed for continued access
+            // await signInAnonymously(auth); 
+        } catch (error) {
+            console.error("Error during sign out:", error);
+        }
+    };
+
+    return { user, userId, authReady: isAuthReady, signInWithGoogle, handleSignOut, db, auth };
+};
+
+// --- FRIEND SYSTEM HOOK ---
+
+const useFriends = (db, currentUserId, isAuthReady) => {
+    const [friends, setFriends] = useState([]);
+    const [outgoingRequests, setOutgoingRequests] = useState([]);
+    const [incomingRequests, setIncomingRequests] = useState([]);
+
+    useEffect(() => {
+        if (!isAuthReady || !currentUserId) {
+            setFriends([]);
+            setOutgoingRequests([]);
+            setIncomingRequests([]);
+            return;
+        }
+
+        const friendRef = collection(db, 'artifacts', appId, 'users', currentUserId, 'friends');
+        const outgoingRef = collection(db, 'artifacts', appId, 'users', currentUserId, 'outgoing_requests');
+        const incomingRef = collection(db, 'artifacts', appId, 'users', currentUserId, 'incoming_requests');
+
+        const unsubFriends = onSnapshot(friendRef, (snapshot) => {
+            const friendList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setFriends(friendList);
+        }, (error) => {
+            console.error("Error listening to friends list:", error.message);
+        });
+
+        const unsubOutgoing = onSnapshot(outgoingRef, (snapshot) => {
+            const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setOutgoingRequests(requests);
+        }, (error) => {
+            console.error("Error listening to outgoing requests:", error.message);
+        });
+
+        const unsubIncoming = onSnapshot(incomingRef, (snapshot) => {
+            const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setIncomingRequests(requests);
+        }, (error) => {
+            console.error("Error listening to incoming requests:", error.message);
+        });
+
+        return () => {
+            unsubFriends();
+            unsubOutgoing();
+            unsubIncoming();
+        };
+    }, [db, currentUserId, isAuthReady]);
+
+    return { friends, outgoingRequests, incomingRequests };
+};
+
+
+// --- CHAT SYSTEM HOOK ---
+
+const useChatSystem = (db, currentUserId, isAuthReady) => {
+    const [messages, setMessages] = useState([]);
+    const [selectedChatId, setSelectedChatId] = useState(null);
+    const [chatRefs, setChatRefs] = useState([]); // List of chat room references (for DM and Global)
+
+    // Global Chat Room Reference
+    const globalChatRef = useMemo(() => {
+        if (!db) return null;
+        return doc(db, 'artifacts', appId, 'public', 'data', 'chats', 'global_fury_chat');
+    }, [db]);
+
+    // 1. Listen for Global Chat messages
+    useEffect(() => {
+        if (!isAuthReady || !db) {
+            setMessages([]);
+            return;
+        }
+
+        // Query for messages ordered by timestamp
+        const messagesRef = collection(globalChatRef, 'messages');
+        const q = query(messagesRef, where('type', '==', 'text')); // Only fetch text messages for now
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const msgs = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+                timestamp: doc.data().timestamp?.toDate() || new Date() // Convert timestamp to Date object
+            }));
+            // Sort in memory to avoid needing Firestore index for 'timestamp'
+            msgs.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+            setMessages(msgs);
+        }, (error) => {
+            console.error("Error listening to global chat messages:", error.message);
+        });
+
+        // Set the global chat as the selected chat by default
+        setSelectedChatId(globalChatRef.id);
+        setChatRefs([{ id: globalChatRef.id, name: 'Global FURY Chat' }]);
+        
+        return () => unsubscribe();
+    }, [db, isAuthReady, globalChatRef]);
+
+    // Function to send a message
+    const sendMessage = async (text) => {
+        if (!currentUserId || !selectedChatId || !text.trim()) return;
+
+        try {
+            // Reference to the messages sub-collection of the currently selected chat room
+            const messagesCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'chats', selectedChatId, 'messages');
             
-            <div class="flex-1 overflow-y-auto custom-scrollbar">
-                <nav id="dm-and-channel-list" class="p-2 space-y-1">
-                    <!-- Dynamic DM and Channel items -->
-                    <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mt-4 px-2">Friends</h3>
-                    <div id="friends-list" class="space-y-1">
-                        <!-- Friend items go here -->
-                        <p class="text-sm text-gray-500 p-2 italic" id="no-friends-msg">No friends yet. Add one!</p>
-                    </div>
+            await addDoc(messagesCollectionRef, {
+                senderId: currentUserId,
+                text: text.trim(),
+                timestamp: serverTimestamp(),
+                type: 'text', // Message type
+                // Add more fields if needed (e.g., sender display name)
+            });
+            return true;
+        } catch (error) {
+            console.error("Error sending message:", error.message);
+            return false;
+        }
+    };
 
-                    <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mt-4 px-2">Servers</h3>
-                    <div id="server-channel-list" class="space-y-1">
-                        <!-- Channel items go here -->
+    return { 
+        messages, 
+        selectedChatId, 
+        setSelectedChatId, 
+        sendMessage,
+        chatRefs // The list of available chats (currently only Global)
+    };
+};
+
+
+// --- UI COMPONENTS ---
+
+// Custom Modal Component
+const Modal = ({ title, message, children, onClose }) => (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-70 backdrop-blur-sm">
+        <div className="bg-gray-800 p-6 md:p-8 rounded-xl shadow-2xl w-full max-w-md border border-red-500/30">
+            {title && <h3 className="text-xl font-bold text-red-400 mb-4">{title}</h3>}
+            <p className="text-gray-300 mb-6">{message}</p>
+            {children}
+            {onClose && (
+                <button
+                    onClick={onClose}
+                    className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3 rounded-xl transition duration-200 shadow-md mt-4"
+                >
+                    Close
+                </button>
+            )}
+        </div>
+    </div>
+);
+
+
+// Direct Chat (Main Interface) Component
+const DirectChat = ({ auth, db, user, userId, handleSignOut }) => {
+    const [currentUserProfile, setCurrentUserProfile] = useState(null);
+    const [loadingProfile, setLoadingProfile] = useState(true);
+
+    // Fetch User Profile
+    useEffect(() => {
+        if (!userId) {
+            setCurrentUserProfile(null);
+            setLoadingProfile(false);
+            return;
+        }
+
+        const userDocRef = doc(db, 'artifacts', appId, 'users', userId, 'user_profile', 'data');
+        const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
+            if (docSnap.exists()) {
+                setCurrentUserProfile(docSnap.data());
+            } else {
+                console.warn(`User profile document not found for ${userId}. This should have been created by useAuth.`);
+            }
+            setLoadingProfile(false);
+        }, (error) => {
+            console.error("Error fetching user profile:", error.message);
+            setLoadingProfile(false);
+        });
+
+        return () => unsubscribe();
+    }, [db, userId]);
+
+
+    const { messages, sendMessage, chatRefs } = useChatSystem(db, userId, !loadingProfile);
+    // Note: loadingProfile is used as the 'isAuthReady' flag for chat system.
+
+    const [messageText, setMessageText] = useState('');
+    const [modal, setModal] = useState(null); // { title: '', message: '' }
+
+    const handleSendMessage = async (e) => {
+        e.preventDefault();
+        if (!messageText.trim()) return;
+
+        const success = await sendMessage(messageText);
+        if (success) {
+            setMessageText('');
+        } else {
+            setModal({ title: 'Send Failed', message: 'Could not send message. Please try again.' });
+        }
+    };
+
+    const ChatMessage = ({ message }) => {
+        // Use currentUserProfile for sender display info
+        const isCurrentUser = message.senderId === userId;
+        const senderDisplay = currentUserProfile && isCurrentUser 
+            ? 'You' 
+            : message.senderId.substring(0, 8); // Fallback to truncated ID
+
+        const bubbleClass = isCurrentUser
+            ? 'bg-indigo-500 text-white self-end rounded-bl-xl rounded-t-xl'
+            : 'bg-gray-700 text-gray-200 self-start rounded-br-xl rounded-t-xl';
+        
+        const timestampDisplay = message.timestamp instanceof Date 
+            ? message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+            : '...';
+
+        return (
+            <div className={`flex flex-col mb-4 max-w-xs md:max-w-md ${isCurrentUser ? 'items-end' : 'items-start'}`}>
+                <div className="text-xs text-gray-400 mb-1 px-3">
+                    {senderDisplay}
+                </div>
+                <div className={`p-3 shadow-md ${bubbleClass}`}>
+                    {message.text}
+                    <span className="ml-4 text-xs opacity-70 block text-right">{timestampDisplay}</span>
+                </div>
+            </div>
+        );
+    };
+
+    if (loadingProfile) {
+        return (
+            <div className="h-screen flex items-center justify-center text-white bg-gray-900">
+                <div className="flex flex-col items-center">
+                    <div className="w-12 h-12 border-4 border-t-4 border-indigo-500 border-opacity-25 rounded-full animate-spin"></div>
+                    <p className="mt-4 text-lg text-gray-400">Loading FURY...</p>
+                </div>
+            </div>
+        );
+    }
+    
+    // Safety check: if profile loading is complete but no profile found (highly unlikely now)
+    if (!currentUserProfile) {
+        return (
+             <div className="h-screen flex items-center justify-center text-red-500 bg-gray-900">
+                <Modal 
+                    title="Profile Error" 
+                    message="User data is missing or could not be loaded. Please try signing out and signing back in."
+                    onClose={() => setModal(null)}
+                >
+                    <button
+                        onClick={handleSignOut}
+                        className="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-semibold py-3 rounded-xl transition duration-200 shadow-md mt-4"
+                    >
+                        Sign Out
+                    </button>
+                </Modal>
+             </div>
+        );
+    }
+
+
+    const userDisplayId = currentUserProfile?.displayName || `user_${userId.substring(0, 8)}`;
+    const onlineStatus = currentUserProfile?.onlineStatus || 'offline';
+    const statusColor = onlineStatus === 'online' ? 'bg-green-500' : 'bg-gray-500';
+
+    return (
+        <div className="flex h-screen text-white bg-gray-900 antialiased">
+            {modal && <Modal {...modal} onClose={() => setModal(null)} />}
+
+            {/* Sidebar (Left) */}
+            <div className="w-64 bg-gray-800 flex flex-col border-r border-gray-700">
+                <div className="p-4 border-b border-gray-700 flex items-center justify-between">
+                    <h1 className="text-xl font-extrabold text-white">FURY</h1>
+                    <button onClick={handleSignOut} className="text-gray-400 hover:text-white transition duration-150">
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                    </button>
+                </div>
+                
+                {/* Channels / Chats List */}
+                <nav className="flex-grow p-4 space-y-4 overflow-y-auto">
+                    <div>
+                        <h2 className="text-xs font-semibold uppercase text-gray-400 mb-2">Global Channels</h2>
+                        <ul className="space-y-1">
+                            {chatRefs.map(chat => (
+                                <li key={chat.id}>
+                                    <button 
+                                        className={`w-full text-left p-2 rounded-lg transition duration-150 ${chat.id === chatRefs[0].id ? 'bg-indigo-600 text-white' : 'text-gray-300 hover:bg-gray-700'}`}
+                                    >
+                                        #{chat.name.toLowerCase().replace(/\s/g, '-')}{' '}
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
                     </div>
                 </nav>
-            </div>
 
-            <!-- User Status/Sign Out Footer -->
-            <footer class="p-3 bg-[#171717] h-16 flex items-center justify-between border-t border-black">
-                <div class="flex items-center space-x-2">
-                    <div id="user-pfp-small" class="pfp-placeholder w-8 h-8 rounded-full text-xs" data-user-id="self">
-                        ?
-                    </div>
-                    <div>
-                        <p class="text-sm font-semibold truncate max-w-[100px]" id="current-username-display">@user_id</p>
-                        <p class="text-xs text-gray-400" id="current-user-status">Online</p>
+                {/* User Info Bar */}
+                <div className="p-4 bg-gray-700 border-t border-gray-700 flex items-center">
+                    <div className={`w-3 h-3 rounded-full mr-3 ${statusColor} border-2 border-gray-700`}></div>
+                    <div className="flex flex-col">
+                        <span className="text-sm font-semibold">{userDisplayId}</span>
+                        <span className="text-xs text-gray-400 capitalize">{onlineStatus}</span>
                     </div>
                 </div>
-                <button id="sign-out-button" title="Sign Out" class="p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-gray-700 transition duration-150">
-                    <i data-lucide="log-out" class="w-5 h-5"></i>
-                </button>
-            </footer>
-        </div>
-
-        <!-- 3. Chat Area -->
-        <div class="chat-area">
-            <!-- Chat Header -->
-            <header class="p-4 flex items-center border-b border-gray-700 h-16">
-                <i id="current-chat-icon" data-lucide="hash" class="w-5 h-5 text-gray-400 mr-2"></i>
-                <h2 class="text-xl font-semibold text-white" id="current-chat-name">Welcome to FURY!</h2>
-            </header>
-
-            <!-- Messages Container -->
-            <div id="messages-container" class="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
-                <div class="text-center text-gray-500 italic pt-20" id="initial-chat-message">Select a server or friend to start chatting.</div>
             </div>
 
-            <!-- Message Input -->
-            <div class="p-4 border-t border-gray-700">
-                <!-- Reply Context Area -->
-                <div id="reply-context-container" class="bg-gray-700 p-2 rounded-t-lg mb-0.5 border-l-4 border-red-500 hidden">
-                    <div class="flex justify-between items-center">
-                        <p class="text-xs text-gray-300 truncate">
-                            Replying to <span class="font-bold" id="reply-username"></span>: <span id="reply-text" class="italic ml-1"></span>
-                        </p>
-                        <button id="cancel-reply-btn" class="text-gray-400 hover:text-white transition duration-150 p-1">
-                            <i data-lucide="x" class="w-4 h-4"></i>
+            {/* Chat Area (Right) */}
+            <div className="flex-grow flex flex-col">
+                {/* Header */}
+                <header className="p-4 border-b border-gray-700 bg-gray-800 flex items-center">
+                    <h2 className="text-xl font-bold"># {chatRefs[0]?.name || 'Chat'}</h2>
+                </header>
+
+                {/* Messages Body */}
+                <div className="flex-grow p-4 overflow-y-auto space-y-3 flex flex-col-reverse" id="messages-container">
+                    {messages.length === 0 ? (
+                        <div className="text-center text-gray-500 py-10">
+                            Say hello! Be the first to send a message to **{chatRefs[0]?.name || 'Global Chat'}**.
+                        </div>
+                    ) : (
+                        messages.slice().reverse().map(msg => (
+                            <ChatMessage key={msg.id} message={msg} />
+                        ))
+                    )}
+                </div>
+
+                {/* Input Area */}
+                <form onSubmit={handleSendMessage} className="p-4 border-t border-gray-700 bg-gray-800">
+                    <div className="flex items-center space-x-3">
+                        <input
+                            type="text"
+                            value={messageText}
+                            onChange={(e) => setMessageText(e.target.value)}
+                            placeholder={`Message #${chatRefs[0]?.name.toLowerCase().replace(/\s/g, '-')}`}
+                            className="flex-grow bg-gray-700 text-white p-3 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none transition duration-150"
+                            disabled={!userId}
+                        />
+                        <button
+                            type="submit"
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white p-3 rounded-xl transition duration-150 shadow-lg disabled:opacity-50"
+                            disabled={!messageText.trim() || !userId}
+                        >
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
                         </button>
                     </div>
-                </div>
-
-                <form id="message-form" class="flex space-x-3">
-                    <input type="text" id="message-input" placeholder="Send a message..." required
-                           class="flex-1 p-3 rounded-xl bg-gray-800 border border-gray-700 focus:outline-none focus:border-red-500 text-white placeholder-gray-400 transition duration-150"
-                    >
-                    <button type="submit" 
-                            class="p-3 rounded-xl font-bold transition duration-300 transform hover:scale-[1.02] active:scale-[0.99] flex items-center justify-center"
-                            style="background: linear-gradient(90deg, #ff416c, #ff7e5f); box-shadow: 0 4px 10px rgba(255, 65, 108, 0.3);"
-                    >
-                        <i data-lucide="send" class="w-5 h-5 text-white"></i>
-                    </button>
                 </form>
             </div>
         </div>
+    );
+};
 
-    </section>
 
-    <!-- Modal for User Profile Setup (Post Google Sign-in) -->
-    <div id="profile-setup-modal" class="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center hidden">
-        <div class="bg-gray-900 p-8 rounded-2xl shadow-2xl max-w-lg w-full text-white">
-            <h3 class="text-2xl font-bold mb-4 text-center">Set up Your FURY Profile</h3>
-            <p class="text-gray-400 mb-6 text-center">Choose a unique User ID and customize your profile.</p>
-            <form id="profile-setup-form" class="space-y-4">
-                
-                <!-- User ID -->
-                <div>
-                    <label for="username-input" class="block text-sm font-medium text-gray-300">Unique FURY User ID (@)</label>
-                    <input type="text" id="username-input" placeholder="e.g., cool_gamer_42" required maxlength="16"
-                           class="mt-1 block w-full p-3 rounded-lg bg-gray-700 border border-gray-600 focus:ring-red-500 focus:border-red-500"
-                    >
-                    <p id="username-error" class="text-xs text-red-400 mt-1 hidden">User ID must be unique, 3-16 chars, lowercase/numbers/underscores only.</p>
-                </div>
-
-                <!-- PFP URL (Supports GIF) -->
-                <div>
-                    <label for="pfp-url-input" class="block text-sm font-medium text-gray-300">Profile Picture URL (Supports GIF)</label>
-                    <input type="url" id="pfp-url-input" placeholder="Paste image/GIF URL here" value="https://placehold.co/128x128/ff416c/ffffff?text=PFP"
-                           class="mt-1 block w-full p-3 rounded-lg bg-gray-700 border border-gray-600 focus:ring-red-500 focus:border-red-500"
-                    >
-                </div>
-
-                <!-- Banner URL (Supports GIF) -->
-                <div>
-                    <label for="banner-url-input" class="block text-sm font-medium text-gray-300">Profile Banner URL (Supports GIF)</label>
-                    <input type="url" id="banner-url-input" placeholder="Paste image/GIF URL here (optional)" value="https://placehold.co/600x150/252525/ffffff?text=FURY+Banner"
-                           class="mt-1 block w-full p-3 rounded-lg bg-gray-700 border border-gray-600 focus:ring-red-500 focus:border-red-500"
-                    >
-                </div>
-
-                <button type="submit" 
-                        id="save-profile-btn"
-                        class="w-full py-3 rounded-lg text-lg font-bold transition duration-300 transform hover:scale-[1.01] bg-red-600 hover:bg-red-700 disabled:opacity-50 mt-6"
-                >
-                    Save Profile
-                </button>
-            </form>
-        </div>
-    </div>
+// --- MAIN APPLICATION COMPONENT ---
+const App = () => {
+    const { user, userId, authReady, signInWithGoogle, handleSignOut, db, auth } = useAuth();
     
-    <!-- Modal for Creating a Server -->
-    <div id="create-server-modal" class="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center hidden">
-        <div class="bg-gray-900 p-8 rounded-2xl shadow-2xl max-w-sm w-full text-white">
-            <h3 class="text-2xl font-bold mb-4 text-center">Create a New Server</h3>
-            <form id="create-server-form" class="space-y-4">
-                
-                <!-- Server Name -->
-                <div>
-                    <label for="server-name-input" class="block text-sm font-medium text-gray-300">Server Name</label>
-                    <input type="text" id="server-name-input" placeholder="e.g., The FURY Hub" required
-                           class="mt-1 block w-full p-3 rounded-lg bg-gray-700 border border-gray-600 focus:ring-red-500 focus:border-red-500"
-                    >
+    if (!authReady) {
+        // Initial loading state while Firebase auth is setting up
+        return (
+            <div className="h-screen flex items-center justify-center text-white bg-gray-900">
+                <div className="flex flex-col items-center">
+                    <div className="w-12 h-12 border-4 border-t-4 border-indigo-500 border-opacity-25 rounded-full animate-spin"></div>
+                    <p className="mt-4 text-lg text-gray-400">Connecting...</p>
                 </div>
-
-                <button type="submit" 
-                        class="w-full py-3 rounded-lg text-lg font-bold transition duration-300 transform hover:scale-[1.01] bg-green-600 hover:bg-green-700 mt-6"
-                >
-                    Create Server
-                </button>
-            </form>
-        </div>
-    </div>
-    
-    <!-- Modal for Adding a Friend (by User ID) -->
-    <div id="add-friend-modal" class="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center hidden">
-        <div class="bg-gray-900 p-8 rounded-2xl shadow-2xl max-w-sm w-full text-white">
-            <h3 class="text-2xl font-bold mb-4 text-center">Add a FURY Friend</h3>
-            <p class="text-gray-400 mb-6 text-center">Enter the unique FURY User ID of your friend.</p>
-            <form id="add-friend-form" class="space-y-4">
-                
-                <!-- Friend User ID -->
-                <div>
-                    <label for="friend-id-input" class="block text-sm font-medium text-gray-300">Friend's FURY User ID (@)</label>
-                    <input type="text" id="friend-id-input" placeholder="e.g., cool_friend_88" required
-                           class="mt-1 block w-full p-3 rounded-lg bg-gray-700 border border-gray-600 focus:ring-red-500 focus:border-red-500"
-                    >
-                </div>
-
-                <button type="submit" 
-                        class="w-full py-3 rounded-lg text-lg font-bold transition duration-300 transform hover:scale-[1.01] bg-red-600 hover:bg-red-700 mt-6"
-                >
-                    Send Friend Request
-                </button>
-            </form>
-        </div>
-    </div>
-    
-    <!-- Modal for displaying custom messages/errors (replaces alert/confirm) -->
-    <div id="message-modal" class="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center hidden">
-        <div class="bg-gray-800 p-6 rounded-lg shadow-xl max-w-sm w-full text-center">
-            <p id="modal-text" class="text-white text-lg mb-4"></p>
-            <button id="modal-close-button" class="px-4 py-2 bg-red-500 rounded-lg text-white font-semibold hover:bg-red-600 transition duration-150">
-                Close
-            </button>
-        </div>
-    </div>
-
-    <!-- Modal for User Profile Viewing -->
-    <div id="profile-view-modal" class="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center hidden">
-        <div class="bg-gray-900 p-0 rounded-2xl shadow-2xl max-w-xl w-full text-white overflow-hidden">
-            <!-- Profile Banner -->
-            <div id="profile-banner-display" class="w-full h-32 bg-gray-700 bg-cover bg-center" style="background-image: url('https://placehold.co/600x150/252525/ffffff?text=FURY+Banner');"></div>
-
-            <div class="p-6 -mt-16">
-                <!-- Profile Picture -->
-                <img id="profile-pfp-display" src="https://placehold.co/128x128/ff416c/ffffff?text=PFP" 
-                     class="w-24 h-24 rounded-full border-4 border-gray-900 object-cover bg-red-500">
-                
-                <h3 id="profile-username-display" class="text-3xl font-bold mt-4">@user_id</h3>
-                <p id="profile-email-display" class="text-gray-400 text-sm mb-4">email@example.com</p>
-
-                <div class="h-px bg-gray-700 mb-4"></div>
-
-                <div id="profile-actions" class="flex justify-start space-x-3">
-                    <!-- Actions will be injected here: Add Friend, Message, Edit Profile -->
-                </div>
-
-                <button id="profile-modal-close-button" class="mt-6 w-full py-2 bg-red-600 rounded-lg text-white font-semibold hover:bg-red-700 transition duration-150">
-                    Close
-                </button>
             </div>
-        </div>
-    </div>
+        );
+    }
 
-
-    <script type="module">
-        // --- FIREBASE IMPORTS ---
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, query, onSnapshot, serverTimestamp, doc, getDoc, setDoc, updateDoc, where, getDocs, arrayUnion, arrayRemove, runTransaction } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        
-        // Enable debug logging for better troubleshooting
-        setLogLevel('Debug'); 
-        
-        // --- CONFIGURATION AND INITIALIZATION ---
-        
-        // Use global configuration if available
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { /* Your default/dummy config here */ };
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-fury-app';
-        
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const provider = new GoogleAuthProvider();
-        
-        // --- GLOBAL STATE ---
-        let currentUserId = null;
-        let currentUserData = null;
-        let authReady = false;
-        let activeChat = {
-            targetId: null, // The ID of the currently selected server/dm
-            isDM: false,
-            targetName: null,
-            targetIcon: null,
-        };
-        let replyToMessage = null; // Stores message data when user is composing a reply
-
-        // Caches for quick lookups
-        const userCache = {}; // userId -> { username, pfpUrl }
-        const serverCache = {}; // serverId -> { name, ownerId, memberIds }
-        const dmCache = {}; // dmId -> { members }
-
-        // --- DOM ELEMENTS ---
-        const loadingScreen = document.getElementById('loading-screen');
-        const authScreen = document.getElementById('auth-screen');
-        const appContainer = document.getElementById('app-container');
-        const signInButton = document.getElementById('google-sign-in-button');
-        const signOutButton = document.getElementById('sign-out-button');
-        const messageForm = document.getElementById('message-form');
-        const messageInput = document.getElementById('message-input');
-        const messagesContainer = document.getElementById('messages-container');
-        const messageModal = document.getElementById('message-modal');
-        const modalText = document.getElementById('modal-text');
-        const modalCloseButton = document.getElementById('modal-close-button');
-        
-        // Modals & Forms
-        const profileSetupModal = document.getElementById('profile-setup-modal');
-        const profileSetupForm = document.getElementById('profile-setup-form');
-        const usernameInput = document.getElementById('username-input');
-        const pfpUrlInput = document.getElementById('pfp-url-input');
-        const bannerUrlInput = document.getElementById('banner-url-input');
-        const createServerModal = document.getElementById('create-server-modal');
-        const createServerForm = document.getElementById('create-server-form');
-        const addFriendModal = document.getElementById('add-friend-modal');
-        const addFriendForm = document.getElementById('add-friend-form');
-        const addFriendBtn = document.getElementById('add-friend-btn');
-        const profileViewModal = document.getElementById('profile-view-modal');
-        const profileModalCloseButton = document.getElementById('profile-modal-close-button');
-        
-        // Sidebar Elements
-        const serverList = document.getElementById('server-list');
-        const friendsList = document.getElementById('friends-list');
-        const serverChannelList = document.getElementById('server-channel-list');
-        const createServerButton = document.getElementById('create-server-button');
-        const currentUsernameDisplay = document.getElementById('current-username-display');
-        const userPfpIcon = document.getElementById('user-pfp-icon');
-        const userPfpSmall = document.getElementById('user-pfp-small');
-        
-        // Chat Header/Input Elements
-        const currentChatName = document.getElementById('current-chat-name');
-        const currentChatIcon = document.getElementById('current-chat-icon');
-        const replyContextContainer = document.getElementById('reply-context-container');
-        const cancelReplyBtn = document.getElementById('cancel-reply-btn');
-
-        // --- FIRESTORE PATH HELPERS ---
-        const paths = {
-            users: `artifacts/${appId}/public/data/users`,
-            servers: `artifacts/${appId}/public/data/servers`,
-            dms: `artifacts/${appId}/public/data/dms`,
-            friendRequests: `artifacts/${appId}/users/${(u) => u}/friend_requests`, // Use function for user-specific path
-            messages: `artifacts/${appId}/public/data/messages`,
-        };
-        const getUserRef = (uid) => doc(db, paths.users, uid);
-
-        // --- UTILITY FUNCTIONS ---
-
-        /** Displays a custom modal message instead of using alert() */
-        function showCustomAlert(message) {
-            modalText.textContent = message;
-            messageModal.classList.remove('hidden');
-        }
-
-        modalCloseButton.addEventListener('click', () => {
-            messageModal.classList.add('hidden');
-        });
-
-        /** Formats Firestore timestamp to a readable time string */
-        function formatTime(timestamp) {
-            if (!timestamp) return '';
-            const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        }
-        
-        function getInitials(name) {
-            if (!name) return '?';
-            const parts = name.split(' ');
-            if (parts.length > 1) {
-                return (parts[0][0] + parts[1][0]).toUpperCase();
-            }
-            return name[0].toUpperCase();
-        }
-
-        function isValidUsername(username) {
-            if (!username) return false;
-            // 3-16 characters, lowercase letters, numbers, and underscores only
-            const regex = /^[a-z0-9_]{3,16}$/;
-            return regex.test(username);
-        }
-
-        // --- AUTH & PROFILE FLOW ---
-
-        async function createOrUpdateUser(user, username, pfpUrl, bannerUrl) {
-            try {
-                const userRef = getUserRef(user.uid);
-                const userSnapshot = await getDoc(userRef);
-
-                const userData = {
-                    userId: user.uid,
-                    email: user.email,
-                    username: username || user.email.split('@')[0], // Default if not provided
-                    pfpUrl: pfpUrl || user.photoURL || `https://placehold.co/128x128/ff416c/ffffff?text=${getInitials(username || user.email)}`,
-                    bannerUrl: bannerUrl || 'https://placehold.co/600x150/252525/ffffff?text=FURY+Banner',
-                    friends: [], // Initialize or maintain friends list
-                };
-
-                if (!userSnapshot.exists()) {
-                    await setDoc(userRef, userData, { merge: true });
-                    console.log("New user profile created.");
-                } else {
-                    await updateDoc(userRef, {
-                        username: userData.username,
-                        pfpUrl: userData.pfpUrl,
-                        bannerUrl: userData.bannerUrl,
-                        // Do not overwrite friends list here
-                    });
-                    console.log("User profile updated.");
-                }
-
-                return userData;
-            } catch (error) {
-                console.error("Error creating/updating user profile:", error);
-                showCustomAlert("Failed to save profile. Check the console.");
-                return null;
-            }
-        }
-
-        async function fetchUserData(uid) {
-            try {
-                const docSnap = await getDoc(getUserRef(uid));
-                if (docSnap.exists()) {
-                    return docSnap.data();
-                }
-                return null;
-            } catch (e) {
-                console.error("Error fetching user data:", e);
-                return null;
-            }
-        }
-
-        profileSetupForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const username = usernameInput.value.trim().toLowerCase();
-            const pfpUrl = pfpUrlInput.value.trim();
-            const bannerUrl = bannerUrlInput.value.trim();
-            const saveBtn = document.getElementById('save-profile-btn');
-
-            if (!isValidUsername(username)) {
-                document.getElementById('username-error').classList.remove('hidden');
-                return;
-            }
-            document.getElementById('username-error').classList.add('hidden');
-            
-            saveBtn.disabled = true;
-            saveBtn.textContent = 'Checking ID...';
-
-            try {
-                // 1. Check if username is unique
-                const q = query(collection(db, paths.users), where("username", "==", username));
-                const querySnapshot = await getDocs(q);
-                
-                if (!querySnapshot.empty) {
-                    // Check if the match is the current user (for updates)
-                    const existingUser = querySnapshot.docs[0].data();
-                    if (existingUser.userId !== currentUserId) {
-                        showCustomAlert("This FURY User ID is already taken. Please choose another.");
-                        return;
-                    }
-                }
-
-                // 2. Save/Update Profile
-                const user = auth.currentUser;
-                const newUserData = await createOrUpdateUser(user, username, pfpUrl, bannerUrl);
-                
-                if (newUserData) {
-                    currentUserData = newUserData;
-                    profileSetupModal.classList.add('hidden');
-                    // Rerender app content
-                    renderAppUI(); 
-                    attachListeners();
-                } else {
-                     showCustomAlert("Failed to create profile. Try again.");
-                }
-            } catch (error) {
-                console.error("Profile Setup Error:", error);
-                showCustomAlert("An error occurred during profile setup.");
-            } finally {
-                saveBtn.disabled = false;
-                saveBtn.textContent = 'Save Profile';
-            }
-        });
-
-        // --- UI RENDERING (SIDEBARS & CHAT) ---
-
-        function renderAppUI() {
-            if (!currentUserData) return;
-            
-            const pfp = currentUserData.pfpUrl;
-            const initials = getInitials(currentUserData.username);
-            
-            // Update small user status
-            currentUsernameDisplay.textContent = `@${currentUserData.username}`;
-            userPfpSmall.innerHTML = pfp ? `<img src="${pfp}" onerror="this.onerror=null;this.src='https://placehold.co/32x32/ff416c/ffffff?text=${initials}'" class="w-8 h-8 rounded-full object-cover" />` : initials;
-            userPfpIcon.innerHTML = pfp ? `<img src="${pfp}" onerror="this.onerror=null;this.src='https://placehold.co/48x48/ff416c/ffffff?text=${initials}'" class="w-12 h-12 rounded-full object-cover" />` : initials;
-            
-            // Render Server Icons
-            renderServerIcons();
-            
-            // Render Friends List
-            renderFriendsList();
-
-            // Auto-select first DM if available, otherwise prompt user
-            if (!activeChat.targetId) {
-                const firstFriend = currentUserData.friends?.[0];
-                if (firstFriend) {
-                    const dmId = generateDmId(currentUserId, firstFriend);
-                    const dmName = userCache[firstFriend]?.username || 'Unknown User';
-                    setActiveChat(dmId, true, `@${dmName}`, 'user');
-                } else if (serverCache && Object.keys(serverCache).length > 0) {
-                    const firstServerId = Object.keys(serverCache)[0];
-                    setActiveChat(firstServerId, false, serverCache[firstServerId].name, 'zap');
-                } else {
-                    document.getElementById('initial-chat-message').textContent = 'Welcome to FURY! Create a server or add a friend to start chatting.';
-                }
-            }
-        }
-        
-        function renderServerIcons() {
-            serverList.innerHTML = '';
-            // For now, only show user's pfp icon as the DM 'server'
-            // The rest of the server list will be populated by the server listener
-        }
-        
-        function renderFriendsList() {
-            friendsList.innerHTML = '';
-            const friends = currentUserData.friends || [];
-
-            if (friends.length === 0) {
-                document.getElementById('no-friends-msg').classList.remove('hidden');
-                return;
-            }
-            document.getElementById('no-friends-msg').classList.add('hidden');
-
-            friends.forEach(friendId => {
-                const friendData = userCache[friendId];
-                if (!friendData) return; // Skip if data is not yet cached
-
-                const dmId = generateDmId(currentUserId, friendId);
-                const isActive = activeChat.targetId === dmId;
-                const pfp = friendData.pfpUrl;
-                const initials = getInitials(friendData.username);
-
-                const item = `
-                    <button data-target-id="${dmId}" data-is-dm="true" 
-                            class="friend-item flex items-center w-full p-2 rounded-lg transition duration-150 ${isActive ? 'bg-red-700' : 'hover:bg-gray-700'}"
-                    >
-                        <div class="pfp-placeholder w-8 h-8 rounded-full text-xs mr-3 flex-shrink-0">
-                            ${pfp ? `<img src="${pfp}" onerror="this.onerror=null;this.src='https://placehold.co/32x32/ff416c/ffffff?text=${initials}'" class="w-full h-full rounded-full object-cover" />` : initials}
+    if (!user) {
+        // Sign-in page
+        return (
+            <div className="h-screen flex items-center justify-center bg-gray-900">
+                <div className="text-center p-8 bg-gray-800 rounded-2xl shadow-2xl max-w-sm w-full border border-gray-700">
+                    <div className="flex justify-center mb-6">
+                        <div className="p-3 bg-red-500 rounded-full">
+                            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.111A9.502 9.502 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
                         </div>
-                        <span class="text-sm font-medium truncate">@${friendData.username}</span>
-                    </button>
-                `;
-                friendsList.insertAdjacentHTML('beforeend', item);
-            });
-            // Re-attach listeners for newly added items
-            attachChatSelectionListeners();
-        }
-
-        function renderServerChannels(serverData) {
-            serverChannelList.innerHTML = '';
-            if (!serverData) return;
-
-            const { serverId, name } = serverData;
-            const isActive = activeChat.targetId === serverId;
-
-            // For simplicity, only one channel per server named 'general'
-            const item = `
-                <button data-target-id="${serverId}" data-is-dm="false" 
-                        class="channel-item flex items-center w-full p-2 rounded-lg transition duration-150 ${isActive ? 'text-white font-bold bg-gray-700' : 'hover:bg-gray-700 text-gray-300'}"
-                >
-                    <i data-lucide="hash" class="w-4 h-4 mr-2"></i>
-                    <span class="text-sm truncate">general</span>
-                </button>
-            `;
-            serverChannelList.insertAdjacentHTML('beforeend', item);
-            // Re-attach listeners
-            attachChatSelectionListeners();
-        }
-        
-        // --- CHAT LOGIC ---
-
-        function setActiveChat(targetId, isDM, targetName, targetIcon) {
-            // Update internal state
-            activeChat.targetId = targetId;
-            activeChat.isDM = isDM;
-            activeChat.targetName = targetName;
-            activeChat.targetIcon = targetIcon;
-            
-            // Update UI elements
-            currentChatName.textContent = targetName;
-            currentChatIcon.innerHTML = targetIcon ? `<i data-lucide="${targetIcon}" class="w-5 h-5 text-gray-400 mr-2"></i>` : '';
-            lucide.createIcons(); // Re-render icon
-
-            messagesContainer.innerHTML = '<div class="text-center text-gray-500 italic pt-20">Loading messages...</div>';
-            
-            // Re-render sidebars to highlight the active chat
-            renderFriendsList();
-            
-            // Setup new message listener
-            setupMessageListener();
-        }
-
-        /** Sets up the real-time listener for chat messages */
-        let unsubscribeMessages = null;
-        function setupMessageListener() {
-            if (unsubscribeMessages) {
-                unsubscribeMessages(); // Detach previous listener
-                unsubscribeMessages = null;
-            }
-
-            if (!activeChat.targetId) {
-                messagesContainer.innerHTML = '<div class="text-center text-gray-500 italic pt-20">Select a server or friend to start chatting.</div>';
-                return;
-            }
-            
-            // Query messages for the current targetId
-            const messagesRef = collection(db, paths.messages);
-            const q = query(messagesRef, where("targetId", "==", activeChat.targetId)); 
-
-            unsubscribeMessages = onSnapshot(q, (snapshot) => {
-                const messages = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                }));
-                
-                // Fetch necessary user data for new messages
-                const uidsToFetch = new Set();
-                messages.forEach(msg => uidsToFetch.add(msg.userId));
-                
-                // Wait for all user data to be in cache before rendering
-                Promise.all(Array.from(uidsToFetch).map(uid => ensureUserInCache(uid))).then(() => {
-                    renderMessages(messages);
-                });
-
-            }, (error) => {
-                console.error("Error fetching messages:", error);
-                showCustomAlert("Failed to load chat messages.");
-                messagesContainer.innerHTML = '<div class="text-center text-red-400 italic pt-20">Failed to load messages.</div>';
-            });
-        }
-        
-        async function ensureUserInCache(uid) {
-            if (!userCache[uid]) {
-                const userData = await fetchUserData(uid);
-                if (userData) {
-                    userCache[uid] = { username: userData.username, pfpUrl: userData.pfpUrl };
-                } else {
-                    userCache[uid] = { username: 'Unknown User', pfpUrl: null };
-                }
-            }
-        }
-        
-        /** Renders a list of messages into the container */
-        function renderMessages(messages) {
-            const sortedMessages = messages.sort((a, b) => {
-                const timeA = (a.createdAt && a.createdAt.toMillis) ? a.createdAt.toMillis() : 0;
-                const timeB = (b.createdAt && b.createdAt.toMillis) ? b.createdAt.toMillis() : 0;
-                return timeA - timeB;
-            });
-            
-            messagesContainer.innerHTML = '';
-            
-            if (sortedMessages.length === 0) {
-                messagesContainer.innerHTML = `<div class="text-center text-gray-500 italic pt-20">Start the conversation in ${activeChat.targetName}!</div>`;
-                return;
-            }
-
-            sortedMessages.forEach(msg => {
-                const isMine = msg.userId === currentUserId;
-                const userData = userCache[msg.userId] || { username: 'Unknown User', pfpUrl: null };
-                const pfp = userData.pfpUrl;
-                const initials = getInitials(userData.username);
-
-                let replyContextHtml = '';
-                if (msg.replyTo) {
-                    const replyUser = msg.replyTo.username;
-                    const replyText = msg.replyTo.text.substring(0, 50) + (msg.replyTo.text.length > 50 ? '...' : '');
-                    replyContextHtml = `
-                        <div class="border-l-2 border-gray-400 pl-2 mb-1 cursor-pointer hover:bg-gray-600 transition duration-100" 
-                             onclick="scrollToMessage('${msg.replyTo.messageId}')"
-                             title="Jump to message"
-                        >
-                            <p class="text-xs text-gray-400 font-semibold">@${replyUser}</p>
-                            <p class="text-xs text-gray-300 italic truncate">${replyText}</p>
-                        </div>
-                    `;
-                }
-                
-                const messageHtml = `
-                    <div id="msg-${msg.id}" class="flex ${isMine ? 'justify-end' : 'justify-start'} group">
-                        <div class="flex ${isMine ? 'flex-row-reverse' : 'flex-row'} space-x-3 space-x-reverse">
-                            <!-- User PFP -->
-                            <div class="pfp-placeholder w-8 h-8 rounded-full text-xs mt-auto flex-shrink-0 cursor-pointer" 
-                                 title="View Profile" data-user-id="${msg.userId}"
-                                 onclick="window.viewUserProfile('${msg.userId}')"
-                            >
-                                ${pfp ? `<img src="${pfp}" onerror="this.onerror=null;this.src='https://placehold.co/32x32/ff416c/ffffff?text=${initials}'" class="w-full h-full rounded-full object-cover" />` : initials}
-                            </div>
-                            
-                            <!-- Message Content -->
-                            <div class="message-bubble p-3 rounded-xl text-sm ${isMine ? 'bg-red-600 text-white rounded-br-none' : 'bg-gray-700 text-white rounded-tl-none'} shadow-md">
-                                ${replyContextHtml}
-                                <p class="font-semibold ${isMine ? 'hidden' : 'block text-red-300'}">@${userData.username}</p>
-                                <p>${msg.text}</p>
-                                <span class="text-xs ${isMine ? 'text-red-300' : 'text-gray-400'} block text-right mt-1">${formatTime(msg.createdAt)}</span>
-                            </div>
-                        </div>
-                        
-                        <!-- Reply Button (Hidden until hover/touch) -->
-                        <button class="reply-button ${isMine ? 'mr-2' : 'ml-2'} opacity-0 group-hover:opacity-100 transition duration-150 self-start p-1 text-gray-400 hover:text-red-400"
-                                onclick="replyToMessageFn('${msg.id}', '${msg.userId}', '${userData.username}', '${msg.text}')"
-                                title="Reply"
-                        >
-                            <i data-lucide="corner-up-left" class="w-4 h-4"></i>
-                        </button>
                     </div>
-                `;
-                messagesContainer.insertAdjacentHTML('beforeend', messageHtml);
-            });
-
-            // Scroll to the bottom only if the user was already near the bottom
-            const isScrolledToBottom = messagesContainer.scrollHeight - messagesContainer.clientHeight <= messagesContainer.scrollTop + 50;
-            if (isScrolledToBottom) {
-                messagesContainer.scrollTop = messagesContainer.scrollHeight;
-            }
-            lucide.createIcons();
-        }
-        
-        // Expose function globally for use in inline HTML handler (replyToMessage)
-        window.scrollToMessage = (id) => {
-             const element = document.getElementById(`msg-${id}`);
-             if (element) {
-                 element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                 // Add a brief highlight
-                 element.style.transition = 'background-color 0.5s';
-                 element.style.backgroundColor = '#4a4a4a';
-                 setTimeout(() => element.style.backgroundColor = 'transparent', 1000);
-             }
-        };
-
-        function replyToMessageFn(messageId, userId, username, text) {
-            // Set the global reply state
-            replyToMessage = { messageId, userId, username, text };
-            
-            // Update the UI
-            document.getElementById('reply-username').textContent = `@${username}`;
-            document.getElementById('reply-text').textContent = text.substring(0, 50) + (text.length > 50 ? '...' : '');
-            replyContextContainer.classList.remove('hidden');
-            messageInput.focus();
-        }
-        
-        cancelReplyBtn.addEventListener('click', () => {
-            replyToMessage = null;
-            replyContextContainer.classList.add('hidden');
-        });
-
-        async function handleMessageSubmit(event) {
-            event.preventDefault();
-            
-            if (!activeChat.targetId) {
-                showCustomAlert("Please select a chat (server or friend) before sending a message.");
-                return;
-            }
-
-            const text = messageInput.value.trim();
-            if (text === "") return;
-            
-            const userData = currentUserData;
-
-            try {
-                const messagesCollectionPath = paths.messages;
-                
-                const messageData = {
-                    text: text,
-                    createdAt: serverTimestamp(),
-                    userId: currentUserId,
-                    username: userData.username,
-                    userPhoto: userData.pfpUrl,
-                    targetId: activeChat.targetId,
-                    isDM: activeChat.isDM,
-                    replyTo: replyToMessage ? {
-                        messageId: replyToMessage.messageId,
-                        username: replyToMessage.username,
-                        text: replyToMessage.text,
-                        userId: replyToMessage.userId,
-                    } : null,
-                };
-                
-                await addDoc(collection(db, messagesCollectionPath), messageData);
-
-                messageInput.value = ''; // Clear input on success
-                cancelReplyBtn.click(); // Clear reply context
-            } catch (error) {
-                console.error("Error sending message:", error);
-                showCustomAlert("Failed to send message: " + (error.message || "Unknown error."));
-            }
-        }
-
-        // --- SERVER/DM LISTENERS (Initial Load) ---
-
-        let unsubscribeServers = null;
-        let unsubscribeFriendRequests = null;
-
-        function attachListeners() {
-            // Detach previous listeners if they exist
-            if (unsubscribeServers) unsubscribeServers();
-            if (unsubscribeFriendRequests) unsubscribeFriendRequests();
-
-            // 1. Listen for Server Changes
-            const serversRef = collection(db, paths.servers);
-            const qServers = query(serversRef, where("memberIds", "array-contains", currentUserId));
-            
-            unsubscribeServers = onSnapshot(qServers, (snapshot) => {
-                serverChannelList.innerHTML = '';
-                snapshot.docs.forEach(doc => {
-                    const server = { id: doc.id, ...doc.data() };
-                    serverCache[server.id] = server;
-                    
-                    // Render Server Icon
-                    const initial = getInitials(server.name).substring(0, 2);
-                    const isActive = activeChat.targetId === server.id;
-                    const serverIconHtml = `
-                        <button data-target-id="${server.id}" data-is-dm="false" title="${server.name}"
-                                class="server-item w-12 h-12 rounded-full mb-3 text-white flex items-center justify-center transition duration-150 ${isActive ? 'bg-red-600 rounded-2xl' : 'bg-gray-700 hover:rounded-2xl hover:bg-red-600'}"
-                        >
-                            <span class="font-bold text-sm">${initial}</span>
-                        </button>
-                    `;
-                    serverList.insertAdjacentHTML('beforeend', serverIconHtml);
-
-                    // Render Channel (1 channel per server)
-                    renderServerChannels(server);
-                });
-                lucide.createIcons();
-                attachChatSelectionListeners();
-            }, (error) => console.error("Error loading servers:", error));
-
-            // 2. Listen for Friend Request Changes (For simplicity, we'll store friend UIDs directly on the user doc for now)
-            // The friend list is maintained by the user profile listener (onAuthStateChanged handles user doc fetch).
-            // We just need to attach the server/dm selection listeners globally once auth is ready.
-            attachChatSelectionListeners();
-        }
-
-        // --- DYNAMIC LISTENERS ---
-
-        function attachChatSelectionListeners() {
-            // Server/DM Selection Listener
-            document.querySelectorAll('.server-item, .friend-item, .channel-item').forEach(el => {
-                el.removeEventListener('click', handleChatSelection); // Remove old to prevent duplicates
-                el.addEventListener('click', handleChatSelection);
-            });
-        }
-        
-        function handleChatSelection(event) {
-            const target = event.currentTarget;
-            const targetId = target.dataset.targetId;
-            const isDM = target.dataset.isDm === 'true';
-            
-            let targetName;
-            let targetIcon;
-
-            if (isDM) {
-                // DM selection
-                const friendId = targetId.split('_').find(id => id !== currentUserId);
-                targetName = `@${userCache[friendId]?.username || 'Unknown User'}`;
-                targetIcon = 'user';
-                document.getElementById('current-sidebar-title').textContent = 'Direct Messages';
-            } else {
-                // Server/Channel selection
-                targetName = serverCache[targetId]?.name || 'Unknown Server';
-                targetIcon = 'hash';
-                document.getElementById('current-sidebar-title').textContent = targetName;
-            }
-            
-            setActiveChat(targetId, isDM, targetName, targetIcon);
-        }
-        
-        // --- DM ID GENERATION ---
-        
-        function generateDmId(id1, id2) {
-            // Ensures a consistent ID regardless of user order
-            return [id1, id2].sort().join('_');
-        }
-
-        // --- FRIENDS & SERVER CREATION HANDLERS ---
-        
-        createServerButton.addEventListener('click', () => {
-            createServerModal.classList.remove('hidden');
-        });
-        
-        createServerModal.querySelector('button[type="submit"]').addEventListener('click', (e) => {
-            e.preventDefault();
-            handleCreateServer();
-        });
-
-        async function handleCreateServer() {
-            const name = document.getElementById('server-name-input').value.trim();
-            if (!name) return showCustomAlert("Server name cannot be empty.");
-
-            try {
-                const serverData = {
-                    name: name,
-                    ownerId: currentUserId,
-                    memberIds: [currentUserId],
-                    createdAt: serverTimestamp(),
-                };
-
-                const docRef = await addDoc(collection(db, paths.servers), serverData);
-                serverCache[docRef.id] = { id: docRef.id, ...serverData };
-                
-                showCustomAlert(`Server "${name}" created successfully!`);
-                createServerModal.classList.add('hidden');
-                document.getElementById('server-name-input').value = '';
-                
-                // Switch to the newly created server chat
-                setActiveChat(docRef.id, false, name, 'hash');
-
-            } catch (error) {
-                console.error("Error creating server:", error);
-                showCustomAlert("Failed to create server. Try again.");
-            }
-        }
-        
-        addFriendBtn.addEventListener('click', () => {
-            addFriendModal.classList.remove('hidden');
-        });
-
-        addFriendModal.querySelector('button[type="submit"]').addEventListener('click', (e) => {
-            e.preventDefault();
-            handleAddFriend();
-        });
-
-        async function handleAddFriend() {
-            const friendUsername = document.getElementById('friend-id-input').value.trim().toLowerCase();
-            if (!friendUsername || friendUsername === currentUserData.username) {
-                return showCustomAlert("Invalid User ID or you cannot add yourself.");
-            }
-            
-            try {
-                // 1. Find target user ID by username
-                const q = query(collection(db, paths.users), where("username", "==", friendUsername));
-                const querySnapshot = await getDocs(q);
-
-                if (querySnapshot.empty) {
-                    return showCustomAlert(`User ID @${friendUsername} not found.`);
-                }
-                
-                const friendDoc = querySnapshot.docs[0];
-                const friendId = friendDoc.id;
-                
-                // 2. Check if already friends
-                if (currentUserData.friends.includes(friendId)) {
-                    return showCustomAlert(`You are already friends with @${friendUsername}.`);
-                }
-
-                // 3. Send Friend Request (simplified: instantly add as friend)
-                // In a real app, this would be a separate 'friend_requests' collection.
-                // For simplicity as requested, we'll auto-accept and add them to both user's friends list in one transaction.
-                
-                await runTransaction(db, async (transaction) => {
-                    const currentUserRef = getUserRef(currentUserId);
-                    const friendUserRef = getUserRef(friendId);
-                    
-                    const currentUserSnap = await transaction.get(currentUserRef);
-                    const friendUserSnap = await transaction.get(friendUserRef);
-                    
-                    if (!currentUserSnap.exists() || !friendUserSnap.exists()) {
-                        throw "User profile data missing.";
-                    }
-                    
-                    transaction.update(currentUserRef, {
-                        friends: arrayUnion(friendId)
-                    });
-                    
-                    transaction.update(friendUserRef, {
-                        friends: arrayUnion(currentUserId)
-                    });
-                });
-                
-                showCustomAlert(`Successfully added @${friendUsername} as a friend!`);
-                addFriendModal.classList.add('hidden');
-                document.getElementById('friend-id-input').value = '';
-
-            } catch (error) {
-                console.error("Error adding friend:", error);
-                showCustomAlert("Failed to add friend. The user might not have a profile yet.");
-            }
-        }
-        
-        // --- PROFILE VIEWING LOGIC ---
-        
-        window.viewUserProfile = async (uid) => {
-            // Determine if the user is viewing their own profile or another's
-            const isSelf = uid === currentUserId;
-
-            let targetUser = isSelf ? currentUserData : userCache[uid];
-
-            if (!targetUser) {
-                targetUser = await fetchUserData(uid);
-                if (targetUser) {
-                    userCache[uid] = { username: targetUser.username, pfpUrl: targetUser.pfpUrl };
-                } else {
-                    return showCustomAlert("User profile could not be loaded.");
-                }
-            }
-            
-            // Populate Modal
-            document.getElementById('profile-banner-display').style.backgroundImage = `url('${targetUser.bannerUrl}')`;
-            document.getElementById('profile-pfp-display').src = targetUser.pfpUrl;
-            document.getElementById('profile-username-display').textContent = `@${targetUser.username}`;
-            document.getElementById('profile-email-display').textContent = targetUser.email;
-
-            // Handle Actions
-            const actionsContainer = document.getElementById('profile-actions');
-            actionsContainer.innerHTML = '';
-
-            if (isSelf) {
-                const editButton = `
-                    <button class="px-4 py-2 bg-gray-700 rounded-lg text-white font-semibold hover:bg-gray-600 transition duration-150" 
-                            onclick="window.openProfileSetup(true)">
-                        <i data-lucide="pencil" class="w-4 h-4 inline-block mr-1"></i> Edit Profile
+                    <h1 className="text-3xl font-extrabold text-red-500 mb-2">FURY</h1>
+                    <p className="text-gray-400 mb-8">Connect with friends instantly.</p>
+                    <h2 className="text-2xl font-semibold text-white mb-4">Welcome to FURY</h2>
+                    <p className="text-gray-500 mb-6">Please sign in with Google to continue.</p>
+                    <button
+                        onClick={signInWithGoogle}
+                        className="w-full flex items-center justify-center bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-xl transition duration-200 shadow-lg shadow-red-600/30"
+                    >
+                        <svg className="w-5 h-5 mr-3" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><path fill="#FFC107" d="M43.61 20.08v3.42H24V20.08h19.61z"/><path fill="#FF3D00" d="M6.3 33.15c.61 1.77 1.63 3.32 2.87 4.6l5.77-4.47c-.77-.48-1.44-1.07-1.95-1.78H6.3z"/><path fill="#4CAF50" d="M43.61 24.5v3.42H24v-3.42h19.61z"/><path fill="#1976D2" d="M12.94 37.75c3.08 3.52 7.7 5.75 12.87 5.75s9.79-2.23 12.87-5.75l-5.77-4.47c-2.34 2.1-5.32 3.42-9.1 3.42s-6.76-1.32-9.1-3.42L12.94 37.75z"/><path fill="#F44336" d="M24 8c-4.99 0-9.62 2.11-12.87 5.75l5.77 4.47c2.34-2.1 5.32-3.42 9.1-3.42s6.76 1.32 9.1 3.42l5.77-4.47C33.62 10.11 28.99 8 24 8z"/></svg>
+                        Sign in with Google
                     </button>
-                `;
-                actionsContainer.insertAdjacentHTML('beforeend', editButton);
-            } else {
-                // Other user actions (assuming 'friends' list is up to date in currentUserData)
-                const isFriend = currentUserData.friends.includes(uid);
-                const dmId = generateDmId(currentUserId, uid);
+                    <p className="text-xs text-gray-600 mt-4">By signing in, you agree to our <a href="#" className="text-red-500 hover:underline">Terms of Service</a>.</p>
+                </div>
+            </div>
+        );
+    }
 
-                if (isFriend) {
-                    // Message button
-                    const messageBtn = `
-                        <button class="px-4 py-2 bg-red-600 rounded-lg text-white font-semibold hover:bg-red-700 transition duration-150" 
-                                onclick="window.handleStartDM('${dmId}', '@${targetUser.username}')">
-                            <i data-lucide="message-square" class="w-4 h-4 inline-block mr-1"></i> Message
-                        </button>
-                    `;
-                    actionsContainer.insertAdjacentHTML('beforeend', messageBtn);
+    // Main application view
+    return <DirectChat auth={auth} db={db} user={user} userId={userId} handleSignOut={handleSignOut} />;
+};
 
-                    // Remove friend (optional)
-                } else {
-                    // Add friend button
-                    const addFriendBtnHtml = `
-                        <button class="px-4 py-2 bg-green-600 rounded-lg text-white font-semibold hover:bg-green-700 transition duration-150" 
-                                onclick="document.getElementById('friend-id-input').value='${targetUser.username}'; document.getElementById('add-friend-btn').click();">
-                            <i data-lucide="user-plus" class="w-4 h-4 inline-block mr-1"></i> Add Friend
-                        </button>
-                    `;
-                    actionsContainer.insertAdjacentHTML('beforeend', addFriendBtnHtml);
-                }
-            }
-
-            profileViewModal.classList.remove('hidden');
-            lucide.createIcons();
-        };
-        
-        window.handleStartDM = (dmId, username) => {
-            profileViewModal.classList.add('hidden');
-            setActiveChat(dmId, true, username, 'user');
-        }
-
-        profileModalCloseButton.addEventListener('click', () => {
-            profileViewModal.classList.add('hidden');
-        });
-        
-        window.openProfileSetup = (isEdit) => {
-            profileViewModal.classList.add('hidden');
-            if (isEdit && currentUserData) {
-                usernameInput.value = currentUserData.username;
-                pfpUrlInput.value = currentUserData.pfpUrl;
-                bannerUrlInput.value = currentUserData.bannerUrl;
-            } else {
-                usernameInput.value = '';
-            }
-            profileSetupModal.classList.remove('hidden');
-        }
-
-        // --- GLOBAL EVENT LISTENERS ---
-        signInButton.addEventListener('click', () => signInWithPopup(auth, provider));
-        signOutButton.addEventListener('click', () => {
-            signOut(auth);
-            // Clear caches on sign out
-            Object.keys(userCache).forEach(key => delete userCache[key]);
-            Object.keys(serverCache).forEach(key => delete serverCache[key]);
-        });
-        messageForm.addEventListener('submit', handleMessageSubmit);
-
-        // --- AUTH STATE OBSERVER ---
-        onAuthStateChanged(auth, async (user) => {
-            authReady = true;
-            loadingScreen.classList.add('hidden');
-            
-            if (user) {
-                currentUserId = user.uid;
-                
-                // 1. Fetch User Profile (Username, PFP, Banner, Friends)
-                const userData = await fetchUserData(user.uid);
-                
-                if (!userData || !userData.username) {
-                    // 2. Profile not set up (new user or missing username)
-                    profileSetupModal.classList.remove('hidden');
-                    authScreen.classList.add('hidden');
-                    appContainer.classList.add('hidden');
-                } else {
-                    // 3. Profile exists - Go to main app
-                    currentUserData = userData;
-                    userCache[user.uid] = { username: userData.username, pfpUrl: userData.pfpUrl }; // Cache self
-                    
-                    // Pre-cache friend data to display list correctly
-                    const friendPromises = (currentUserData.friends || []).map(uid => ensureUserInCache(uid));
-                    await Promise.all(friendPromises);
-
-                    profileSetupModal.classList.add('hidden');
-                    authScreen.classList.add('hidden');
-                    appContainer.classList.remove('hidden');
-                    
-                    renderAppUI();
-                    attachListeners();
-                }
-            } else {
-                // User is signed out (Show Auth UI)
-                currentUserId = null;
-                currentUserData = null;
-                appContainer.classList.add('hidden');
-                profileSetupModal.classList.add('hidden');
-                authScreen.classList.remove('hidden');
-
-                if (unsubscribeMessages) unsubscribeMessages();
-                if (unsubscribeServers) unsubscribeServers();
-                if (unsubscribeFriendRequests) unsubscribeFriendRequests();
-                setActiveChat(null, false, 'Welcome to FURY!', 'zap');
-            }
-            // Re-run lucide icon creation after UI changes
-            lucide.createIcons();
-        });
-
-        // Initialize Lucide icons on window load
-        window.onload = () => {
-            lucide.createIcons();
-        };
-
-    </script>
-</body>
-</html>
+export default App;
