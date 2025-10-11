@@ -872,16 +872,18 @@
         }
 
         async function completeSetup() {
-            const userId = document.getElementById('newUserId').value.trim();
+            const userIdInput = document.getElementById('newUserId');
+            let userId = userIdInput.value.trim();
 
             if (!userId) {
                 alert('Please enter your @user_id');
                 return;
             }
 
+            // Auto-add @ if user forgot it
             if (!userId.startsWith('@')) {
-                alert('User ID must start with @ (e.g., @john_doe)');
-                return;
+                userId = '@' + userId;
+                userIdInput.value = userId; // Update the input field
             }
 
             // Basic validation for user ID format
@@ -889,6 +891,12 @@
                 alert('User ID can only contain letters, numbers, and underscores after the @');
                 return;
             }
+
+            // Disable button to prevent double clicks
+            const joinButton = event.target;
+            joinButton.disabled = true;
+            joinButton.textContent = 'Creating Account...';
+            joinButton.style.opacity = '0.7';
 
             try {
                 console.log('Completing setup for user:', currentUser.uid, 'with userId:', userId);
@@ -932,6 +940,11 @@
                 
             } catch (error) {
                 console.error('Error completing setup:', error);
+                
+                // Re-enable button on error
+                joinButton.disabled = false;
+                joinButton.textContent = 'Join SQUIT up';
+                joinButton.style.opacity = '1';
                 
                 // Fallback: continue with basic setup
                 const userProfile = {
@@ -1203,5 +1216,5 @@
         `;
         document.head.appendChild(style);
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'98cf6fa7b1022e8f',t:'MTc2MDE5NzAxOS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'98cf773a16bf2e8f',t:'MTc2MDE5NzMyOS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
