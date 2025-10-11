@@ -9,7 +9,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-analytics-compat.js"></script>
     <style>
-        /* ... (Your original CSS is kept here for styling) ... */
+        /* ... (Your original CSS for body, html, container, auth-card, etc. remains here) ... */
 
         body {
             box-sizing: border-box;
@@ -68,6 +68,39 @@
             color: #333;
             font-weight: 500;
         }
+
+        /* --- NEW STYLES FOR PREFIXED INPUT FIX --- */
+        .input-with-prefix {
+            display: flex;
+            align-items: center;
+            border: 2px solid #e1e5e9;
+            border-radius: 10px;
+            padding: 0; /* Remove padding from container */
+            transition: border-color 0.3s;
+        }
+        .input-with-prefix:focus-within {
+            border-color: #667eea;
+        }
+        .input-prefix {
+            padding: 12px 0 12px 12px;
+            color: #777;
+            font-size: 16px;
+        }
+        .form-group input.prefixed-input {
+            width: 100%;
+            padding: 12px;
+            border: none; /* Remove border from input element */
+            border-radius: 0 10px 10px 0;
+            font-size: 16px;
+            box-sizing: border-box;
+            background: transparent;
+        }
+        .form-group input.prefixed-input:focus {
+            outline: none;
+            border-color: transparent;
+        }
+        /* ----------------------------------------- */
+
 
         .form-group input {
             width: 100%;
@@ -134,15 +167,13 @@
             height: 100%;
             background: #36393f;
             color: white;
-            /* Added to ensure dashboard is full screen */
             position: absolute;
             width: 100%;
             top: 0;
             left: 0;
         }
 
-        /* All other CSS styles (sidebar, chat, modal, etc.) go here */
-        /* ... (Your original CSS for dashboard, modals, etc.) ... */
+        /* All other dashboard/chat CSS styles remain here */
         .dashboard-header { background: #2f3136; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #202225; }
         .dashboard-content { display: flex; height: calc(100% - 70px); }
         .sidebar { width: 240px; background: #2f3136; border-right: 1px solid #202225; display: flex; flex-direction: column; }
@@ -237,7 +268,10 @@
             </div>
             <div class="form-group">
                 <label for="newUserId">Choose your @user_id</label>
-                <input type="text" id="newUserId" placeholder="Enter unique @user_id">
+                <div class="input-with-prefix">
+                    <span class="input-prefix">@</span>
+                    <input type="text" id="newUserId" class="prefixed-input" placeholder="e.g., squituser_11">
+                </div>
             </div>
             <button class="btn btn-primary" onclick="completeSetup()">Complete Setup</button> 
         </div>
@@ -348,7 +382,7 @@
             if (pageId === 'auth') {
                 authPage.style.display = 'flex';
             } else if (pageId === 'dashboard') {
-                dashboard.style.display = 'block'; // Use block for full screen
+                dashboard.style.display = 'block'; 
             } else if (pageId === 'setup') {
                 setupModal.style.display = 'block';
             }
@@ -387,7 +421,6 @@
             try {
                 const provider = new firebase.auth.GoogleAuthProvider();
                 await auth.signInWithPopup(provider);
-                // Auth state change listener will handle redirection
             } catch (error) {
                 console.error("Google Sign-In error:", error.message);
                 alert(`Google Sign-In Error: ${error.message}`);
@@ -408,10 +441,12 @@
         /** Completes the user profile setup by saving a unique user ID */
         async function completeSetup() {
             const user = auth.currentUser;
+            // *** FIX: Get value and trim/lowercase it. It should NOT contain the @ symbol. ***
             const userId = newUserId.value.trim().toLowerCase();
 
             if (!user) return;
 
+            // *** FIX: Validation check is for letters, numbers, and underscores only. ***
             if (!userId || !/^[a-z0-9_]{3,15}$/.test(userId)) {
                 alert('Please choose a valid @user_id (3-15 letters, numbers, or underscores only).');
                 return;
@@ -481,9 +516,6 @@
 
             // Clear input
             messageInput.value = '';
-
-            // In a real app, you'd save this to Firestore here:
-            // db.collection('messages').add({ user_id: userId, text: messageText, timestamp: firebase.firestore.FieldValue.serverTimestamp() });
         }
         
         // --- MAIN APPLICATION FLOW ---
