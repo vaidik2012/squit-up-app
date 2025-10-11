@@ -196,16 +196,14 @@
             document.getElementById('email-password-form').addEventListener('submit', handleEmailPasswordSignIn);
         }
 
-        // --- NEW/UPDATED LOGIN HANDLERS ---
+        // --- AUTHENTICATION HANDLERS ---
 
         /** Handles manual email/password sign-in. */
         async function handleEmailPasswordSignIn(e) {
             e.preventDefault();
             const email = document.getElementById('email-input').value.trim();
             const password = document.getElementById('password-input').value;
-            const errorElement = document.getElementById('error-message');
-            if (errorElement) errorElement.textContent = ''; // Clear previous errors
-
+            
             if (!email || !password) {
                 return renderSignIn('Please enter both email and password.');
             }
@@ -217,7 +215,7 @@
                 await signInWithEmailAndPassword(auth, email, password);
                 
                 // Success: onAuthStateChanged listener will automatically detect login
-                // and call initializeUserProfileAndRenderUI, which then renders the dashboard.
+                // and call initializeUserProfileAndRenderUI, which then renders the dashboard or setup.
             } catch (error) {
                 console.error("Manual Login failed:", error);
                 
@@ -251,24 +249,49 @@
         async function signInWithGoogle() {
             const provider = new GoogleAuthProvider();
             try {
+                // Prompt user to select/confirm Google account
                 await signInWithPopup(auth, provider);
-                // Success is handled by onAuthStateChanged listener
+                // Success is handled by onAuthStateChanged listener -> initializeUserProfileAndRenderUI
             } catch (error) {
                 console.error("Google Sign-In failed:", error);
-                renderSignIn("Google sign-in failed. Please try again.");
+                // Check for 'auth/popup-closed-by-user' or similar, otherwise show generic error
+                if (error.code !== 'auth/popup-closed-by-user') {
+                    renderSignIn("Google sign-in failed. Please try again.");
+                } else {
+                    renderSignIn(); // Just show sign-in screen without error
+                }
             }
         }
         
-        /** Renders the Profile Setup screen. */
+        /** Signs out the current user and sets their status to 'offline'. */
+        async function handleSignOut() {
+            try {
+                if (userId && db) {
+                    const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'user_profiles', userId);
+                    // Use fire-and-forget for setting status
+                    setDoc(userDocRef, { onlineStatus: 'offline' }, { merge: true }).catch(e => console.error("Error setting offline status:", e));
+                }
+                await signOut(auth);
+                // onAuthStateChanged listener will handle rendering renderSignIn()
+            } catch (error) {
+                console.error("Error during sign out:", error);
+            }
+        }
+
+        /** Renders the Profile Setup screen (REQUIRED for Google users to set password/display name). */
         function renderProfileSetup(errorMessage = '') {
             const user = auth.currentUser;
             const container = document.getElementById('app-container');
+            
+            // Check if user is a Google account (needed for the password field)
+            const isGoogleUser = user.providerData.some(p => p.providerId === GoogleAuthProvider.PROVIDER_ID);
+
             container.innerHTML = `
                 <div class="h-full flex items-center justify-center bg-gray-900">
                     <div class="text-center p-8 bg-gray-800 rounded-2xl shadow-2xl max-w-sm w-full border border-gray-700">
-                        <h1 class="text-2xl font-extrabold text-white mb-2">Welcome to FURY!</h1>
+                        <h1 class="text-2xl font-extrabold text-red-400 mb-2">Welcome to FURY!</h1>
                         <p class="text-gray-400 mb-8">
-                            Complete your profile to unlock manual login and set your chat identity.
+                            Complete your profile to set your unique chat ID and manual login password.
                         </p>
                         
                         <p class="text-sm text-gray-400 mb-4 p-2 bg-gray-700 rounded-lg">
@@ -281,20 +304,24 @@
                                 type="text" 
                                 id="user-id-input" 
                                 placeholder="@user_id (e.g., @GamerTag)"
+                                value="${user?.displayName ? '@' + user.displayName.replace(/[^a-zA-Z0-9_]/g, '') : ''}"
                                 required 
                                 pattern="^@[a-zA-Z0-9_]{3,15}$"
                                 title="Must start with @ and contain 3-15 letters, numbers, or underscores."
                                 class="w-full bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-red-500 focus:border-red-500"
                             >
-                            <!-- Password Input -->
-                            <input 
-                                type="password" 
-                                id="new-password-input" 
-                                placeholder="Set Password (min 6 chars)"
-                                required 
-                                minlength="6"
-                                class="w-full bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                            >
+                            
+                            ${isGoogleUser ? `
+                                <input 
+                                    type="password" 
+                                    id="new-password-input" 
+                                    placeholder="Set Password (min 6 chars for manual login)"
+                                    required 
+                                    minlength="6"
+                                    class="w-full bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                                >
+                            ` : ''}
+
                             <button id="setup-btn" type="submit" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-xl transition duration-200 shadow-lg shadow-red-600/30">
                                 Complete Setup
                             </button>
@@ -302,7 +329,7 @@
                         
                         ${errorMessage ? `<p id="error-message" class="text-sm text-red-400 mt-4 font-semibold p-2 bg-gray-900 rounded-lg">${errorMessage}</p>` : ''}
                         
-                        <!-- Added Logout button for the fix -->
+                        <!-- Added Logout button -->
                         <button id="setup-logout-btn" class="text-sm text-gray-500 hover:text-red-500 mt-4 underline">
                             Cancel / Log Out
                         </button>
@@ -314,34 +341,19 @@
             document.getElementById('setup-logout-btn').addEventListener('click', handleSignOut);
         }
 
-        // --- AUTHENTICATION HANDLERS ---
-
-        /** Signs out the current user and sets their status to 'offline'. */
-        async function handleSignOut() {
-            try {
-                if (userId && db) {
-                    const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'user_profiles', userId);
-                    setDoc(userDocRef, { onlineStatus: 'offline' }, { merge: true }).catch(e => console.error("Error setting offline status:", e));
-                }
-                await signOut(auth);
-                // After sign out, the onAuthStateChanged listener will call renderSignIn()
-            } catch (error) {
-                console.error("Error during sign out:", error);
-            }
-        }
-
-        /** Handles Profile Setup: Fixes credential issue and updates profile. */
+        /** Handles Profile Setup: Updates profile and sets password (for Google users). */
         async function handleProfileSetup(e) {
             e.preventDefault();
             const user = auth.currentUser;
             if (!user) {
-                return renderModal("Error", "Session expired. Please sign in again.");
+                return handleSignOut(); // Force sign out if session is invalid
             }
 
             const userIdInput = document.getElementById('user-id-input').value.trim();
-            const newPassword = document.getElementById('new-password-input').value;
+            const passwordInputEl = document.getElementById('new-password-input');
+            const newPassword = passwordInputEl ? passwordInputEl.value : null;
 
-            if (newPassword.length < 6) {
+            if (newPassword && newPassword.length < 6) {
                 return renderProfileSetup('Password must be at least 6 characters long.');
             }
             if (!userIdInput.match(/^@[a-zA-Z0-9_]{3,15}$/)) {
@@ -351,13 +363,15 @@
             renderLoading("Setting up profile...");
 
             try {
-                // 1. Update the user's display name
+                // 1. Update the user's display name (used for chatting)
                 await updateProfile(user, { displayName: userIdInput });
 
-                // 2. Set the password
-                await updatePassword(user, newPassword);
+                // 2. Set the password (ONLY for Google users who don't have one set)
+                if (newPassword) {
+                    await updatePassword(user, newPassword);
+                }
 
-                // 3. Update the Firestore profile
+                // 3. Update the Firestore profile to mark setup as complete
                 const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'user_profiles', user.uid);
                 await setDoc(userDocRef, {
                     displayName: userIdInput,
@@ -365,18 +379,17 @@
                     lastActive: serverTimestamp(),
                 }, { merge: true });
 
-                // Success: Manually update profile state and render chat UI
+                // Success: Update local state and render chat UI
                 currentUserProfile = { ...currentUserProfile, displayName: userIdInput, isSetupComplete: true };
-                currentView = { type: 'global', id: 'global_fury_chat', displayName: 'Global FURY Chat' };
-                renderDashboard();
+                renderDashboardView();
             } catch (error) {
                 console.error("Profile Setup failed:", error);
                 let message = 'Profile setup failed. Please try again.';
                 
                 if (error.code === 'auth/weak-password') {
                     message = 'Password is too weak. Choose a stronger one.';
-                } else if (error.code === 'auth/requires-recent-login' || error.code === 'auth/credential-too-old') {
-                    // CRITICAL FIX: Prompt sign out/in and re-render the sign-in page with a clear message.
+                } else if (error.code === 'auth/requires-recent-login') {
+                    // This error occurs if the session is too old when updating sensitive info like password
                     handleSignOut().then(() => {
                         renderSignIn('Security check failed. Please sign in again immediately to complete your profile.');
                     });
@@ -387,6 +400,12 @@
         }
         
         // --- CHAT AND DASHBOARD LOGIC (Simplified/Refactored) ---
+        
+        /** Sets the initial view and calls the dashboard renderer. */
+        function renderDashboardView() {
+            currentView = { type: 'global', id: 'global_fury_chat', displayName: 'Global FURY Chat' };
+            renderDashboard();
+        }
 
         /** Renders a single message into the messages container. */
         function renderMessages() {
@@ -442,7 +461,7 @@
             }
         }
 
-        /** Sends a message to the currently selected view (global or DM). */
+        /** Sends a message to the currently selected view (global or DM). (unchanged) */
         async function sendMessage(text) {
             if (!userId || !text.trim() || !db) return;
 
@@ -475,7 +494,7 @@
             }
         }
 
-        /** Sets up the listener for the currently selected chat view. */
+        /** Sets up the listener for the currently selected chat view. (unchanged) */
         function setupChatListener() {
             if (!userId || !db) return;
             
@@ -513,7 +532,7 @@
             });
         }
         
-        /** Renders the list of Direct Messages in the sidebar. */
+        /** Renders the list of Direct Messages in the sidebar. (unchanged) */
         function renderDMsList() {
              const dmListContainer = document.getElementById('dm-list');
              if (!dmListContainer) return;
@@ -545,7 +564,7 @@
              });
         }
 
-        /** Listener for Direct Messages and Friend System. */
+        /** Listener for Direct Messages and Friend System. (unchanged) */
         function setupFriendsAndDmsListener() {
             if (!userId || !db) return;
 
@@ -603,9 +622,33 @@
             });
         }
 
-        // --- DASHBOARD RENDERING ---
+        /** Handles switching between chat views (Global, DM). (unchanged) */
+        function handleViewChange(e) {
+            const button = e.currentTarget;
+            const id = button.getAttribute('data-id');
+            const type = button.getAttribute('data-type');
+            const name = button.getAttribute('data-name');
+            
+            currentView = { id, type, displayName: name };
 
-        /** Renders the main dashboard layout. */
+            const header = document.getElementById('chat-header-name');
+            const input = document.getElementById('message-input');
+
+            if (header) header.textContent = `# ${name}`;
+            if (input) input.placeholder = `Message # ${name}`;
+
+            // Re-render sidebars to highlight active chat
+            document.querySelectorAll('.server-switch-btn').forEach(btn => {
+                const isGlobalActive = type === 'global' && btn.getAttribute('data-type') === 'global';
+                btn.className = `server-switch-btn w-12 h-12 flex items-center justify-center transition duration-200 shadow-xl ${isGlobalActive ? 'bg-red-600 rounded-2xl hover:shadow-red-600/30' : 'bg-gray-800 rounded-3xl hover:bg-gray-700 hover:rounded-2xl'}`;
+            });
+            renderDMsList(); 
+
+            // Restart chat listener for the new view
+            setupChatListener(); 
+        }
+
+        /** Renders the main dashboard layout. (unchanged) */
         function renderDashboard() {
             const userDisplayId = currentUserProfile?.displayName || `@user_${userId.substring(0, 8)}`;
             const container = document.getElementById('app-container');
@@ -709,32 +752,7 @@
             setupFriendsAndDmsListener(); // Start listening to friend list and requests
         }
 
-        /** Handles switching between chat views (Global, DM). */
-        function handleViewChange(e) {
-            const button = e.currentTarget;
-            const id = button.getAttribute('data-id');
-            const type = button.getAttribute('data-type');
-            const name = button.getAttribute('data-name');
-            
-            currentView = { id, type, displayName: name };
-
-            const header = document.getElementById('chat-header-name');
-            const input = document.getElementById('message-input');
-
-            if (header) header.textContent = `# ${name}`;
-            if (input) input.placeholder = `Message # ${name}`;
-
-            // Re-render sidebars to highlight active chat
-            document.querySelectorAll('.server-switch-btn').forEach(btn => {
-                const isGlobalActive = type === 'global' && btn.getAttribute('data-type') === 'global';
-                btn.className = `server-switch-btn w-12 h-12 flex items-center justify-center transition duration-200 shadow-xl ${isGlobalActive ? 'bg-red-600 rounded-2xl hover:shadow-red-600/30' : 'bg-gray-800 rounded-3xl hover:bg-gray-700 hover:rounded-2xl'}`;
-            });
-            renderDMsList(); 
-
-            // Restart chat listener for the new view
-            setupChatListener(); 
-        }
-
+        // --- FRIEND AND MODAL LOGIC (Unchanged for the current request) ---
         /** Renders the Friend/DM management modal. (omitted for brevity, unchanged) */
         function renderFriendModal() {
             const container = document.getElementById('modal-container');
@@ -990,13 +1008,19 @@
         /** CRITICAL: Ensures the profile exists and determines whether to render Setup or Dashboard. */
         async function initializeUserProfileAndRenderUI(uid) {
             renderLoading("Loading profile data...");
-            const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'user_profiles', uid);
             const user = auth.currentUser;
+            if (!user) return renderSignIn("Authentication failed during profile check."); // Safety exit
+            
+            const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'user_profiles', uid);
             const defaultDisplay = user?.email ? `@${user.email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '')}` : `@user_${uid.substring(0, 8)}`;
-            let isSetupComplete = false;
+            
+            // Determine user type from Firebase provider data
+            const isGoogleUser = user.providerData.some(p => p.providerId === GoogleAuthProvider.PROVIDER_ID);
+            const isManualUser = user.providerData.some(p => p.providerId === 'password');
+            let docSnap;
 
             try {
-                const docSnap = await getDoc(userDocRef);
+                docSnap = await getDoc(userDocRef);
                 
                 if (!docSnap.exists()) {
                     // Profile does not exist, create it with setup incomplete
@@ -1005,41 +1029,47 @@
                         displayName: user.displayName || defaultDisplay,
                         email: user?.email || '',
                         onlineStatus: 'online', 
-                        isSetupComplete: false, 
+                        // Only auto-complete setup for manual users who just logged in
+                        isSetupComplete: isManualUser, 
                         lastActive: serverTimestamp(),
                         createdAt: serverTimestamp(),
                     });
-                    currentUserProfile = { displayName: user.displayName || defaultDisplay, isSetupComplete: false, onlineStatus: 'online' };
+                    currentUserProfile = { displayName: user.displayName || defaultDisplay, isSetupComplete: isManualUser, onlineStatus: 'online' };
 
                 } else {
-                    // Profile exists, update status and check setup state
+                    // Profile exists, update status
                     currentUserProfile = docSnap.data();
-                    isSetupComplete = currentUserProfile.isSetupComplete === true;
                     
+                    // If the user is a manual user and their profile was somehow incomplete, complete it now.
+                    if (isManualUser && currentUserProfile.isSetupComplete !== true) {
+                        currentUserProfile.isSetupComplete = true;
+                    }
+
                     await setDoc(userDocRef, {
                         onlineStatus: 'online',
+                        isSetupComplete: currentUserProfile.isSetupComplete, // Persist the updated state
                         lastActive: serverTimestamp(),
                     }, { merge: true });
                 }
             } catch (error) {
                 console.error("Error creating/updating user profile document (Public Path):", error.message);
-                currentUserProfile = currentUserProfile || { displayName: defaultDisplay, isSetupComplete: false, onlineStatus: 'online' };
+                // Fail-safe local profile data
+                currentUserProfile = currentUserProfile || { displayName: defaultDisplay, isSetupComplete: isManualUser, onlineStatus: 'online' };
             }
             
             // --- IMMEDIATE RENDERING LOGIC ---
+            
+            // 1. If profile setup is explicitly complete (or auto-completed for manual user), go to Dashboard.
             if (currentUserProfile.isSetupComplete === true) {
-                currentView = { type: 'global', id: 'global_fury_chat', displayName: 'Global FURY Chat' };
-                renderDashboard(); 
-            } else if (user && user.providerData.some(p => p.providerId === GoogleAuthProvider.PROVIDER_ID) && !user.isAnonymous) {
-                // Only prompt setup for Google users who are incomplete
+                renderDashboardView();
+            } 
+            // 2. If it's a Google user, they MUST set a password and display name manually.
+            else if (isGoogleUser) {
                 renderProfileSetup();
-            } else if (user && user.email && !user.isAnonymous) {
-                 // For manual email/password users, if authenticated but setup is false, show setup page
-                 renderProfileSetup();
-            } else {
-                 // If not a Google or manual setup user, but authenticated (e.g. from an older setup flow), assume ready for chat.
-                 currentView = { type: 'global', id: 'global_fury_chat', displayName: 'Global FURY Chat' };
-                 renderDashboard(); 
+            }
+            // 3. Fallback: If authenticated but status is neither complete nor a Google user (e.g., old manual user), default to dashboard.
+            else {
+                renderDashboardView(); 
             }
             
             // Start the real-time listener for user profile (for friend system)
@@ -1071,12 +1101,13 @@
 
             renderLoading("Authenticating...");
 
-            // Set up Authentication Listener
+            // Set up Authentication Listener - This is the core function that drives the UI state
             onAuthStateChanged(auth, async (user) => {
                 isAuthReady = true; 
 
                 if (user) {
                     userId = user.uid;
+                    // FIX: This call must resolve to a Dashboard or Setup screen to prevent loading loop.
                     await initializeUserProfileAndRenderUI(userId); 
                 } else {
                     userId = null;
