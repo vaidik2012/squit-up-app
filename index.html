@@ -820,22 +820,17 @@
         }
 
         async function checkUserProfile(user) {
+            // Only proceed if user is properly authenticated with Google
+            if (!user || !user.email || !user.uid) {
+                console.error('Invalid user object, redirecting to auth');
+                showAuthPage();
+                return;
+            }
+
             try {
-                console.log('Checking user profile for:', user.uid, user.email);
+                console.log('Checking user profile for authenticated user:', user.uid, user.email);
                 
-                // First, try to find user by email in our database
-                const emailQuery = await db.collection('users').where('email', '==', user.email).get();
-                
-                if (!emailQuery.empty) {
-                    // User exists with this email, log them in
-                    const userDoc = emailQuery.docs[0];
-                    currentUser = { ...userDoc.data(), uid: user.uid };
-                    console.log('Existing user found by email, logging in:', currentUser);
-                    showDashboard();
-                    return;
-                }
-                
-                // Check by Firebase UID as backup
+                // First, try to find user by Firebase UID (most reliable)
                 const userDoc = await db.collection('users').doc(user.uid).get();
                 if (userDoc.exists) {
                     currentUser = { ...userDoc.data(), uid: user.uid };
@@ -844,8 +839,28 @@
                     return;
                 }
                 
-                // New user - show setup modal
-                console.log('New user detected, showing setup modal');
+                // Backup: try to find user by email in our database
+                const emailQuery = await db.collection('users').where('email', '==', user.email).get();
+                if (!emailQuery.empty) {
+                    // User exists with this email, update their UID and log them in
+                    const userDoc = emailQuery.docs[0];
+                    const userData = userDoc.data();
+                    
+                    // Update the document with the correct UID
+                    await db.collection('users').doc(user.uid).set(userData);
+                    // Delete the old document if it has a different ID
+                    if (userDoc.id !== user.uid) {
+                        await userDoc.ref.delete();
+                    }
+                    
+                    currentUser = { ...userData, uid: user.uid };
+                    console.log('Existing user found by email, migrated to correct UID, logging in:', currentUser);
+                    showDashboard();
+                    return;
+                }
+                
+                // New user - show setup modal (only after successful Google auth)
+                console.log('New authenticated user detected, showing setup modal');
                 currentUser = { 
                     uid: user.uid, 
                     email: user.email, 
@@ -858,16 +873,21 @@
             } catch (error) {
                 console.error('Error checking user profile:', error);
                 
-                // For new users or database issues, proceed with setup
-                console.log('Database error, proceeding with new user setup');
-                currentUser = { 
-                    uid: user.uid, 
-                    email: user.email, 
-                    displayName: user.displayName,
-                    photoURL: user.photoURL
-                };
-                document.getElementById('authPage').style.display = 'none';
-                document.getElementById('setupModal').style.display = 'block';
+                // Only proceed with setup if user is properly authenticated
+                if (user.email && user.uid) {
+                    console.log('Database error, but user is authenticated, proceeding with new user setup');
+                    currentUser = { 
+                        uid: user.uid, 
+                        email: user.email, 
+                        displayName: user.displayName,
+                        photoURL: user.photoURL
+                    };
+                    document.getElementById('authPage').style.display = 'none';
+                    document.getElementById('setupModal').style.display = 'block';
+                } else {
+                    console.error('User not properly authenticated, staying on auth page');
+                    showAuthPage();
+                }
             }
         }
 
@@ -1206,5 +1226,5 @@
         `;
         document.head.appendChild(style);
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'98cf7cb8306033a2',t:'MTc2MDE5NzU1NC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'98cf8bc6260da5d3',t:'MTc2MDE5ODE3MC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
