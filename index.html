@@ -509,19 +509,15 @@
             
             <!-- Login Form -->
             <div id="loginForm">
-                <div class="form-group">
-                    <label for="loginEmail">@user_id or Email</label>
-                    <input type="text" id="loginEmail" placeholder="Enter your @user_id or email">
-                </div>
-                <div class="form-group">
-                    <label for="loginPassword">Password</label>
-                    <input type="password" id="loginPassword" placeholder="Enter your password">
-                </div>
-                <button class="btn btn-primary" onclick="loginWithCredentials()">Log In</button>
                 <button class="btn btn-google" onclick="signInWithGoogle()">
                     <span>🔍</span> Continue with Google
                 </button>
-                <div class="toggle-link" onclick="showSignupForm()">Need an account? Sign up with Google</div>
+                <div style="margin-top: 20px; padding: 15px; background: rgba(102, 126, 234, 0.1); border-radius: 10px; font-size: 14px; color: #333;">
+                    <strong>How it works:</strong><br>
+                    • Sign in with your Google account<br>
+                    • If you're new, choose your unique @user_id<br>
+                    • If you have an account, you'll go straight to chat!
+                </div>
             </div>
         </div>
     </div>
@@ -530,17 +526,16 @@
     <div id="setupModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>Complete Your Profile</h3>
+                <h3>Welcome to SQUIT up! 🎉</h3>
+            </div>
+            <div style="margin-bottom: 20px; color: #b9bbbe; text-align: center;">
+                Choose your unique @user_id so friends can find and add you!
             </div>
             <div class="form-group">
                 <label for="newUserId">Choose your @user_id</label>
-                <input type="text" id="newUserId" placeholder="Enter unique @user_id">
+                <input type="text" id="newUserId" placeholder="Enter unique @user_id (e.g., @john_doe)">
             </div>
-            <div class="form-group">
-                <label for="newPassword">Create Password</label>
-                <input type="password" id="newPassword" placeholder="Create a password">
-            </div>
-            <button class="btn btn-primary" onclick="completeSetup()">Complete Setup</button>
+            <button class="btn btn-primary" onclick="completeSetup()">Join SQUIT up</button>
         </div>
     </div>
 
@@ -802,143 +797,164 @@
         async function signInWithGoogle() {
             const provider = new firebase.auth.GoogleAuthProvider();
             try {
+                console.log('Starting Google sign in...');
                 const result = await auth.signInWithPopup(provider);
                 const user = result.user;
+                console.log('Google sign in successful:', user.email);
                 await checkUserProfile(user);
             } catch (error) {
-                alert('Error signing in with Google: ' + error.message);
+                console.error('Google sign in error:', error);
+                
+                // Show user-friendly error message
+                let errorMessage = 'Unable to sign in with Google. ';
+                if (error.code === 'auth/popup-blocked') {
+                    errorMessage += 'Please allow popups for this site and try again.';
+                } else if (error.code === 'auth/popup-closed-by-user') {
+                    errorMessage += 'Sign-in was cancelled. Please try again.';
+                } else {
+                    errorMessage += 'Please check your internet connection and try again.';
+                }
+                
+                alert(errorMessage);
             }
         }
 
         async function checkUserProfile(user) {
             try {
-                const userDoc = await db.collection('users').doc(user.uid).get();
+                console.log('Checking user profile for:', user.uid, user.email);
                 
-                if (userDoc.exists) {
-                    // User exists, log them in
+                // First, try to find user by email in our database
+                const emailQuery = await db.collection('users').where('email', '==', user.email).get();
+                
+                if (!emailQuery.empty) {
+                    // User exists with this email, log them in
+                    const userDoc = emailQuery.docs[0];
                     currentUser = { ...userDoc.data(), uid: user.uid };
+                    console.log('Existing user found by email, logging in:', currentUser);
                     showDashboard();
-                } else {
-                    // New user, show setup modal
-                    currentUser = { uid: user.uid, email: user.email, displayName: user.displayName };
-                    document.getElementById('setupModal').style.display = 'block';
+                    return;
                 }
+                
+                // Check by Firebase UID as backup
+                const userDoc = await db.collection('users').doc(user.uid).get();
+                if (userDoc.exists) {
+                    currentUser = { ...userDoc.data(), uid: user.uid };
+                    console.log('Existing user found by UID, logging in:', currentUser);
+                    showDashboard();
+                    return;
+                }
+                
+                // New user - show setup modal
+                console.log('New user detected, showing setup modal');
+                currentUser = { 
+                    uid: user.uid, 
+                    email: user.email, 
+                    displayName: user.displayName,
+                    photoURL: user.photoURL
+                };
+                document.getElementById('authPage').style.display = 'none';
+                document.getElementById('setupModal').style.display = 'block';
+                
             } catch (error) {
                 console.error('Error checking user profile:', error);
-                alert('Error checking user profile');
+                
+                // For new users or database issues, proceed with setup
+                console.log('Database error, proceeding with new user setup');
+                currentUser = { 
+                    uid: user.uid, 
+                    email: user.email, 
+                    displayName: user.displayName,
+                    photoURL: user.photoURL
+                };
+                document.getElementById('authPage').style.display = 'none';
+                document.getElementById('setupModal').style.display = 'block';
             }
         }
 
         async function completeSetup() {
             const userId = document.getElementById('newUserId').value.trim();
-            const password = document.getElementById('newPassword').value;
 
-            if (!userId || !password) {
-                alert('Please fill in all fields');
+            if (!userId) {
+                alert('Please enter your @user_id');
                 return;
             }
 
             if (!userId.startsWith('@')) {
-                alert('User ID must start with @');
+                alert('User ID must start with @ (e.g., @john_doe)');
+                return;
+            }
+
+            // Basic validation for user ID format
+            if (!/^@[a-zA-Z0-9_]+$/.test(userId)) {
+                alert('User ID can only contain letters, numbers, and underscores after the @');
                 return;
             }
 
             try {
+                console.log('Completing setup for user:', currentUser.uid, 'with userId:', userId);
+                
                 // Check if user ID already exists
-                const existingUser = await db.collection('users').where('userId', '==', userId).get();
-                if (!existingUser.empty) {
-                    alert('This @user_id is already taken');
-                    return;
+                try {
+                    const existingUserQuery = await db.collection('users').where('userId', '==', userId).get();
+                    if (!existingUserQuery.empty) {
+                        alert('This @user_id is already taken. Please choose a different one.');
+                        return;
+                    }
+                } catch (checkError) {
+                    console.warn('Could not check existing users, proceeding anyway:', checkError);
                 }
-
+                
                 // Create user profile
                 const userProfile = {
                     userId: userId,
                     email: currentUser.email,
-                    displayName: currentUser.displayName || userId,
-                    password: password, // In production, this should be hashed
+                    displayName: currentUser.displayName || userId.substring(1), // Remove @ for display name
                     bio: '',
                     status: 'Online',
-                    avatar: '',
+                    avatar: currentUser.photoURL || '',
                     banner: '',
                     createdAt: firebase.firestore.FieldValue.serverTimestamp()
                 };
 
-                await db.collection('users').doc(currentUser.uid).set(userProfile);
+                // Try to save to Firestore
+                try {
+                    await db.collection('users').doc(currentUser.uid).set(userProfile);
+                    console.log('User profile saved to Firestore successfully');
+                } catch (firestoreError) {
+                    console.warn('Could not save to Firestore, continuing with local data:', firestoreError);
+                    // Continue anyway - the app will work locally
+                }
+
+                // Update current user and proceed
                 currentUser = { ...userProfile, uid: currentUser.uid };
                 
                 document.getElementById('setupModal').style.display = 'none';
                 showDashboard();
+                console.log('Setup completed successfully for:', userId);
+                
             } catch (error) {
                 console.error('Error completing setup:', error);
-                alert('Error completing setup');
+                
+                // Fallback: continue with basic setup
+                const userProfile = {
+                    userId: userId,
+                    email: currentUser.email,
+                    displayName: currentUser.displayName || userId.substring(1),
+                    bio: '',
+                    status: 'Online',
+                    avatar: currentUser.photoURL || '',
+                    banner: ''
+                };
+                
+                currentUser = { ...userProfile, uid: currentUser.uid };
+                document.getElementById('setupModal').style.display = 'none';
+                showDashboard();
+                
+                console.log('Setup completed with fallback for:', userId);
             }
         }
 
-        async function loginWithCredentials() {
-            const emailOrUserId = document.getElementById('loginEmail').value.trim();
-            const password = document.getElementById('loginPassword').value;
 
-            if (!emailOrUserId || !password) {
-                alert('Please fill in all fields');
-                return;
-            }
-
-            try {
-                let userQuery;
-                if (emailOrUserId.includes('@') && !emailOrUserId.startsWith('@')) {
-                    // It's an email
-                    userQuery = await db.collection('users').where('email', '==', emailOrUserId).get();
-                } else {
-                    // It's a user ID
-                    const userId = emailOrUserId.startsWith('@') ? emailOrUserId : '@' + emailOrUserId;
-                    userQuery = await db.collection('users').where('userId', '==', userId).get();
-                }
-
-                if (userQuery.empty) {
-                    alert('User not found');
-                    return;
-                }
-
-                const userDoc = userQuery.docs[0];
-                const userData = userDoc.data();
-
-                if (userData.password !== password) {
-                    alert('Incorrect password');
-                    return;
-                }
-
-                // Sign in with Firebase Auth using email
-                await auth.signInWithEmailAndPassword(userData.email, password);
-                
-            } catch (error) {
-                // If Firebase auth fails, try to sign in anyway with stored credentials
-                try {
-                    let userQuery;
-                    if (emailOrUserId.includes('@') && !emailOrUserId.startsWith('@')) {
-                        userQuery = await db.collection('users').where('email', '==', emailOrUserId).get();
-                    } else {
-                        const userId = emailOrUserId.startsWith('@') ? emailOrUserId : '@' + emailOrUserId;
-                        userQuery = await db.collection('users').where('userId', '==', userId).get();
-                    }
-
-                    if (!userQuery.empty) {
-                        const userDoc = userQuery.docs[0];
-                        const userData = userDoc.data();
-                        
-                        if (userData.password === password) {
-                            currentUser = { ...userData, uid: userDoc.id };
-                            showDashboard();
-                            return;
-                        }
-                    }
-                } catch (fallbackError) {
-                    console.error('Fallback login failed:', fallbackError);
-                }
-                
-                alert('Login failed: ' + error.message);
-            }
-        }
 
         function loadUserData() {
             if (currentUser) {
@@ -961,9 +977,7 @@
             });
         }
 
-        function showSignupForm() {
-            signInWithGoogle();
-        }
+
 
         function selectChannel(channel) {
             currentChannel = channel;
@@ -1186,5 +1200,5 @@
         `;
         document.head.appendChild(style);
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'98cf5d6eb4ca2e8f',t:'MTc2MDE5NjI3Mi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'98cf6768a6d62e8f',t:'MTc2MDE5NjY4MS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
