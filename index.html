@@ -839,14 +839,14 @@
                     return;
                 }
                 
-                // Backup: try to find user by email in our database
+                // Critical: Check if ANY account exists with this email (prevent duplicates)
                 const emailQuery = await db.collection('users').where('email', '==', user.email).get();
                 if (!emailQuery.empty) {
-                    // User exists with this email, update their UID and log them in
+                    // User exists with this email - log them into their existing account
                     const userDoc = emailQuery.docs[0];
                     const userData = userDoc.data();
                     
-                    // Update the document with the correct UID
+                    // Update the document with the correct UID if needed
                     await db.collection('users').doc(user.uid).set(userData);
                     // Delete the old document if it has a different ID
                     if (userDoc.id !== user.uid) {
@@ -854,9 +854,38 @@
                     }
                     
                     currentUser = { ...userData, uid: user.uid };
-                    console.log('Existing user found by email, migrated to correct UID, logging in:', currentUser);
+                    console.log('Existing account found with this Gmail, logging in:', currentUser);
                     showDashboard();
+                    
+                    // Show message about existing account
+                    setTimeout(() => {
+                        alert(`Welcome back! 🎉\n\nI found your existing account "${userData.userId}" linked to ${user.email}.\n\nYou've been logged into your previous account automatically!`);
+                    }, 500);
                     return;
+                }
+                
+                // Check localStorage for previously created account (prevents re-creation after refresh)
+                const savedUserData = localStorage.getItem('squitup_user_' + user.uid);
+                if (savedUserData) {
+                    try {
+                        const userData = JSON.parse(savedUserData);
+                        currentUser = { ...userData, uid: user.uid };
+                        console.log('Found saved user data in localStorage, logging in:', currentUser);
+                        showDashboard();
+                        
+                        // Try to sync with database in background
+                        db.collection('users').doc(user.uid).set(userData).catch(error => {
+                            console.warn('Background sync failed:', error);
+                        });
+                        
+                        setTimeout(() => {
+                            alert(`Welcome back, ${userData.userId}! 🎉\n\nYou've been automatically logged into your account.`);
+                        }, 500);
+                        return;
+                    } catch (e) {
+                        console.warn('Invalid saved user data, proceeding with new setup');
+                        localStorage.removeItem('squitup_user_' + user.uid);
+                    }
                 }
                 
                 // New user - show setup modal (only after successful Google auth)
@@ -872,6 +901,25 @@
                 
             } catch (error) {
                 console.error('Error checking user profile:', error);
+                
+                // Check localStorage as fallback even if database fails
+                const savedUserData = localStorage.getItem('squitup_user_' + user.uid);
+                if (savedUserData && user.email && user.uid) {
+                    try {
+                        const userData = JSON.parse(savedUserData);
+                        currentUser = { ...userData, uid: user.uid };
+                        console.log('Database error, but found localStorage data, logging in:', currentUser);
+                        showDashboard();
+                        
+                        setTimeout(() => {
+                            alert(`Welcome back, ${userData.userId}! 🎉\n\nYou've been automatically logged into your account.`);
+                        }, 500);
+                        return;
+                    } catch (e) {
+                        console.warn('Invalid saved user data');
+                        localStorage.removeItem('squitup_user_' + user.uid);
+                    }
+                }
                 
                 // Only proceed with setup if user is properly authenticated
                 if (user.email && user.uid) {
@@ -938,6 +986,9 @@
                     // Update current user and proceed immediately
                     currentUser = { ...userProfile, uid: currentUser.uid };
                     
+                    // Save to localStorage immediately for persistence
+                    localStorage.setItem('squitup_user_' + currentUser.uid, JSON.stringify(userProfile));
+                    
                     // Hide modal and show dashboard immediately
                     document.getElementById('setupModal').style.display = 'none';
                     showDashboard();
@@ -968,6 +1019,10 @@
                     };
                     
                     currentUser = { ...userProfile, uid: currentUser.uid };
+                    
+                    // Save to localStorage for persistence
+                    localStorage.setItem('squitup_user_' + currentUser.uid, JSON.stringify(userProfile));
+                    
                     document.getElementById('setupModal').style.display = 'none';
                     showDashboard();
                     
@@ -998,6 +1053,10 @@
 
         function logout() {
             auth.signOut().then(() => {
+                // Clear localStorage when user logs out
+                if (currentUser && currentUser.uid) {
+                    localStorage.removeItem('squitup_user_' + currentUser.uid);
+                }
                 currentUser = null;
                 showAuthPage();
             });
@@ -1226,5 +1285,5 @@
         `;
         document.head.appendChild(style);
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'98cf8bc6260da5d3',t:'MTc2MDE5ODE3MC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'98cf96b7714c33a2',t:'MTc2MDE5ODYxOS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
