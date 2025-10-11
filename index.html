@@ -9,7 +9,6 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-analytics-compat.js"></script>
     <style>
-        /* CSS styles (for layout, auth, and dashboard) */
         body {
             box-sizing: border-box;
             margin: 0;
@@ -19,7 +18,7 @@
             height: 100%;
             overflow-x: hidden;
         }
-
+        
         html, body {
             height: 100%;
         }
@@ -67,39 +66,6 @@
             color: #333;
             font-weight: 500;
         }
-
-        /* Styles for Prefix Input Fix */
-        .input-with-prefix {
-            display: flex;
-            align-items: center;
-            border: 2px solid #e1e5e9;
-            border-radius: 10px;
-            padding: 0;
-            transition: border-color 0.3s;
-        }
-        .input-with-prefix:focus-within {
-            border-color: #667eea;
-        }
-        .input-prefix {
-            padding: 12px 0 12px 12px;
-            color: #777;
-            font-size: 16px;
-        }
-        .form-group input.prefixed-input {
-            width: 100%;
-            padding: 12px;
-            border: none;
-            border-radius: 0 10px 10px 0;
-            font-size: 16px;
-            box-sizing: border-box;
-            background: transparent;
-        }
-        .form-group input.prefixed-input:focus {
-            outline: none;
-            border-color: transparent;
-        }
-        /* End Prefix Input Styles */
-
 
         .form-group input {
             width: 100%;
@@ -150,4 +116,1075 @@
 
         .btn-primary:hover {
             transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(102, 1
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .toggle-link {
+            color: #667eea;
+            cursor: pointer;
+            text-decoration: underline;
+            margin-top: 15px;
+            display: inline-block;
+        }
+
+        .dashboard {
+            display: none;
+            height: 100%;
+            background: #36393f;
+            color: white;
+        }
+
+        .dashboard-header {
+            background: #2f3136;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #202225;
+        }
+
+        .dashboard-content {
+            display: flex;
+            height: calc(100% - 70px);
+        }
+
+        .sidebar {
+            width: 240px;
+            background: #2f3136;
+            border-right: 1px solid #202225;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-section {
+            padding: 15px;
+            border-bottom: 1px solid #202225;
+        }
+
+        .sidebar-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: #8e9297;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+
+        .sidebar-item {
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-bottom: 2px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .sidebar-item:hover {
+            background: #393c43;
+        }
+
+        .sidebar-item.active {
+            background: #5865f2;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-header {
+            background: #36393f;
+            padding: 15px 20px;
+            border-bottom: 1px solid #202225;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: #36393f;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+            gap: 15px;
+        }
+
+        .message-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #5865f2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        .message-content {
+            flex: 1;
+        }
+
+        .message-author {
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .message-text {
+            color: #dcddde;
+        }
+
+        .chat-input {
+            padding: 20px;
+            background: #40444b;
+            border-top: 1px solid #202225;
+        }
+
+        .input-container {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .chat-input input {
+            flex: 1;
+            padding: 12px 15px;
+            border: none;
+            border-radius: 25px;
+            background: #36393f;
+            color: white;
+            font-size: 14px;
+        }
+
+        .chat-input input:focus {
+            outline: none;
+            background: #2f3136;
+        }
+
+        .emoji-btn, .gif-btn, .sticker-btn {
+            background: none;
+            border: none;
+            color: #b9bbbe;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 4px;
+        }
+
+        .emoji-btn:hover, .gif-btn:hover, .sticker-btn:hover {
+            background: #36393f;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+        }
+
+        .modal-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #36393f;
+            border-radius: 10px;
+            padding: 30px;
+            width: 90%;
+            max-width: 500px;
+            color: white;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            color: #b9bbbe;
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        .user-profile {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 4px;
+        }
+
+        .user-profile:hover {
+            background: #393c43;
+        }
+
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #5865f2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #3ba55c;
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            border: 2px solid #2f3136;
+        }
+
+        .friend-request {
+            background: #2f3136;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 12px;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            margin-left: 5px;
+        }
+
+        .btn-accept {
+            background: #3ba55c;
+            color: white;
+        }
+
+        .btn-decline {
+            background: #ed4245;
+            color: white;
+        }
+
+        .server-list {
+            width: 72px;
+            background: #202225;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 12px 0;
+            gap: 8px;
+        }
+
+        .server-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: #5865f2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: border-radius 0.2s;
+            font-weight: bold;
+            color: white;
+        }
+
+        .server-icon:hover {
+            border-radius: 16px;
+        }
+
+        .server-icon.active {
+            border-radius: 16px;
+            background: #5865f2;
+        }
+
+        .add-server {
+            background: #36393f;
+            color: #3ba55c;
+            font-size: 24px;
+        }
+
+        .add-server:hover {
+            background: #3ba55c;
+            color: white;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-content {
+                flex-direction: column;
+            }
+            
+            .sidebar {
+                width: 100%;
+                height: auto;
+                order: 2;
+            }
+            
+            .server-list {
+                width: 100%;
+                flex-direction: row;
+                height: auto;
+                padding: 8px;
+                overflow-x: auto;
+            }
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .profile-banner {
+            height: 120px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px 10px 0 0;
+            position: relative;
+            cursor: pointer;
+        }
+
+        .profile-avatar-large {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: #5865f2;
+            position: absolute;
+            bottom: -40px;
+            left: 20px;
+            border: 6px solid #36393f;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        .profile-info {
+            padding: 50px 20px 20px;
+        }
+
+        .profile-username {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .profile-bio {
+            color: #b9bbbe;
+            margin-bottom: 15px;
+        }
+
+        .profile-status {
+            background: #2f3136;
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Authentication Page -->
+    <div id="authPage" class="container">
+        <div class="auth-card">
+            <div class="logo">SQUIT up</div>
+            <div class="subtitle">Connect with friends and communities</div>
+            
+            <!-- Login Form -->
+            <div id="loginForm">
+                <div class="form-group">
+                    <label for="loginEmail">@user_id or Email</label>
+                    <input type="text" id="loginEmail" placeholder="Enter your @user_id or email">
+                </div>
+                <div class="form-group">
+                    <label for="loginPassword">Password</label>
+                    <input type="password" id="loginPassword" placeholder="Enter your password">
+                </div>
+                <button class="btn btn-primary" onclick="loginWithCredentials()">Log In</button>
+                <button class="btn btn-google" onclick="signInWithGoogle()">
+                    <span>🔍</span> Continue with Google
+                </button>
+                <div class="toggle-link" onclick="showSignupForm()">Need an account? Sign up with Google</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Setup User ID Modal -->
+    <div id="setupModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Complete Your Profile</h3>
+            </div>
+            <div class="form-group">
+                <label for="newUserId">Choose your @user_id</label>
+                <input type="text" id="newUserId" placeholder="Enter unique @user_id">
+            </div>
+            <div class="form-group">
+                <label for="newPassword">Create Password</label>
+                <input type="password" id="newPassword" placeholder="Create a password">
+            </div>
+            <button class="btn btn-primary" onclick="completeSetup()">Complete Setup</button>
+        </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="dashboard" class="dashboard">
+        <!-- Server List -->
+        <div class="server-list">
+            <div class="server-icon active" onclick="selectServer('home')">H</div>
+            <div class="server-icon add-server" onclick="showCreateServerModal()">+</div>
+            <div id="serverList"></div>
+        </div>
+
+        <!-- Main Dashboard Content -->
+        <div class="dashboard-content">
+            <!-- Sidebar -->
+            <div class="sidebar">
+                <div class="sidebar-section">
+                    <div class="sidebar-title">Direct Messages</div>
+                    <div class="sidebar-item active" onclick="selectChannel('general')">
+                        <span>#</span> general
+                    </div>
+                    <div id="dmList"></div>
+                </div>
+                
+                <div class="sidebar-section">
+                    <div class="sidebar-title">Friends</div>
+                    <div class="sidebar-item" onclick="showAddFriendModal()">
+                        <span>+</span> Add Friend
+                    </div>
+                    <div class="sidebar-item" onclick="showFriendRequests()">
+                        <span>📬</span> Friend Requests
+                    </div>
+                    <div id="friendsList"></div>
+                </div>
+
+                <!-- User Profile Section -->
+                <div style="margin-top: auto; padding: 15px; border-top: 1px solid #202225;">
+                    <div class="user-profile" onclick="showProfileModal()">
+                        <div style="position: relative;">
+                            <div class="user-avatar" id="userAvatar">U</div>
+                            <div class="status-indicator"></div>
+                        </div>
+                        <div>
+                            <div style="font-size: 14px; font-weight: 600;" id="userName">User</div>
+                            <div style="font-size: 12px; color: #b9bbbe;" id="userStatus">Online</div>
+                        </div>
+                        <button style="margin-left: auto; background: none; border: none; color: #b9bbbe; cursor: pointer;" onclick="logout()">🚪</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <div class="main-content">
+                <div class="chat-header">
+                    <span>#</span>
+                    <span id="currentChannel">general</span>
+                </div>
+                
+                <div class="chat-messages" id="chatMessages">
+                    <div class="message">
+                        <div class="message-avatar">S</div>
+                        <div class="message-content">
+                            <div class="message-author">SQUIT Bot</div>
+                            <div class="message-text">Welcome to SQUIT up! 🎉 Start chatting with friends and join communities!</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="chat-input">
+                    <div class="input-container">
+                        <button class="emoji-btn" onclick="showEmojiPicker()">😀</button>
+                        <button class="gif-btn" onclick="showGifPicker()">GIF</button>
+                        <button class="sticker-btn" onclick="showStickerPicker()">🎭</button>
+                        <input type="text" id="messageInput" placeholder="Message #general" onkeypress="handleMessageInput(event)">
+                        <button class="btn btn-primary" style="width: auto; margin: 0; padding: 8px 16px;" onclick="sendMessage()">Send</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Server Modal -->
+    <div id="createServerModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Create Your Server</h3>
+                <button class="close-btn" onclick="closeModal('createServerModal')">&times;</button>
+            </div>
+            <div class="form-group">
+                <label for="serverName">Server Name</label>
+                <input type="text" id="serverName" placeholder="Enter server name">
+            </div>
+            <div class="form-group">
+                <label>Server Type</label>
+                <select id="serverType" style="width: 100%; padding: 12px; border: 2px solid #e1e5e9; border-radius: 10px; background: white;">
+                    <option value="text">Text Channels Only</option>
+                    <option value="voice">Text + Voice Channels</option>
+                </select>
+            </div>
+            <button class="btn btn-primary" onclick="createServer()">Create Server</button>
+        </div>
+    </div>
+
+    <!-- Add Friend Modal -->
+    <div id="addFriendModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Add Friend</h3>
+                <button class="close-btn" onclick="closeModal('addFriendModal')">&times;</button>
+            </div>
+            <div class="form-group">
+                <label for="friendUserId">Friend's @user_id</label>
+                <input type="text" id="friendUserId" placeholder="Enter @user_id">
+            </div>
+            <button class="btn btn-primary" onclick="sendFriendRequest()">Send Friend Request</button>
+        </div>
+    </div>
+
+    <!-- Friend Requests Modal -->
+    <div id="friendRequestsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Friend Requests</h3>
+                <button class="close-btn" onclick="closeModal('friendRequestsModal')">&times;</button>
+            </div>
+            <div id="friendRequestsList">
+                <div class="friend-request">
+                    <div>
+                        <div style="font-weight: 600;">@john_doe</div>
+                        <div style="font-size: 12px; color: #b9bbbe;">Wants to be your friend</div>
+                    </div>
+                    <div>
+                        <button class="btn-small btn-accept" onclick="acceptFriendRequest('@john_doe')">Accept</button>
+                        <button class="btn-small btn-decline" onclick="declineFriendRequest('@john_doe')">Decline</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Profile Modal -->
+    <div id="profileModal" class="modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3>User Profile</h3>
+                <button class="close-btn" onclick="closeModal('profileModal')">&times;</button>
+            </div>
+            <div class="profile-banner" onclick="changeBanner()">
+                <div class="profile-avatar-large" id="profileAvatarLarge" onclick="changeAvatar(event)">U</div>
+            </div>
+            <div class="profile-info">
+                <div class="profile-username" id="profileUsername">Username</div>
+                <div class="profile-bio" id="profileBio">Click to add a bio...</div>
+                <div class="profile-status" id="profileStatus">Online</div>
+                <button class="btn btn-primary" style="margin-top: 15px;" onclick="editProfile()">Edit Profile</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Profile Modal -->
+    <div id="editProfileModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Edit Profile</h3>
+                <button class="close-btn" onclick="closeModal('editProfileModal')">&times;</button>
+            </div>
+            <div class="form-group">
+                <label for="editBio">Bio</label>
+                <textarea id="editBio" style="width: 100%; padding: 12px; border: 2px solid #e1e5e9; border-radius: 10px; min-height: 80px; resize: vertical; box-sizing: border-box;" placeholder="Tell us about yourself..."></textarea>
+            </div>
+            <div class="form-group">
+                <label for="editStatus">Status</label>
+                <input type="text" id="editStatus" placeholder="What's your status?">
+            </div>
+            <div class="form-group">
+                <label>Profile Picture (URL or GIF)</label>
+                <input type="url" id="editAvatar" placeholder="Enter image/GIF URL">
+            </div>
+            <div class="form-group">
+                <label>Banner (URL or GIF)</label>
+                <input type="url" id="editBanner" placeholder="Enter banner image/GIF URL">
+            </div>
+            <button class="btn btn-primary" onclick="saveProfile()">Save Changes</button>
+        </div>
+    </div>
+
+    <!-- Emoji Picker Modal -->
+    <div id="emojiModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Choose Emoji</h3>
+                <button class="close-btn" onclick="closeModal('emojiModal')">&times;</button>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(8, 1fr); gap: 10px; max-height: 300px; overflow-y: auto;">
+                <span class="emoji-option" onclick="insertEmoji('😀')">😀</span>
+                <span class="emoji-option" onclick="insertEmoji('😂')">😂</span>
+                <span class="emoji-option" onclick="insertEmoji('😍')">😍</span>
+                <span class="emoji-option" onclick="insertEmoji('🤔')">🤔</span>
+                <span class="emoji-option" onclick="insertEmoji('😎')">😎</span>
+                <span class="emoji-option" onclick="insertEmoji('😭')">😭</span>
+                <span class="emoji-option" onclick="insertEmoji('😱')">😱</span>
+                <span class="emoji-option" onclick="insertEmoji('🔥')">🔥</span>
+                <span class="emoji-option" onclick="insertEmoji('💯')">💯</span>
+                <span class="emoji-option" onclick="insertEmoji('❤️')">❤️</span>
+                <span class="emoji-option" onclick="insertEmoji('👍')">👍</span>
+                <span class="emoji-option" onclick="insertEmoji('👎')">👎</span>
+                <span class="emoji-option" onclick="insertEmoji('🎉')">🎉</span>
+                <span class="emoji-option" onclick="insertEmoji('🚀')">🚀</span>
+                <span class="emoji-option" onclick="insertEmoji('⭐')">⭐</span>
+                <span class="emoji-option" onclick="insertEmoji('🌟')">🌟</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Firebase Configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyB1zvVHaBrbzX5iA9fBVNGa_3sY1-WCSpY",
+            authDomain: "squit-up-auth.firebaseapp.com",
+            projectId: "squit-up-auth",
+            storageBucket: "squit-up-auth.firebasestorage.app",
+            messagingSenderId: "503910898443",
+            appId: "1:503910898443:web:c5a56eb24cd4f183d8600e",
+            measurementId: "G-K4LHFHSNJC"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        // Global variables
+        let currentUser = null;
+        let currentChannel = 'general';
+        let messages = [];
+        let friends = [];
+        let servers = [];
+
+        // Check if user is already logged in
+        auth.onAuthStateChanged((user) => {
+            if (user) {
+                checkUserProfile(user);
+            } else {
+                showAuthPage();
+            }
+        });
+
+        function showAuthPage() {
+            document.getElementById('authPage').style.display = 'flex';
+            document.getElementById('dashboard').style.display = 'none';
+        }
+
+        function showDashboard() {
+            document.getElementById('authPage').style.display = 'none';
+            document.getElementById('dashboard').style.display = 'block';
+            loadUserData();
+        }
+
+        async function signInWithGoogle() {
+            const provider = new firebase.auth.GoogleAuthProvider();
+            try {
+                const result = await auth.signInWithPopup(provider);
+                const user = result.user;
+                await checkUserProfile(user);
+            } catch (error) {
+                alert('Error signing in with Google: ' + error.message);
+            }
+        }
+
+        async function checkUserProfile(user) {
+            try {
+                const userDoc = await db.collection('users').doc(user.uid).get();
+                
+                if (userDoc.exists) {
+                    // User exists, log them in
+                    currentUser = { ...userDoc.data(), uid: user.uid };
+                    showDashboard();
+                } else {
+                    // New user, show setup modal
+                    currentUser = { uid: user.uid, email: user.email, displayName: user.displayName };
+                    document.getElementById('setupModal').style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Error checking user profile:', error);
+                alert('Error checking user profile');
+            }
+        }
+
+        async function completeSetup() {
+            const userId = document.getElementById('newUserId').value.trim();
+            const password = document.getElementById('newPassword').value;
+
+            if (!userId || !password) {
+                alert('Please fill in all fields');
+                return;
+            }
+
+            if (!userId.startsWith('@')) {
+                alert('User ID must start with @');
+                return;
+            }
+
+            try {
+                // Check if user ID already exists
+                const existingUser = await db.collection('users').where('userId', '==', userId).get();
+                if (!existingUser.empty) {
+                    alert('This @user_id is already taken');
+                    return;
+                }
+
+                // Create user profile
+                const userProfile = {
+                    userId: userId,
+                    email: currentUser.email,
+                    displayName: currentUser.displayName || userId,
+                    password: password, // In production, this should be hashed
+                    bio: '',
+                    status: 'Online',
+                    avatar: '',
+                    banner: '',
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                };
+
+                await db.collection('users').doc(currentUser.uid).set(userProfile);
+                currentUser = { ...userProfile, uid: currentUser.uid };
+                
+                document.getElementById('setupModal').style.display = 'none';
+                showDashboard();
+            } catch (error) {
+                console.error('Error completing setup:', error);
+                alert('Error completing setup');
+            }
+        }
+
+        async function loginWithCredentials() {
+            const emailOrUserId = document.getElementById('loginEmail').value.trim();
+            const password = document.getElementById('loginPassword').value;
+
+            if (!emailOrUserId || !password) {
+                alert('Please fill in all fields');
+                return;
+            }
+
+            try {
+                let userQuery;
+                if (emailOrUserId.includes('@') && !emailOrUserId.startsWith('@')) {
+                    // It's an email
+                    userQuery = await db.collection('users').where('email', '==', emailOrUserId).get();
+                } else {
+                    // It's a user ID
+                    const userId = emailOrUserId.startsWith('@') ? emailOrUserId : '@' + emailOrUserId;
+                    userQuery = await db.collection('users').where('userId', '==', userId).get();
+                }
+
+                if (userQuery.empty) {
+                    alert('User not found');
+                    return;
+                }
+
+                const userDoc = userQuery.docs[0];
+                const userData = userDoc.data();
+
+                if (userData.password !== password) {
+                    alert('Incorrect password');
+                    return;
+                }
+
+                // Sign in with Firebase Auth using email
+                await auth.signInWithEmailAndPassword(userData.email, password);
+                
+            } catch (error) {
+                // If Firebase auth fails, try to sign in anyway with stored credentials
+                try {
+                    let userQuery;
+                    if (emailOrUserId.includes('@') && !emailOrUserId.startsWith('@')) {
+                        userQuery = await db.collection('users').where('email', '==', emailOrUserId).get();
+                    } else {
+                        const userId = emailOrUserId.startsWith('@') ? emailOrUserId : '@' + emailOrUserId;
+                        userQuery = await db.collection('users').where('userId', '==', userId).get();
+                    }
+
+                    if (!userQuery.empty) {
+                        const userDoc = userQuery.docs[0];
+                        const userData = userDoc.data();
+                        
+                        if (userData.password === password) {
+                            currentUser = { ...userData, uid: userDoc.id };
+                            showDashboard();
+                            return;
+                        }
+                    }
+                } catch (fallbackError) {
+                    console.error('Fallback login failed:', fallbackError);
+                }
+                
+                alert('Login failed: ' + error.message);
+            }
+        }
+
+        function loadUserData() {
+            if (currentUser) {
+                document.getElementById('userName').textContent = currentUser.displayName || currentUser.userId;
+                document.getElementById('userStatus').textContent = currentUser.status || 'Online';
+                document.getElementById('userAvatar').textContent = (currentUser.displayName || currentUser.userId).charAt(0).toUpperCase();
+                
+                // Load profile modal data
+                document.getElementById('profileUsername').textContent = currentUser.displayName || currentUser.userId;
+                document.getElementById('profileBio').textContent = currentUser.bio || 'Click to add a bio...';
+                document.getElementById('profileStatus').textContent = currentUser.status || 'Online';
+                document.getElementById('profileAvatarLarge').textContent = (currentUser.displayName || currentUser.userId).charAt(0).toUpperCase();
+            }
+        }
+
+        function logout() {
+            auth.signOut().then(() => {
+                currentUser = null;
+                showAuthPage();
+            });
+        }
+
+        function showSignupForm() {
+            signInWithGoogle();
+        }
+
+        function selectChannel(channel) {
+            currentChannel = channel;
+            document.getElementById('currentChannel').textContent = channel;
+            
+            // Update active channel
+            document.querySelectorAll('.sidebar-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            loadMessages();
+        }
+
+        function loadMessages() {
+            // Simulate loading messages for the channel
+            const chatMessages = document.getElementById('chatMessages');
+            // Keep existing messages and add channel-specific ones
+        }
+
+        function handleMessageInput(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        function sendMessage() {
+            const messageInput = document.getElementById('messageInput');
+            const message = messageInput.value.trim();
+            
+            if (!message) return;
+
+            const chatMessages = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message';
+            messageDiv.innerHTML = `
+                <div class="message-avatar">${(currentUser.displayName || currentUser.userId).charAt(0).toUpperCase()}</div>
+                <div class="message-content">
+                    <div class="message-author">${currentUser.displayName || currentUser.userId}</div>
+                    <div class="message-text">${message}</div>
+                </div>
+            `;
+            
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            messageInput.value = '';
+        }
+
+        function showCreateServerModal() {
+            document.getElementById('createServerModal').style.display = 'block';
+        }
+
+        function createServer() {
+            const serverName = document.getElementById('serverName').value.trim();
+            const serverType = document.getElementById('serverType').value;
+            
+            if (!serverName) {
+                alert('Please enter a server name');
+                return;
+            }
+
+            const serverList = document.getElementById('serverList');
+            const serverIcon = document.createElement('div');
+            serverIcon.className = 'server-icon';
+            serverIcon.textContent = serverName.charAt(0).toUpperCase();
+            serverIcon.onclick = () => selectServer(serverName);
+            
+            serverList.appendChild(serverIcon);
+            
+            closeModal('createServerModal');
+            alert(`Server "${serverName}" created successfully!`);
+        }
+
+        function selectServer(serverName) {
+            document.querySelectorAll('.server-icon').forEach(icon => {
+                icon.classList.remove('active');
+            });
+            event.target.classList.add('active');
+        }
+
+        function showAddFriendModal() {
+            document.getElementById('addFriendModal').style.display = 'block';
+        }
+
+        function sendFriendRequest() {
+            const friendUserId = document.getElementById('friendUserId').value.trim();
+            
+            if (!friendUserId) {
+                alert('Please enter a @user_id');
+                return;
+            }
+
+            // Simulate sending friend request
+            alert(`Friend request sent to ${friendUserId}!`);
+            closeModal('addFriendModal');
+        }
+
+        function showFriendRequests() {
+            document.getElementById('friendRequestsModal').style.display = 'block';
+        }
+
+        function acceptFriendRequest(userId) {
+            alert(`Accepted friend request from ${userId}`);
+            // Remove the request from the list
+            event.target.closest('.friend-request').remove();
+        }
+
+        function declineFriendRequest(userId) {
+            alert(`Declined friend request from ${userId}`);
+            // Remove the request from the list
+            event.target.closest('.friend-request').remove();
+        }
+
+        function showProfileModal() {
+            document.getElementById('profileModal').style.display = 'block';
+        }
+
+        function editProfile() {
+            document.getElementById('editBio').value = currentUser.bio || '';
+            document.getElementById('editStatus').value = currentUser.status || '';
+            document.getElementById('editAvatar').value = currentUser.avatar || '';
+            document.getElementById('editBanner').value = currentUser.banner || '';
+            
+            closeModal('profileModal');
+            document.getElementById('editProfileModal').style.display = 'block';
+        }
+
+        async function saveProfile() {
+            const bio = document.getElementById('editBio').value;
+            const status = document.getElementById('editStatus').value;
+            const avatar = document.getElementById('editAvatar').value;
+            const banner = document.getElementById('editBanner').value;
+
+            try {
+                const updates = {
+                    bio: bio,
+                    status: status,
+                    avatar: avatar,
+                    banner: banner
+                };
+
+                if (currentUser.uid) {
+                    await db.collection('users').doc(currentUser.uid).update(updates);
+                }
+
+                // Update local user data
+                currentUser = { ...currentUser, ...updates };
+                loadUserData();
+                
+                closeModal('editProfileModal');
+                alert('Profile updated successfully!');
+            } catch (error) {
+                console.error('Error updating profile:', error);
+                alert('Error updating profile');
+            }
+        }
+
+        function showEmojiPicker() {
+            document.getElementById('emojiModal').style.display = 'block';
+        }
+
+        function insertEmoji(emoji) {
+            const messageInput = document.getElementById('messageInput');
+            messageInput.value += emoji;
+            messageInput.focus();
+            closeModal('emojiModal');
+        }
+
+        function showGifPicker() {
+            alert('GIF picker coming soon! 🎬');
+        }
+
+        function showStickerPicker() {
+            alert('Sticker picker coming soon! 🎭');
+        }
+
+        function changeAvatar(event) {
+            event.stopPropagation();
+            const url = prompt('Enter avatar URL (image or GIF):');
+            if (url) {
+                document.getElementById('profileAvatarLarge').style.backgroundImage = `url(${url})`;
+                document.getElementById('profileAvatarLarge').style.backgroundSize = 'cover';
+                document.getElementById('profileAvatarLarge').textContent = '';
+            }
+        }
+
+        function changeBanner() {
+            const url = prompt('Enter banner URL (image or GIF):');
+            if (url) {
+                document.querySelector('.profile-banner').style.backgroundImage = `url(${url})`;
+                document.querySelector('.profile-banner').style.backgroundSize = 'cover';
+            }
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+
+        // Close modals when clicking outside
+        window.onclick = function(event) {
+            if (event.target.classList.contains('modal')) {
+                event.target.style.display = 'none';
+            }
+        }
+
+        // Add emoji option styling
+        const style = document.createElement('style');
+        style.textContent = `
+            .emoji-option {
+                font-size: 24px;
+                cursor: pointer;
+                padding: 8px;
+                border-radius: 4px;
+                text-align: center;
+                transition: background-color 0.2s;
+            }
+            .emoji-option:hover {
+                background-color: #393c43;
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'98cf5d6eb4ca2e8f',t:'MTc2MDE5NjI3Mi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
