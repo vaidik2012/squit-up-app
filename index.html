@@ -1,553 +1,160 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithCustomToken, onAuthStateChanged, signOut } from 'firebase/auth';
-import { 
-    getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs, onSnapshot,
-    serverTimestamp, updateDoc, deleteDoc, runTransaction
-} from 'firebase/firestore';
-
-// --- Global Variables (provided by the Canvas environment) ---
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-// --- End Global Variables ---
-
-// Initialize Firebase App and Services
-let app;
-let db;
-let auth;
-
-// Helper to use exponential backoff for Firestore calls
-const firestoreRetry = async (fn, retries = 5, delay = 1000) => {
-    for (let i = 0; i < retries; i++) {
-        try {
-            return await fn();
-        } catch (error) {
-            if (i === retries - 1) throw error;
-            await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, i)));
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modern Single-File Web App</title>
+    <!-- Load Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom font import for "Inter" */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            transition: background-color 0.3s ease;
         }
-    }
-};
+        /* Style for the dark theme */
+        .dark-bg {
+            background-color: #1a1a2e; /* Deep purple/blue */
+        }
+        .text-accent {
+            color: #ff6b6b; /* Vibrant coral red */
+        }
+    </style>
+</head>
+<body class="dark-bg min-h-screen text-gray-100">
 
-const App = () => {
-    const [user, setUser] = useState(null); // Firebase user object
-    const [username, setUsername] = useState(null); // The user's custom @user_id
-    const [isAuthReady, setIsAuthReady] = useState(false);
-    const [loading, setLoading] = useState(true);
-    const [view, setView] = useState('Auth'); // 'Auth', 'Main', 'Friends'
-    const [message, setMessage] = useState('');
+    <!-- Header and Navigation -->
+    <header class="p-4 md:p-6 shadow-xl sticky top-0 z-10 bg-opacity-95 bg-[#1a1a2e]">
+        <div class="max-w-7xl mx-auto flex justify-between items-center">
+            <!-- Logo/Site Title -->
+            <a href="#" class="text-2xl font-bold text-accent hover:opacity-80 transition duration-300">
+                Project|Gemini
+            </a>
 
-    const [friendRequests, setFriendRequests] = useState([]);
-    const [friendsList, setFriendsList] = useState([]);
+            <!-- Desktop Navigation Links -->
+            <nav class="hidden md:flex space-x-6 text-lg">
+                <a href="#features" class="hover:text-accent transition duration-300">Features</a>
+                <a href="#pricing" class="hover:text-accent transition duration-300">Pricing</a>
+                <a href="#contact" class="hover:text-accent transition duration-300">Contact</a>
+            </nav>
 
-    // 1. Initial Firebase Setup and Persistent Auth Listener
-    useEffect(() => {
-        try {
-            app = initializeApp(firebaseConfig);
-            db = getFirestore(app);
-            auth = getAuth(app);
-            // setLogLevel('Debug'); // Uncomment for debugging
+            <!-- Mobile Menu Button (Icon will be added with JavaScript) -->
+            <button id="mobile-menu-button" class="md:hidden p-2 rounded-lg hover:bg-[#2c2c4b] transition duration-300">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-100" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+            </button>
+        </div>
+    </header>
 
-            // Handle initial custom token sign-in (for persistence on refresh)
-            const handleInitialAuth = async () => {
-                if (initialAuthToken) {
-                    try {
-                        // Attempt to sign in with the provided token for persistence
-                        await signInWithCustomToken(auth, initialAuthToken);
-                        console.log("Signed in with custom token for persistence.");
-                    } catch (error) {
-                        console.error("Custom token sign-in failed:", error);
-                        // Cannot proceed without custom token/UID, force Auth state
-                        setIsAuthReady(true);
-                        setLoading(false);
-                    }
-                } else {
-                    // No initial token, means the system didn't authenticate the session.
-                    setIsAuthReady(true);
-                    setLoading(false);
-                }
+    <!-- Mobile Menu Dropdown (Hidden by default) -->
+    <div id="mobile-menu" class="hidden md:hidden bg-[#2c2c4b] p-4 shadow-lg">
+        <nav class="flex flex-col space-y-3 text-center">
+            <a href="#features" class="block p-2 rounded-lg hover:bg-[#3d3d66]">Features</a>
+            <a href="#pricing" class="block p-2 rounded-lg hover:bg-[#3d3d66]">Pricing</a>
+            <a href="#contact" class="block p-2 rounded-lg hover:bg-[#3d3d66]">Contact</a>
+        </nav>
+    </div>
+
+    <!-- Main Content Area -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20">
+
+        <!-- Hero Section -->
+        <section class="text-center mb-20">
+            <h1 class="text-4xl sm:text-6xl font-extrabold mb-4 leading-tight">
+                Build <span class="text-accent">Anything</span>. Launch <span class="text-accent">Faster</span>.
+            </h1>
+            <p class="text-xl text-gray-400 mb-8 max-w-3xl mx-auto">
+                The ultimate one-file solution for your next project. Minimal complexity, maximum impact.
+            </p>
+            <div class="flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-4">
+                <button class="bg-accent text-[#1a1a2e] font-bold py-3 px-8 rounded-xl shadow-lg hover:shadow-xl transition duration-300 transform hover:scale-105">
+                    Get Started Now
+                </button>
+                <button class="bg-transparent border border-gray-500 text-gray-100 font-bold py-3 px-8 rounded-xl hover:bg-[#2c2c4b] transition duration-300">
+                    Learn More
+                </button>
+            </div>
+        </section>
+
+        <!-- Features Section -->
+        <section id="features" class="pt-10 mb-20">
+            <h2 class="text-3xl font-bold text-center mb-12 text-gray-50">Core Features</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+
+                <!-- Feature Card 1 -->
+                <div class="bg-[#2c2c4b] p-6 rounded-2xl shadow-lg hover:shadow-2xl transition duration-500 transform hover:-translate-y-1">
+                    <div class="text-accent mb-4">
+                        <!-- Icon: Responsive Design -->
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1v-3.25m-7.25 0h12.5M12 15a4 4 0 01-4-4V5a4 4 0 018 0v6a4 4 0 01-4 4z" />
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-3">Fully Responsive</h3>
+                    <p class="text-gray-400">The layout adapts seamlessly to any screen size—mobile, tablet, and desktop—without extra effort.</p>
+                </div>
+
+                <!-- Feature Card 2 -->
+                <div class="bg-[#2c2c4b] p-6 rounded-2xl shadow-lg hover:shadow-2xl transition duration-500 transform hover:-translate-y-1">
+                    <div class="text-accent mb-4">
+                        <!-- Icon: Fast Deployment -->
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-3">Zero Dependencies</h3>
+                    <p class="text-gray-400">Everything is contained in this single file, making deployment instant and maintenance trivial.</p>
+                </div>
+
+                <!-- Feature Card 3 -->
+                <div class="bg-[#2c2c4b] p-6 rounded-2xl shadow-lg hover:shadow-2xl transition duration-500 transform hover:-translate-y-1">
+                    <div class="text-accent mb-4">
+                        <!-- Icon: Modern Styling -->
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343h2.571m-9 3.428h9m-9 3.429h5.143" />
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-3">Dark & Stylish Theme</h3>
+                    <p class="text-gray-400">A clean, dark color palette with vibrant accents to give your site a professional, modern look.</p>
+                </div>
+
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-[#1a1a2e] border-t border-[#2c2c4b] p-8 mt-12">
+        <div class="max-w-7xl mx-auto text-center text-gray-500 text-sm">
+            <p>&copy; 2025 Single File Template. All rights reserved.</p>
+            <p class="mt-2">Made with <span class="text-accent">&hearts;</span> and Tailwind CSS.</p>
+        </div>
+    </footer>
+
+    <!-- JavaScript for Mobile Menu Toggle -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const button = document.getElementById('mobile-menu-button');
+            const menu = document.getElementById('mobile-menu');
+            const links = menu.querySelectorAll('a');
+
+            // Function to toggle the menu visibility
+            const toggleMenu = () => {
+                menu.classList.toggle('hidden');
             };
 
-            handleInitialAuth();
+            // Event listener for the button click
+            button.addEventListener('click', toggleMenu);
 
-            // Setup Auth State Listener for persistence
-            const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
-                setUser(currentUser);
-                if (currentUser) {
-                    // Check if the current Firebase UID has a registered @username
-                    const userProfileRef = doc(db, 'artifacts', appId, 'public', 'data', 'userProfiles', currentUser.uid);
-                    const docSnap = await firestoreRetry(() => getDoc(userProfileRef));
-
-                    if (docSnap.exists()) {
-                        const profileData = docSnap.data();
-                        setUsername(profileData.username);
-                        setView('Main'); // User is logged in with a valid @user_id
-                        console.log(`User logged in as @${profileData.username}`);
-                    } else {
-                        // User is authenticated (e.g., via custom token) but has no @user_id. Must register one.
-                        setUsername(null);
-                        setView('Auth');
+            // Close menu when a link is clicked (for smoother navigation)
+            links.forEach(link => {
+                link.addEventListener('click', () => {
+                    if (!menu.classList.contains('hidden')) {
+                        toggleMenu();
                     }
-                } else {
-                    setUsername(null);
-                    setView('Auth'); // No Firebase user, force login/registration
-                }
-                setIsAuthReady(true);
-                setLoading(false);
-            });
-
-            return () => unsubscribeAuth();
-
-        } catch (error) {
-            console.error("Firebase Initialization Error:", error);
-            setMessage("Error initializing app.");
-            setLoading(false);
-        }
-    }, []); // Run only once on mount
-
-    // 2. Real-time Listeners for Friends and Requests
-    useEffect(() => {
-        if (!isAuthReady || view !== 'Main' || !user?.uid) {
-            setFriendRequests([]);
-            setFriendsList([]);
-            return;
-        }
-
-        const currentUserId = user.uid;
-        
-        // Listener for incoming friend requests (Private Collection)
-        const requestsQuery = query(
-            collection(db, 'artifacts', appId, 'users', currentUserId, 'friendRequests'),
-            where('status', '==', 'pending')
-        );
-
-        const unsubscribeRequests = onSnapshot(requestsQuery, (snapshot) => {
-            const requests = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
-            setFriendRequests(requests);
-        }, (error) => console.error("Error fetching friend requests:", error));
-
-        // Listener for confirmed friends (Private Collection)
-        const friendsQuery = collection(db, 'artifacts', appId, 'users', currentUserId, 'friends');
-
-        const unsubscribeFriends = onSnapshot(friendsQuery, (snapshot) => {
-            const friends = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
-            setFriendsList(friends);
-        }, (error) => console.error("Error fetching friends list:", error));
-
-        return () => {
-            unsubscribeRequests();
-            unsubscribeFriends();
-        };
-
-    }, [isAuthReady, view, user?.uid]);
-
-    // 3. User ID Registration / Login Logic (Auth View)
-    const handleRegisterOrLogin = async (inputUsername) => {
-        if (!user) {
-            setMessage("System Error: Not authenticated. Cannot register ID.");
-            return;
-        }
-        
-        const cleanUsername = inputUsername.toLowerCase().trim().replace(/[^a-z0-9_]/g, '');
-
-        if (cleanUsername.length < 3) {
-            setMessage("Username must be at least 3 characters long (a-z, 0-9, _).");
-            return;
-        }
-
-        setLoading(true);
-        setMessage('');
-
-        try {
-            // Check if username exists in the public userProfiles collection
-            const usernameQuery = query(
-                collection(db, 'artifacts', appId, 'public', 'data', 'userProfiles'),
-                where('username', '==', cleanUsername)
-            );
-            const querySnapshot = await firestoreRetry(() => getDocs(usernameQuery));
-
-            // Check if the current user already has a profile document linked to their UID
-            const currentUserProfileRef = doc(db, 'artifacts', appId, 'public', 'data', 'userProfiles', user.uid);
-            const currentUserProfileSnap = await firestoreRetry(() => getDoc(currentUserProfileRef));
-
-            if (currentUserProfileSnap.exists()) {
-                // Scenario 1: User is trying to re-register or change ID, but they already have one.
-                const existingUsername = currentUserProfileSnap.data().username;
-                if (existingUsername === cleanUsername) {
-                    setMessage(`Welcome back, @${cleanUsername}!`);
-                    setUsername(cleanUsername);
-                    setView('Main');
-                } else {
-                    setMessage(`Your account is already registered as @${existingUsername}. Please log out to use a different ID.`);
-                }
-            } else if (!querySnapshot.empty) {
-                // Scenario 2: Username is taken by another user's UID (preventing collision)
-                setMessage(`The ID @${cleanUsername} is already taken. Please try another one.`);
-            } else {
-                // Scenario 3: Username is available and the current user has no ID. REGISTER!
-                
-                // Use a transaction to ensure atomicity: check again and create if still available.
-                await runTransaction(db, async (transaction) => {
-                    const freshQuerySnap = await transaction.get(usernameQuery);
-                    
-                    if (!freshQuerySnap.empty) {
-                         throw new Error("Username was just taken. Please try again.");
-                    }
-
-                    // 1. Create the new user profile in the public mapping (UID -> @username)
-                    transaction.set(currentUserProfileRef, {
-                        uid: user.uid,
-                        username: cleanUsername,
-                        createdAt: serverTimestamp(),
-                    });
                 });
-                
-                setMessage(`Success! Your new ID @${cleanUsername} has been created.`);
-                setUsername(cleanUsername);
-                setView('Main');
-            }
-        } catch (error) {
-            console.error("Registration/Login error:", error);
-            setMessage(`Failed to process: ${error.message || 'Server error'}.`);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    // 4. Friend Request Logic
-    const sendFriendRequest = async (targetUsername) => {
-        if (!username || !user?.uid) return;
-        
-        const cleanTargetUsername = targetUsername.toLowerCase().trim().replace(/[^a-z0-9_]/g, '');
-        if (cleanTargetUsername === username) {
-            setMessage("You cannot send a friend request to yourself!");
-            return;
-        }
-
-        setLoading(true);
-        setMessage('');
-
-        try {
-            // 1. Find the target user's UID using the public username profile
-            const targetQuery = query(
-                collection(db, 'artifacts', appId, 'public', 'data', 'userProfiles'),
-                where('username', '==', cleanTargetUsername)
-            );
-            const targetSnapshot = await firestoreRetry(() => getDocs(targetQuery));
-
-            if (targetSnapshot.empty) {
-                setMessage(`User @${cleanTargetUsername} not found.`);
-                return;
-            }
-
-            const targetUserDoc = targetSnapshot.docs[0];
-            const targetUid = targetUserDoc.data().uid;
-
-            // 2. Check if already friends
-            const friendRef = doc(db, 'artifacts', appId, 'users', user.uid, 'friends', targetUid);
-            const friendSnap = await firestoreRetry(() => getDoc(friendRef));
-            if (friendSnap.exists()) {
-                setMessage(`You are already friends with @${cleanTargetUsername}.`);
-                return;
-            }
-
-            // 3. Send the request (add a document to the target user's private friendRequests collection)
-            const requestRef = doc(db, 'artifacts', appId, 'users', targetUid, 'friendRequests', user.uid);
-            await firestoreRetry(() => setDoc(requestRef, {
-                senderUid: user.uid,
-                senderUsername: username,
-                status: 'pending',
-                sentAt: serverTimestamp(),
-            }));
-            
-            setMessage(`Friend request sent to @${cleanTargetUsername}!`);
-
-        } catch (error) {
-            console.error("Error sending friend request:", error);
-            setMessage(`Failed to send request: ${error.message}`);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleFriendRequest = async (requestId, action) => {
-        if (!user?.uid) return;
-
-        const senderUid = requestId;
-        const targetUid = user.uid; // Current user
-
-        setLoading(true);
-        setMessage('');
-
-        try {
-            const requestRef = doc(db, 'artifacts', appId, 'users', targetUid, 'friendRequests', senderUid);
-            const requestSnap = await firestoreRetry(() => getDoc(requestRef));
-
-            if (!requestSnap.exists()) {
-                setMessage("Request not found or already processed.");
-                return;
-            }
-
-            const senderUsername = requestSnap.data().senderUsername;
-            
-            if (action === 'accept') {
-                // 1. Add sender to current user's friends list
-                const currentUserFriendRef = doc(db, 'artifacts', appId, 'users', targetUid, 'friends', senderUid);
-                await firestoreRetry(() => setDoc(currentUserFriendRef, {
-                    friendUid: senderUid,
-                    friendUsername: senderUsername,
-                    addedAt: serverTimestamp(),
-                }));
-
-                // 2. Add current user to sender's friends list (mutual)
-                const senderProfileRef = doc(db, 'artifacts', appId, 'public', 'data', 'userProfiles', targetUid);
-                const senderProfileSnap = await firestoreRetry(() => getDoc(senderProfileRef));
-                const targetUsername = senderProfileSnap.data()?.username || 'Unknown';
-                
-                const senderFriendRef = doc(db, 'artifacts', appId, 'users', senderUid, 'friends', targetUid);
-                await firestoreRetry(() => setDoc(senderFriendRef, {
-                    friendUid: targetUid,
-                    friendUsername: targetUsername,
-                    addedAt: serverTimestamp(),
-                }));
-
-                // 3. Remove the pending request
-                await firestoreRetry(() => deleteDoc(requestRef));
-                setMessage(`You are now friends with @${senderUsername}!`);
-
-            } else if (action === 'reject') {
-                // Just remove the pending request
-                await firestoreRetry(() => deleteDoc(requestRef));
-                setMessage(`Request from @${senderUsername} rejected.`);
-            }
-
-        } catch (error) {
-            console.error(`Error handling request (${action}):`, error);
-            setMessage(`Failed to ${action} request: ${error.message}`);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    // 5. Logout Functionality
-    const handleLogout = async () => {
-        setLoading(true);
-        try {
-            await signOut(auth);
-            setUsername(null);
-            setView('Auth');
-            setMessage('You have been successfully logged out.');
-        } catch (error) {
-            console.error("Logout error:", error);
-            setMessage("Logout failed. Please try again.");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    // --- UI Components ---
-
-    const AuthView = () => {
-        const [inputUsername, setInputUsername] = useState('');
-        
-        // This component is shown if the user is not fully registered with an @user_id.
-        return (
-            <div className="flex flex-col space-y-4 p-6 bg-white shadow-xl rounded-xl w-full max-w-sm">
-                <h2 className="text-2xl font-extrabold text-indigo-700 text-center">
-                    {user ? 'Register Your @ID' : 'Welcome'}
-                </h2>
-                <p className="text-sm text-gray-500 text-center">
-                    {user ? 'Create a unique @user_id to start making friends.' : 'Please wait for authentication...'}
-                </p>
-
-                {user && (
-                    <>
-                        <div className="relative">
-                            <input
-                                type="text"
-                                placeholder="Choose your ID (e.g., cool_user123)"
-                                value={inputUsername}
-                                onChange={(e) => setInputUsername(e.target.value)}
-                                className="w-full pl-8 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-150"
-                                disabled={loading}
-                            />
-                            <span className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400 font-semibold">@</span>
-                        </div>
-                        
-                        <button
-                            onClick={() => handleRegisterOrLogin(inputUsername)}
-                            className={`w-full py-2 px-4 rounded-lg font-bold transition duration-300 ${
-                                loading
-                                    ? 'bg-indigo-400 cursor-not-allowed'
-                                    : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-md hover:shadow-lg'
-                            }`}
-                            disabled={loading || inputUsername.length < 3}
-                        >
-                            {loading ? 'Processing...' : 'Create or Log In with @ID'}
-                        </button>
-                    </>
-                )}
-            </div>
-        );
-    };
-
-    const MainView = () => {
-        const [searchId, setSearchId] = useState('');
-
-        const RequestItem = ({ request }) => (
-            <div className="flex items-center justify-between p-3 bg-indigo-50 rounded-lg shadow-sm">
-                <p className="font-semibold text-gray-700">Request from <span className="text-indigo-600">@{request.senderUsername}</span></p>
-                <div className="flex space-x-2">
-                    <button
-                        onClick={() => handleFriendRequest(request.id, 'accept')}
-                        className="p-2 text-white bg-green-500 hover:bg-green-600 rounded-full text-xs shadow transition"
-                        disabled={loading}
-                        title="Accept"
-                    >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
-                    </button>
-                    <button
-                        onClick={() => handleFriendRequest(request.id, 'reject')}
-                        className="p-2 text-white bg-red-500 hover:bg-red-600 rounded-full text-xs shadow transition"
-                        disabled={loading}
-                        title="Reject"
-                    >
-                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                    </button>
-                </div>
-            </div>
-        );
-
-        const FriendItem = ({ friend }) => (
-             <div className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg shadow-sm">
-                <p className="font-bold text-gray-700">@{friend.friendUsername}</p>
-                <span className="text-xs text-green-500">Friend since {new Date(friend.addedAt?.toDate()).toLocaleDateString()}</span>
-            </div>
-        );
-
-        return (
-            <div className="flex flex-col space-y-6 p-6 bg-white shadow-2xl rounded-xl w-full max-w-lg">
-                <div className="flex justify-between items-center pb-4 border-b">
-                    <h2 className="text-3xl font-extrabold text-indigo-700">
-                        Hello, <span className="text-indigo-500">@{username}</span>
-                    </h2>
-                    <button
-                        onClick={handleLogout}
-                        className="py-1 px-3 bg-red-500 hover:bg-red-600 text-white text-sm font-semibold rounded-full shadow transition duration-300"
-                        disabled={loading}
-                    >
-                        Logout
-                    </button>
-                </div>
-                
-                {/* Friend Request Section */}
-                <div className="space-y-3">
-                    <h3 className="text-xl font-bold text-gray-800 flex items-center">
-                        Friend Requests 
-                        <span className={`ml-2 text-sm font-extrabold px-2 py-0.5 rounded-full ${friendRequests.length > 0 ? 'bg-red-500 text-white' : 'bg-gray-200 text-gray-500'}`}>
-                            {friendRequests.length}
-                        </span>
-                    </h3>
-                    {friendRequests.length > 0 ? (
-                        <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
-                            {friendRequests.map(req => (
-                                <RequestItem key={req.id} request={req} />
-                            ))}
-                        </div>
-                    ) : (
-                        <p className="text-gray-500 text-sm italic">No pending friend requests.</p>
-                    )}
-                </div>
-
-                {/* Send Request Section */}
-                <div className="space-y-2 pt-4 border-t">
-                    <h3 className="text-xl font-bold text-gray-800">Send Friend Request</h3>
-                    <div className="flex space-x-2">
-                         <div className="relative flex-grow">
-                            <input
-                                type="text"
-                                placeholder="Enter @user_id to add"
-                                value={searchId}
-                                onChange={(e) => setSearchId(e.target.value)}
-                                className="w-full pl-8 pr-4 py-2 border border-indigo-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-150"
-                                disabled={loading}
-                            />
-                            <span className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400 font-semibold">@</span>
-                        </div>
-                        <button
-                            onClick={() => sendFriendRequest(searchId)}
-                            className={`py-2 px-4 rounded-lg font-bold transition duration-300 ${
-                                loading
-                                    ? 'bg-gray-400 cursor-not-allowed'
-                                    : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-md hover:shadow-lg'
-                            }`}
-                            disabled={loading || searchId.length < 3}
-                        >
-                            Send
-                        </button>
-                    </div>
-                </div>
-
-                {/* Friends List */}
-                <div className="space-y-3 pt-4 border-t">
-                    <h3 className="text-xl font-bold text-gray-800">My Friends ({friendsList.length})</h3>
-                    {friendsList.length > 0 ? (
-                        <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
-                            {friendsList.map(friend => (
-                                <FriendItem key={friend.id} friend={friend} />
-                            ))}
-                        </div>
-                    ) : (
-                        <p className="text-gray-500 text-sm italic">You don't have any friends yet. Send a request!</p>
-                    )}
-                </div>
-            </div>
-        );
-    };
-
-    // --- Main Render ---
-
-    if (loading && !isAuthReady) {
-        return (
-            <div className="flex items-center justify-center min-h-screen bg-gray-50">
-                <div className="text-xl font-semibold text-indigo-600">Loading Application...</div>
-            </div>
-        );
-    }
-
-    return (
-        <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 font-sans">
-            <style>
-                {`
-                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
-                    .font-sans { font-family: 'Inter', sans-serif; }
-                `}
-            </style>
-            
-            {/* Main Application Area */}
-            {view === 'Auth' ? <AuthView /> : <MainView />}
-
-            {/* Global Message Box */}
-            {message && (
-                <div className="mt-4 p-3 bg-yellow-100 border border-yellow-400 text-yellow-800 rounded-lg shadow-md max-w-lg w-full text-center">
-                    {message}
-                </div>
-            )}
-            
-            {/* User ID Display for Debugging/Reference */}
-            {user && (
-                <div className="mt-4 p-2 bg-gray-800 text-white text-xs rounded-lg max-w-lg w-full text-center break-words">
-                    Internal UID: <span className="font-mono text-gray-300">{user.uid}</span>
-                </div>
-            )}
-        </div>
-    );
-};
-
-export default App;
+            });
+        });
+    </script>
+</body>
+</html>
