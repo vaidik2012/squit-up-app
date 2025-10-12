@@ -19,10 +19,590 @@
             --border: #202225;
             --elevation: rgba(0, 0, 0, 0.2);
         }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
+
         body {
             font-family: 'Whitney', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            background-color: var(--background-primary);
+            color: var(--text-normal);
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* Left Sidebar: Servers */
+        .sidebar {
+            width: 72px;
+            background-color: var(--background-secondary);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 12px 0;
+            border-right: 1px solid var(--border);
+            position: relative;
+        }
+
+        .server-icon {
+            width: 48px;
+            height: 48px;
+            background-color: var(--background-tertiary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: border-radius 0.1s ease-out;
+            position: relative;
+        }
+
+        .server-icon:hover {
+            background-color: var(--background-modifier-hover);
+        }
+
+        .server-icon.active {
+            border-radius: 16px;
+        }
+
+        .server-icon::after {
+            content: '';
+            position: absolute;
+            bottom: -4px;
+            right: -4px;
+            width: 20px;
+            height: 20px;
+            background: var(--interactive-normal);
+            border-radius: 50%;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .server-icon.active::after {
+            opacity: 1;
+        }
+
+        .add-server {
+            width: 48px;
+            height: 48px;
+            background-color: var(--background-tertiary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            margin-top: auto;
+            margin-bottom: 12px;
+            transition: background-color 0.2s;
+        }
+
+        .add-server:hover {
+            background-color: var(--background-modifier-hover);
+        }
+
+        .add-server::before {
+            content: '+';
+            font-size: 24px;
+            color: var(--text-muted);
+        }
+
+        /* Channel Sidebar */
+        .channels-sidebar {
+            width: 240px;
+            background-color: var(--background-secondary);
+            border-right: 1px solid var(--border);
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .server-header {
+            padding: 12px 16px;
+            font-size: 16px;
+            font-weight: bold;
+            color: var(--text-normal);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .channel-category {
+            padding: 8px 16px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .channel-list {
+            list-style: none;
+        }
+
+        .channel-item {
+            padding: 6px 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            transition: background-color 0.2s;
+            border-radius: 4px;
+        }
+
+        .channel-item:hover {
+            background-color: var(--background-modifier-hover);
+        }
+
+        .channel-item.active {
+            background-color: var(--background-tertiary);
+        }
+
+        .channel-icon {
+            width: 16px;
+            height: 16px;
+            margin-right: 12px;
+            color: var(--text-muted);
+        }
+
+        .channel-name {
+            font-size: 16px;
+            color: var(--text-normal);
+        }
+
+        /* Main Chat Area */
+        .main-chat {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .chat-header {
+            padding: 12px 16px;
+            background-color: var(--background-secondary);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .channel-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: var(--text-normal);
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0 16px;
+            background-color: var(--background-primary);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message {
+            display: flex;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .message-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            margin-right: 16px;
+            flex-shrink: 0;
+            background-color: var(--background-tertiary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            color: var(--text-muted);
+        }
+
+        .message-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .message-header {
+            display: flex;
+            align-items: baseline;
+            margin-bottom: 2px;
+        }
+
+        .message-author {
+            font-weight: 500;
+            color: var(--text-normal);
+            margin-right: 8px;
+        }
+
+        .message-time {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .message-text {
+            font-size: 16px;
+            line-height: 1.4;
+            color: var(--text-normal);
+            word-wrap: break-word;
+        }
+
+        /* Input Area */
+        .message-input-area {
+            padding: 12px 16px;
+            background-color: var(--background-secondary);
+            border-top: 1px solid var(--border);
+            display: flex;
+            align-items: flex-end;
+        }
+
+        #messageInput {
+            flex: 1;
+            padding: 10px 12px;
+            background-color: var(--channeltextarea-background);
+            color: var(--text-normal);
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            resize: none;
+            max-height: 80px;
+            outline: none;
+            margin-right: 12px;
+        }
+
+        #sendButton {
+            padding: 8px 16px;
+            background-color: var(--interactive-normal);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+
+        #sendButton:hover:not(:disabled) {
+            background-color: var(--interactive-hover);
+        }
+
+        #sendButton:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Right Sidebar: Members */
+        .members-sidebar {
+            width: 240px;
+            background-color: var(--background-secondary);
+            border-left: 1px solid var(--border);
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .members-header {
+            padding: 12px 16px;
+            font-size: 16px;
+            font-weight: bold;
+            color: var(--text-normal);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .members-list {
+            list-style: none;
+            flex: 1;
+        }
+
+        .member-item {
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .member-item:hover {
+            background-color: var(--background-modifier-hover);
+        }
+
+        .member-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            margin-right: 12px;
+            background-color: var(--background-tertiary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            color: var(--text-muted);
+        }
+
+        .member-name {
+            font-size: 16px;
+            color: var(--text-normal);
+        }
+
+        /* Auth Overlay */
+        .auth-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .auth-box {
+            background-color: var(--background-primary);
+            padding: 40px;
+            border-radius: 8px;
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+        }
+
+        .auth-box h2 {
+            margin-bottom: 20px;
+            color: var(--text-normal);
+        }
+
+        .google-signin-btn {
+            padding: 12px 24px;
+            background-color: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+            transition: background-color 0.2s;
+        }
+
+        .google-signin-btn:hover {
+            background-color: #3367d6;
+        }
+
+        .user-info {
+            margin-top: 20px;
+            padding: 12px;
+            background-color: var(--background-secondary);
+            border-radius: 4px;
+            text-align: left;
+        }
+
+        /* Hide scrollbars */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--background-secondary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--text-muted);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-normal);
+        }
+    </style>
+</head>
+<body>
+    <!-- Auth Overlay -->
+    <div id="authOverlay" class="auth-overlay" style="display: none;">
+        <div class="auth-box">
+            <h2>Welcome to Discord Clone</h2>
+            <p style="color: var(--text-muted); margin-bottom: 20px;">Sign in to join the chat</p>
+            <button id="googleSignIn" class="google-signin-btn">Sign in with Google</button>
+            <div id="userInfo" class="user-info" style="display: none;"></div>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="mainApp" style="display: none;">
+        <!-- Left Sidebar: Servers -->
+        <div class="sidebar">
+            <div class="server-icon active" data-server="global">
+                <span style="font-size: 24px;">🌐</span>
+            </div>
+            <div class="add-server"></div>
+        </div>
+
+        <!-- Channel Sidebar -->
+        <div class="channels-sidebar">
+            <div class="server-header">Global Server</div>
+            <div class="channel-category">TEXT CHANNELS</div>
+            <ul class="channel-list">
+                <li class="channel-item active" data-channel="general">
+                    <span class="channel-icon">#</span>
+                    <span class="channel-name">general</span>
+                </li>
+                <li class="channel-item" data-channel="random">
+                    <span class="channel-icon">#</span>
+                    <span class="channel-name">random</span>
+                </li>
+                <li class="channel-item" data-channel="announcements">
+                    <span class="channel-icon">#</span>
+                    <span class="channel-name">announcements</span>
+                </li>
+            </ul>
+        </div>
+
+        <!-- Main Chat -->
+        <div class="main-chat">
+            <div class="chat-header">
+                <div class="channel-title" id="currentChannelTitle">#general</div>
+                <div style="display: flex; align-items: center;">
+                    <span style="margin-right: 16px; color: var(--text-muted);">Users: <span id="onlineCount">1</span></span>
+                </div>
+            </div>
+            <div class="chat-messages" id="messages"></div>
+            <div class="message-input-area">
+                <textarea id="messageInput" placeholder="Message #general" rows="1"></textarea>
+                <button id="sendButton" disabled>Send</button>
+            </div>
+        </div>
+
+        <!-- Right Sidebar: Members -->
+        <div class="members-sidebar">
+            <div class="members-header">Online — 1 Member</div>
+            <ul class="members-list" id="membersList">
+                <!-- Members will be populated here -->
+            </ul>
+        </div>
+    </div>
+
+    <!-- Firebase SDKs via CDN -->
+    <script type="module">
+        // Import Firebase modules
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-analytics.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp, query, orderBy, where } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js";
+
+        // Firebase Config (Your provided keys)
+        const firebaseConfig = {
+            apiKey: "AIzaSyB1zvVHaBrbzX5iA9fBVNGa_3sY1-WCSpY",
+            authDomain: "squit-up-auth.firebaseapp.com",
+            projectId: "squit-up-auth",
+            storageBucket: "squit-up-auth.firebasestorage.app",
+            messagingSenderId: "503910898443",
+            appId: "1:503910898443:web:c5a56eb24cd4f183d8600e",
+            measurementId: "G-K4LHFHSNJC"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const analytics = getAnalytics(app);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // Google Auth Provider
+        const provider = new GoogleAuthProvider();
+        provider.addScope('email');
+        provider.addScope('profile');
+
+        // DOM Elements
+        const authOverlay = document.getElementById('authOverlay');
+        const mainApp = document.getElementById('mainApp');
+        const googleSignIn = document.getElementById('googleSignIn');
+        const userInfo = document.getElementById('userInfo');
+        const messagesDiv = document.getElementById('messages');
+        const messageInput = document.getElementById('messageInput');
+        const sendButton = document.getElementById('sendButton');
+        const currentChannelTitle = document.getElementById('currentChannelTitle');
+        const onlineCount = document.getElementById('onlineCount');
+        const membersList = document.getElementById('membersList');
+
+        // Channel Management
+        let currentChannel = 'general';
+        let unsubscribeMessages;
+        let currentUser = null;
+        const channels = ['general', 'random', 'announcements'];
+
+        // Auth State Listener
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUser = user;
+                userInfo.innerHTML = `
+                    <strong>${user.displayName}</strong><br>
+                    <small style="color: var(--text-muted);">${user.email}</small>
+                `;
+                userInfo.style.display = 'block';
+                googleSignIn.style.display = 'none';
+                authOverlay.style.display = 'none';
+                mainApp.style.display = 'flex';
+                loadMembers();
+                switchChannel(currentChannel);
+                sendButton.disabled = false;
+            } else {
+                currentUser = null;
+                userInfo.innerHTML = '';
+                userInfo.style.display = 'none';
+                googleSignIn.style.display = 'block';
+                authOverlay.style.display = 'flex';
+                mainApp.style.display = 'none';
+                if (unsubscribeMessages) unsubscribeMessages();
+                messagesDiv.innerHTML = '';
+            }
+        });
+
+        // Sign in with Google
+        googleSignIn.addEventListener('click', async () => {
+            try {
+                await signInWithPopup(auth, provider);
+            } catch (error) {
+                console.error('Auth error:', error);
+                alert('Sign in failed: ' + error.message);
+            }
+        });
+
+        // Channel Switching
+        document.querySelectorAll('.channel-item').forEach(item => {
+            item.addEventListener('click', () => {
+                document.querySelectorAll('.channel-item').forEach(i => i.classList.remove('active'));
+                item.classList.add('active');
+                currentChannel = item.dataset.channel;
+                currentChannelTitle.textContent = `#${currentChannel}`;
+                switchChannel(currentChannel);
+                messageInput.placeholder = `Message #${currentChannel}`;
+                messageInput.focus();
+            });
+        });
+
+        // Switch Channel Function
+        function switchChannel(channel) {
+            if (unsubscribeMessages) unsubscribeMessages();
+            const q = query(
+                collection(db, 'messages'),
+                where('channel', '==', channel),
+                orderBy('timestamp', 'asc')
+            );
+            unsubscribeMessages = onSnapshot(q, (snapshot) => {
+                messagesDiv.innerHTML = '';
+                let visibleCount = 0;
+                snapshot.forEach((doc) => {
+                    const data = doc.data();
+                    if (data.uid) { // Only show messages from authenticated users
+                        addMessageToDOM(data);
+                        visibleCount++;
+                    }
+                });
+                onlineCount.textContent = visibleCount || 0;
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            });
+        }
+
+        // Add Message to DOM
+        function
