@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SQUIT up - Discord Clone</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
         /* General Setup */
         body {
@@ -19,7 +20,7 @@
             flex-direction: column;
         }
 
-        /* Auth/Setup Containers */
+        /* Tailwind Configuration */
         .auth-container, .userid-container {
             flex-grow: 1;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -30,177 +31,62 @@
         }
 
         .auth-card {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border-radius: 12px; /* Smoother rounded corners */
-            padding: 40px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-            width: 100%;
-            max-width: 400px;
-            text-align: center;
+            @apply bg-white bg-opacity-95 backdrop-blur-md rounded-xl p-8 shadow-2xl w-full max-w-md text-center;
         }
 
         .logo {
-            font-size: 2.5rem;
-            font-weight: 800; /* Bold logo */
-            color: #5865f2; /* Discord blue */
-            margin-bottom: 10px;
+            @apply text-4xl font-extrabold text-[#5865f2] mb-2;
         }
 
         .subtitle {
-            color: #666;
-            margin-bottom: 30px;
-            font-size: 1.1rem;
+            @apply text-gray-600 mb-8 text-lg;
         }
 
         .btn {
-            width: 100%;
-            padding: 12px;
-            border: none;
-            border-radius: 8px; /* Consistent rounded corners */
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s ease-in-out;
-            margin-bottom: 15px;
+            @apply w-full py-3 border-none rounded-lg text-base font-semibold cursor-pointer transition-all duration-200 ease-in-out my-2;
         }
 
         .btn-google {
-            background: #fff;
-            color: #333;
-            border: 1px solid #e1e5e9;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
+            @apply bg-white text-gray-700 border-2 border-gray-200 flex items-center justify-center gap-3;
         }
 
         .btn-google:hover {
-            background: #f8f9fa;
-            transform: translateY(-1px);
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            @apply bg-gray-50 transform -translate-y-px shadow-lg;
         }
 
-        .btn-google:active {
-            transform: translateY(0);
+        .btn-primary {
+            @apply bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white;
         }
 
-        .form-group {
-            margin-bottom: 20px;
-            text-align: left;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            color: #333;
-            font-weight: 500;
+        .btn-primary:hover {
+            @apply opacity-90;
         }
 
         .form-group input {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #ddd;
-            border-radius: 8px;
-            font-size: 16px;
-            transition: border-color 0.3s;
-            box-sizing: border-box;
+            @apply w-full p-3 border-2 border-gray-300 rounded-lg text-base transition-colors duration-300 box-border text-gray-800;
         }
 
         .form-group input:focus {
-            outline: none;
-            border-color: #5865f2;
+            @apply outline-none border-[#5865f2];
         }
 
         .error-message {
-            color: #f04747; /* Discord Red */
-            font-size: 14px;
-            margin-top: 5px;
+            @apply text-[#f04747] text-sm mt-1;
+        }
+
+        .success-message {
+            @apply text-[#3ba55c] text-sm mt-1;
         }
 
         .loading-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.6);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            z-index: 1001;
-            border-radius: 12px;
+            @apply absolute inset-0 bg-black bg-opacity-60 flex items-center justify-center text-white z-50 rounded-xl text-lg font-medium;
         }
         
-        /* Main App */
+        /* Main App Structure (Tailwind utility classes are used inline where possible) */
         .app-container {
             display: none;
             height: 100vh;
             flex-direction: column;
-        }
-
-        /* App UI Styles (Retained from previous code for consistency) */
-        .app-header {
-            background: #2f3136;
-            padding: 10px 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid #202225;
-            min-height: 50px;
-        }
-
-        .user-info {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-left: auto;
-        }
-
-        .user-avatar {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            background: #5865f2;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: bold;
-        }
-
-        .app-body {
-            display: flex;
-            height: calc(100vh - 50px);
-        }
-
-        .sidebar {
-            width: 240px;
-            background: #2f3136;
-            display: flex;
-            flex-direction: column;
-            border-right: 1px solid #202225;
-            overflow-y: auto;
-        }
-        
-        .main-content {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-        }
-        .content-body {
-            flex: 1;
-            padding: 20px;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column-reverse; 
-        }
-
-        .message-input-container {
-            padding: 20px;
-            background: #36393f;
-            flex-shrink: 0;
         }
     </style>
 </head>
@@ -209,10 +95,17 @@
     <div id="authScreen" class="auth-container">
         <div class="auth-card">
             <div class="logo">SQUIT up</div>
-            <div class="subtitle">Connect with friends and communities</div>
-            <div class="loading-overlay" id="authLoading">
-                Signing in...
+            <div class="subtitle">Your ID: <span id="currentTempId">...</span></div>
+            <div class="loading-overlay" id="authLoading" style="display: none;">
+                Connecting...
             </div>
+            
+            <button class="btn btn-primary" onclick="showScreen('useridScreen')">
+                Set Permanent @user_id
+            </button>
+
+            <div class="my-4 text-gray-500 font-semibold">-- OR --</div>
+
             <button class="btn btn-google" onclick="signInWithGoogle()">
                 <!-- Google SVG Icon -->
                 <svg width="20" height="20" viewBox="0 0 24 24">
@@ -221,10 +114,10 @@
                     <path fill="#fbbc05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
                     <path fill="#ea4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 15.02 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
                 </svg>
-                Sign in with Google
+                Sign in/Register with Google
             </button>
-            <p style="color:#72767d; font-size: 0.85rem; margin-top: 20px;">
-                By signing in, you agree to our terms.
+            <p class="text-gray-500 text-sm mt-5">
+                Google sign-in links your account permanently. Anonymous users can chat until they set a permanent ID.
             </p>
         </div>
     </div>
@@ -233,18 +126,21 @@
     <div id="useridScreen" class="userid-container" style="display: none;">
         <div class="auth-card">
             <div class="logo">One Last Step</div>
-            <div class="subtitle">Choose your SQUIT Username</div>
-            <div class="loading-overlay" id="usernameLoading">
-                Saving Profile...
+            <div class="subtitle">Choose your Permanent @user_id</div>
+            <div class="loading-overlay" id="usernameLoading" style="display: none;">
+                Checking ID...
             </div>
             <div class="form-group">
-                <label for="usernameInput">Username</label>
-                <input type="text" id="usernameInput" placeholder="e.g., CoolUser#1234" maxlength="32">
+                <label for="usernameInput" class="text-gray-700 font-medium">@user_id (e.g., cooluser123)</label>
+                <input type="text" id="usernameInput" placeholder="Enter a unique ID (3-16 characters, no spaces)" maxlength="16">
                 <div id="usernameError" class="error-message"></div>
                 <div id="usernameSuccess" class="success-message"></div>
             </div>
             <button class="btn btn-primary" onclick="saveUsername()" id="saveUsernameBtn">
                 Continue to SQUIT up
+            </button>
+            <button class="btn bg-gray-300 text-gray-800" onclick="showScreen(auth.currentUser.isAnonymous ? 'authScreen' : 'appScreen')" id="cancelUsernameBtn">
+                Cancel
             </button>
         </div>
     </div>
@@ -252,50 +148,47 @@
     <!-- Main Application UI -->
     <div id="appScreen" class="app-container" style="display: none;">
         <!-- Header -->
-        <div class="app-header">
-            <h1 style="font-size: 1.2rem; font-weight: 700;"># General Chat</h1>
-            <div class="user-info">
-                <span id="currentUsername">User#0000</span>
-                <div class="user-avatar" id="currentUserAvatar">U</div>
-                <button class="btn" style="background: #f04747; padding: 8px 16px; margin: 0;" onclick="signOutUser()">Sign Out</button>
+        <div class="app-header bg-[#2f3136] flex justify-between items-center px-5 py-3 border-b border-[#202225] min-h-[50px]">
+            <h1 class="text-lg font-bold"># General Chat</h1>
+            <div class="flex items-center gap-3 ml-auto">
+                <span id="currentUsernameDisplay" class="font-semibold text-white">@Loading...</span>
+                <div class="w-8 h-8 rounded-full bg-[#5865f2] flex items-center justify-center text-white font-bold" id="currentUserAvatar">?</div>
+                <button class="bg-[#f04747] text-white py-2 px-4 rounded-lg font-semibold transition-colors duration-200 hover:bg-[#c93c3f]" onclick="signOutUser()">Sign Out</button>
             </div>
         </div>
         
         <!-- Body -->
-        <div class="app-body">
-            <!-- Sidebar (Placeholder for Friends/DMs) -->
-            <div class="sidebar">
-                <div class="sidebar-section">
-                    <div class="sidebar-title">
-                        DIRECT MESSAGES
-                    </div>
-                    <!-- Placeholder for logged-in user to see their own ID -->
-                    <div class="sidebar-item active">
-                        <span class="online-indicator"></span>
-                        <span id="sidebarUserId">Fetching...</span>
+        <div class="app-body flex flex-grow">
+            <!-- Sidebar -->
+            <div class="sidebar w-60 bg-[#2f3136] flex flex-col border-r border-[#202225] overflow-y-auto">
+                <div class="p-4 border-b border-[#202225]">
+                    <div class="text-xs font-semibold uppercase text-gray-400 mb-2">My Account</div>
+                    <div class="text-sm p-2 rounded-md bg-[#393c43] flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                        <span id="sidebarUserId" class="truncate text-sm font-mono">Loading...</span>
                     </div>
                 </div>
             </div>
 
             <!-- Main Content (Chat View) -->
-            <div class="main-content">
-                <div class="content-body" id="chatMessages">
+            <div class="main-content flex flex-col flex-grow bg-[#36393f]">
+                <div class="content-body flex flex-col-reverse flex-grow p-5 overflow-y-auto" id="chatMessages">
                     <!-- Messages will be injected here -->
-                    <div class="message">
-                        <div class="message-avatar">S</div>
-                        <div class="message-content">
-                            <div class="message-header">
-                                <span class="message-author">System Bot</span>
-                                <span class="message-time">Now</span>
+                    <div class="flex gap-3 mb-4">
+                        <div class="w-10 h-10 rounded-full bg-[#5865f2] flex items-center justify-center text-white font-bold flex-shrink-0">S</div>
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="font-semibold text-white">System Bot</span>
+                                <span class="text-xs text-gray-400">Now</span>
                             </div>
-                            <div class="message-text">Welcome to SQUIT up! Sign in to start chatting.</div>
+                            <div class="text-white text-base leading-relaxed">Welcome to SQUIT up! Your temporary ID is active for anonymous use. Set a permanent @user_id to secure your profile and start chatting.</div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Message Input -->
-                <div class="message-input-container">
-                    <input type="text" id="messageInput" class="message-input" placeholder="Message #general-chat (Not implemented yet)">
+                <div class="p-5 bg-[#36393f] flex-shrink-0">
+                    <input type="text" id="messageInput" class="w-full p-3 bg-[#40444b] border-none rounded-lg text-white text-sm box-border focus:outline-none focus:ring-2 focus:ring-[#5865f2]" placeholder="Message #general-chat (Not implemented yet)">
                 </div>
             </div>
         </div>
@@ -305,14 +198,14 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- 1. Firebase Environment Setup (MANDATORY) ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'squit-up-auth';
         const firebaseConfig = typeof __firebase_config !== 'undefined'
             ? JSON.parse(__firebase_config)
             : {
-                // Fallback config (using user's provided keys)
+                // Fallback config using user's provided keys
                 apiKey: "AIzaSyB1zvVHaBrbzX5iA9fBVNGa_3sY1-WCSpY",
                 authDomain: "squit-up-auth.firebaseapp.com",
                 projectId: "squit-up-auth",
@@ -323,14 +216,16 @@
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
         let auth, db;
-        let currentUserId = null;
-        let currentUserData = null;
+        let currentUserData = null; // Stores { username, avatarUrl, ... }
+
+        // Firestore Paths (MANDATORY STRUCTURE)
+        const userProfilePath = (uid) => doc(db, `/artifacts/${appId}/users/${uid}/profile/metadata`);
+        const usernameUniquenessPath = (username) => doc(db, `/artifacts/${appId}/public/data/usernames/${username.toLowerCase()}`);
 
         // --- 2. Utility Functions ---
 
         /**
          * Shows a specific screen while hiding others.
-         * @param {string} screenId - The ID of the screen element to show.
          */
         function showScreen(screenId) {
             document.getElementById('authScreen').style.display = 'none';
@@ -345,15 +240,11 @@
                 } else {
                     screen.style.display = 'flex';
                 }
-            } else {
-                console.error(`Screen element not found: ${screenId}`);
             }
         }
         
         /**
          * Toggles the loading state for a screen.
-         * @param {string} loadingId - The ID of the loading overlay element.
-         * @param {boolean} show - Whether to show or hide the loading overlay.
          */
         function toggleLoading(loadingId, show) {
             const loadingElement = document.getElementById(loadingId);
@@ -362,28 +253,59 @@
             }
         }
 
+        /**
+         * Updates UI elements with the current user's status.
+         * @param {object} user - Firebase User object.
+         */
+        function updateUI(user) {
+            const uid = user.uid;
+            let displayName = currentUserData?.username ? `@${currentUserData.username}` : `TempID: ${uid.substring(0, 8)}`;
+            let avatarChar = currentUserData?.username ? currentUserData.username[0].toUpperCase() : uid[0].toUpperCase();
+
+            // Auth Screen for Temporary ID display
+            document.getElementById('currentTempId').textContent = `TempID: ${uid.substring(0, 8)}`;
+
+            // Main App UI
+            document.getElementById('currentUsernameDisplay').textContent = displayName;
+            document.getElementById('currentUserAvatar').textContent = avatarChar;
+            document.getElementById('sidebarUserId').textContent = displayName; // Use unique ID for sidebar
+
+            // If it's an anonymous user who hasn't set a username yet, show auth screen
+            if (user.isAnonymous && !currentUserData?.username) {
+                showScreen('authScreen');
+            } else {
+                // Otherwise, go to the main app
+                showScreen('appScreen');
+            }
+        }
+
         // --- 3. Authentication & Profile Management ---
 
         /**
-         * Firebase Google Sign-In implementation.
+         * Handles the Google Sign-In process (real).
          */
         window.signInWithGoogle = async () => {
             if (!auth) return console.error("Firebase Auth not initialized.");
             toggleLoading('authLoading', true);
             try {
                 const provider = new GoogleAuthProvider();
-                // Optional: set custom parameters for the OAuth request
-                // provider.setCustomParameters({ prompt: 'select_account' }); 
+                
+                // If the user is currently anonymous, link the Google account to the anonymous account
+                if (auth.currentUser.isAnonymous) {
+                    await auth.currentUser.linkWithPopup(provider);
+                    console.log("Successfully linked anonymous account with Google.");
+                } else {
+                    await signInWithPopup(auth, provider);
+                    console.log("Signed in successfully with Google.");
+                }
 
-                const result = await signInWithPopup(auth, provider);
-                console.log("Signed in successfully with Google:", result.user.uid);
                 // onAuthStateChanged will handle navigation
             } catch (error) {
                 console.error("Google Sign-In Error:", error.code, error.message);
-                // Display error to user (using a custom modal/message box instead of alert)
-                document.getElementById('authLoading').innerText = `Sign In Failed: ${error.code.replace('auth/', '')}`;
+                const errorMessage = `Sign In Failed: ${error.code.replace('auth/', '')}`;
+                document.getElementById('authLoading').textContent = errorMessage;
                 setTimeout(() => {
-                    document.getElementById('authLoading').innerText = 'Signing in...';
+                    document.getElementById('authLoading').textContent = 'Connecting...';
                     toggleLoading('authLoading', false);
                 }, 3000);
             }
@@ -396,80 +318,125 @@
              if (!auth) return;
              try {
                 await signOut(auth);
-                // onAuthStateChanged will handle screen transition
+                // After signing out, sign in anonymously again to allow temporary use.
+                await signInAnonymously(auth);
              } catch (error) {
                 console.error("Sign out error:", error);
              }
         }
 
         /**
-         * Checks if the user has a username saved in Firestore.
-         * @param {string} uid - The Firebase User UID.
+         * Checks if the user has a permanent username saved in Firestore.
          */
-        async function checkUserProfile(uid) {
-            if (!db || !uid) return;
-            const profileRef = doc(db, `/artifacts/${appId}/users/${uid}/profile/metadata`);
+        async function checkUserProfile(user) {
+            if (!db || !user) return;
+            
+            const profileRef = userProfilePath(user.uid);
+            toggleLoading('authLoading', true);
+
             try {
                 const profileSnap = await getDoc(profileRef);
+                
                 if (profileSnap.exists() && profileSnap.data().username) {
-                    console.log("Profile exists. Proceeding to app.");
                     currentUserData = profileSnap.data();
-                    showMainApp(uid);
+                    console.log("Profile exists. Proceeding to app.");
+                    updateUI(user);
                 } else {
+                    currentUserData = null;
                     console.log("Profile does not exist. Showing username setup.");
+                    
+                    // Pre-fill input if Google user has an existing display name
+                    const usernameInput = document.getElementById('usernameInput');
+                    if (user.displayName && user.isAnonymous === false) {
+                        // Sanitize display name for username format (e.g., "John Doe" -> "johndoe")
+                        usernameInput.value = user.displayName.toLowerCase().replace(/[^a-z0-9]/g, '');
+                    } else {
+                        usernameInput.value = '';
+                    }
+
                     showScreen('useridScreen');
                 }
             } catch (error) {
                 console.error("Error fetching user profile:", error);
                 // If fetching fails, let user try to set username
                 showScreen('useridScreen');
+            } finally {
+                toggleLoading('authLoading', false);
             }
         }
 
         /**
-         * Saves the chosen username to Firestore.
+         * Checks if the chosen username is available globally.
+         * @param {string} username - The desired username.
+         * @returns {boolean} True if available, false otherwise.
+         */
+        async function checkUsernameAvailability(username) {
+            if (!db) return false;
+            try {
+                const docRef = usernameUniquenessPath(username);
+                const docSnap = await getDoc(docRef);
+                return !docSnap.exists();
+            } catch (error) {
+                console.error("Error checking username availability:", error);
+                return false; // Assume unavailable on error
+            }
+        }
+
+        /**
+         * Saves the chosen unique username and updates both the private profile and the public uniqueness list.
          */
         window.saveUsername = async () => {
             if (!auth.currentUser) return;
 
             const usernameInput = document.getElementById('usernameInput');
-            const username = usernameInput.value.trim();
+            const rawUsername = usernameInput.value.trim();
+            const username = rawUsername.toLowerCase().replace(/\s/g, ''); // Remove spaces and convert to lowercase
+            
             const errorElement = document.getElementById('usernameError');
             const successElement = document.getElementById('usernameSuccess');
 
             errorElement.textContent = '';
             successElement.textContent = '';
 
-            if (username.length < 3 || username.length > 32) {
-                errorElement.textContent = 'Username must be between 3 and 32 characters.';
+            // Simple validation
+            if (username.length < 3 || username.length > 16 || !/^[a-z0-9]+$/.test(username)) {
+                errorElement.textContent = '@user_id must be 3-16 characters long and contain only letters and numbers.';
                 return;
             }
 
             toggleLoading('usernameLoading', true);
             const uid = auth.currentUser.uid;
             
-            // Mandatory Firestore path: /artifacts/{appId}/users/{userId}/profile/metadata
-            const profileRef = doc(db, `/artifacts/${appId}/users/${uid}/profile/metadata`);
-            
             try {
-                // Check if username is already taken (Simplified check - proper global check requires a separate collection)
-                // For simplicity, we just save it directly here as uniqueness is hard to enforce without complex indexing/transactions.
-                
+                // 1. Check for uniqueness
+                const isAvailable = await checkUsernameAvailability(username);
+
+                if (!isAvailable) {
+                    errorElement.textContent = `@${username} already exists. Please try a different ID.`;
+                    return;
+                }
+
+                // 2. Prepare Data
                 const newProfileData = {
                     username: username,
+                    isAnonymous: auth.currentUser.isAnonymous,
+                    email: auth.currentUser.email || null,
                     avatarUrl: auth.currentUser.photoURL || null,
                     createdAt: new Date().toISOString()
                 };
 
-                await setDoc(profileRef, newProfileData, { merge: true });
-                currentUserData = newProfileData;
-                successElement.textContent = 'Profile saved successfully!';
-                console.log("Username saved:", username);
+                // 3. Save to Private Profile (User Data)
+                await setDoc(userProfilePath(uid), newProfileData, { merge: true });
 
-                // Wait a moment then transition to main app
+                // 4. Save to Public Uniqueness List (Global Check)
+                await setDoc(usernameUniquenessPath(username), { uid: uid });
+
+                currentUserData = newProfileData;
+                successElement.textContent = 'Profile saved successfully! Redirecting...';
+                
                 setTimeout(() => {
                     toggleLoading('usernameLoading', false);
-                    showMainApp(uid);
+                    updateUI(auth.currentUser); // Go to main app
                 }, 1000);
                 
             } catch (error) {
@@ -478,23 +445,6 @@
                 console.error("Error saving username:", error);
             }
         };
-
-        /**
-         * Shows the main application screen and populates user info.
-         * @param {string} uid - The Firebase User UID.
-         */
-        function showMainApp(uid) {
-            currentUserId = uid;
-            const displayId = currentUserData?.username || `User ID: ${uid.substring(0, 8)}...`;
-            
-            document.getElementById('currentUsername').textContent = displayId;
-            document.getElementById('currentUserAvatar').textContent = displayId[0].toUpperCase();
-            
-            // MANDATORY: Show full userId for public apps
-            document.getElementById('sidebarUserId').textContent = `User ID: ${uid}`;
-
-            showScreen('appScreen');
-        }
 
         // --- 4. Initialization ---
 
@@ -505,30 +455,25 @@
                 auth = getAuth(app);
                 db = getFirestore(app);
                 
-                // Sign in with custom token or anonymously if not available
+                // 1. Initial Authentication (Anonymous/Custom Token)
                 if (initialAuthToken) {
                     await signInWithCustomToken(auth, initialAuthToken);
-                    console.log("Signed in with Custom Token.");
                 } else {
                     await signInAnonymously(auth);
-                    console.log("Signed in Anonymously.");
                 }
-
-                // Set up Auth State Listener
+                
+                // 2. Set up Auth State Listener
                 onAuthStateChanged(auth, (user) => {
                     if (user) {
-                        currentUserId = user.uid;
-                        console.log("Auth state changed: Logged in. UID:", user.uid);
+                        console.log("Auth state changed: Logged in. UID:", user.uid, "Anonymous:", user.isAnonymous);
                         // Check if the user has completed their profile setup
-                        checkUserProfile(user.uid);
+                        checkUserProfile(user);
                     } else {
-                        currentUserId = null;
                         currentUserData = null;
                         console.log("Auth state changed: Logged out.");
-                        // Show the initial sign-in screen
+                        // This should ideally only happen if the user explicitly signs out and we fail to sign back in anonymously.
                         showScreen('authScreen');
                     }
-                    toggleLoading('authLoading', false);
                 });
 
             } catch (error) {
