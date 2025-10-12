@@ -3,829 +3,329 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Squit Up! Chat Platform</title>
+    <title>SQUIT: Chat Universe</title>
+    <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --primary-color: #6d28d9; /* Deep Purple for main accents */
-            --secondary-color: #4f46e5; /* Indigo for hover/active states */
-            --bg-color-dark: #1f1d2c; /* Main dark background */
-            --bg-color-light: #2c2a3e; /* Sidebar/Card background */
-            --text-color-light: #e0e0e0; /* Main text color */
-            --text-color-faded: #a0a0a0; /* Faded text/subtitles */
-            --online-color: #10b981; /* Emerald green */
-        }
-
+        /* Base styling for dark, centered layout */
         body {
             font-family: 'Inter', sans-serif;
-            background-color: var(--bg-color-dark);
-            color: var(--text-color-light);
-            height: 100vh;
-            margin: 0;
-            overflow: hidden; /* Prevent body scrolling */
+            background-color: #1f2937; /* Dark background */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
         }
 
-        .chat-sidebar {
-            background-color: var(--bg-color-light);
-            width: 280px;
-            box-shadow: 4px 0 10px rgba(0, 0, 0, 0.3);
-            display: flex;
-            flex-direction: column;
+        /* Custom dynamic style for the exciting SQUIT title */
+        .exciting-title {
+            text-shadow: 0 4px 10px rgba(134, 49, 255, 0.5);
+            animation: glow 1.5s ease-in-out infinite alternate;
+        }
+
+        @keyframes glow {
+            from {
+                text-shadow: 0 0 5px #facc15, 0 0 10px #facc15, 0 0 15px #8b5cf6;
+            }
+            to {
+                text-shadow: 0 0 10px #facc15, 0 0 20px #facc15, 0 0 30px #8b5cf6;
+            }
+        }
+
+        .auth-container {
             z-index: 10;
         }
-
-        .chat-main {
-            flex-grow: 1;
-            display: flex;
-            flex-direction: column;
-            background-color: var(--bg-color-dark);
-            position: relative;
+        
+        /* Button hover effect */
+        .button-pulse:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
         }
 
-        .chat-header {
-            background-color: var(--bg-color-light);
-            padding: 0.75rem 1rem;
-            border-bottom: 1px solid #3c3b51;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-            z-index: 5;
-        }
-
-        .chat-messages {
-            flex-grow: 1;
-            padding: 1rem;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-            padding-bottom: 6rem; /* Space for input bar */
-        }
-
-        .message {
-            max-width: 80%;
-            padding: 0.5rem 1rem;
-            border-radius: 12px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-            line-height: 1.4;
-        }
-
-        .message-incoming {
-            background-color: #3730a3; /* Indigo-700 */
-            align-self: flex-start;
-            border-bottom-left-radius: 4px;
-        }
-
-        .message-outgoing {
-            background-color: var(--primary-color); /* Deep Purple */
-            align-self: flex-end;
-            border-bottom-right-radius: 4px;
-        }
-
-        .message-timestamp {
-            font-size: 0.65rem;
-            opacity: 0.6;
-            margin-top: 0.25rem;
-        }
-
-        .chat-input-area {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            padding: 1rem;
-            background-color: var(--bg-color-light);
-            border-top: 1px solid #3c3b51;
-            z-index: 10;
-        }
-
-        .btn-primary {
-            background-color: var(--primary-color);
-            color: white;
-            /* Changed padding from '0.75rem 1.5rem' to a smaller size */
-            padding: 0.5rem 1.25rem; 
-            border-radius: 10px;
-            transition: background-color 0.2s, transform 0.1s;
-        }
-        .btn-primary:hover {
-            background-color: var(--secondary-color);
-            transform: translateY(-1px);
-        }
-
-        .loading-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(31, 29, 44, 0.95);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-        }
-
-        .spinner {
-            border: 4px solid rgba(255, 255, 255, 0.1);
-            border-left-color: var(--primary-color);
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        /* Custom Modal Styling (replaces alert/confirm) */
-        .custom-modal-backdrop {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.7);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1001;
-            opacity: 0;
-            visibility: hidden;
-            transition: opacity 0.3s;
-        }
-
-        .custom-modal-backdrop.show {
-            opacity: 1;
-            visibility: visible;
-        }
-
-        .custom-modal {
-            background-color: var(--bg-color-light);
-            padding: 2rem;
-            border-radius: 15px;
-            max-width: 400px;
-            width: 90%;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
-            transform: scale(0.9);
-            transition: transform 0.3s;
-        }
-
-        .custom-modal-backdrop.show .custom-modal {
-            transform: scale(1);
-        }
-
-        .modal-title {
-            color: var(--primary-color);
-            font-size: 1.5rem;
-            font-weight: 700;
-            margin-bottom: 0.5rem;
-        }
-
-        .user-profile-box {
-            background-color: var(--primary-color);
-            height: 60px;
-            border-radius: 10px 10px 0 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: 700;
-            font-size: 1.2rem;
-            padding: 0 1rem;
-        }
-
-        .user-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background-color: var(--secondary-color);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-weight: 800;
-            font-size: 1.2rem;
-            color: white;
-            margin-right: 0.5rem;
-        }
-
-        .friend-item {
-            padding: 0.75rem 1rem;
-            transition: background-color 0.2s;
-            cursor: pointer;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        .friend-item:hover {
-            background-color: rgba(109, 40, 217, 0.2); /* Light primary hover */
-        }
-        .friend-item.active {
-            background-color: rgba(109, 40, 217, 0.4); /* Stronger primary active */
-        }
-        .online-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background-color: var(--online-color);
-            margin-right: 0.5rem;
-        }
-
-        @media (max-width: 768px) {
-            .chat-sidebar {
-                width: 100%;
-                height: 100%;
-                position: absolute;
-                transform: translateX(-100%);
-                transition: transform 0.3s ease-in-out;
-            }
-            .chat-sidebar.open {
-                transform: translateX(0);
-            }
-            .chat-main {
-                width: 100%;
-            }
-            .chat-header {
-                padding-left: 3.5rem; /* Space for back button */
-            }
+        .button-pulse:active {
+            transform: translateY(0);
         }
     </style>
 </head>
 <body>
 
-    <!-- Loading Screen -->
-    <div id="loadingOverlay" class="loading-overlay">
-        <div class="spinner mb-4"></div>
-        <p class="text-xl font-semibold">Starting SQUIT UP!</p>
-    </div>
+    <!-- Main Authentication Container (Centered on page) -->
+    <div id="auth-container" class="auth-container w-full max-w-sm p-8 bg-gray-800 rounded-xl shadow-2xl transition-all duration-500">
 
-    <!-- Main Chat Layout -->
-    <div id="appContainer" class="flex h-screen w-full hidden">
-        
-        <!-- Sidebar -->
-        <div id="sidebar" class="chat-sidebar md:flex flex-col">
-            
-            <div class="p-4 border-b border-[#3c3b51] flex items-center justify-between">
-                <h1 class="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-indigo-400">SQUIT UP!</h1>
-                <button id="toggleSidebarClose" class="md:hidden text-white text-xl">
-                    &times;
-                </button>
+        <!-- Title/Logo Area -->
+        <h1 class="text-4xl font-extrabold text-yellow-400 mb-10 tracking-wider text-center exciting-title">
+            SQUIT: Your <span class="text-indigo-400">ULTIMATE</span> Chat Universe! 🚀
+        </h1>
+
+        <!-- Loading State (Initially shown while Firebase initializes) -->
+        <div id="loading-state" class="text-center text-gray-400">
+            <svg class="animate-spin h-5 w-5 mr-3 inline-block text-indigo-400" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            Loading SQUIT...
+        </div>
+
+        <!-- Authentication Form (Hidden until Firebase ready or error occurs) -->
+        <div id="auth-form" class="hidden">
+            <div class="mb-6">
+                <label for="email" class="block text-sm font-medium text-gray-300 mb-2">Email Address</label>
+                <input type="email" id="email" class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 text-white focus:ring-indigo-500 focus:border-indigo-500 transition duration-150" placeholder="Enter your email" required>
             </div>
             
-            <!-- Friends/Requests Section -->
-            <div class="flex-grow p-4 overflow-y-auto">
-                <h2 class="text-xs font-bold uppercase text-gray-400 mb-2">Pending Requests (<span id="pendingRequestCount">0</span>)</h2>
-                <div id="pendingRequestsList" class="space-y-1 mb-6">
-                    <p class="text-sm italic text-gray-500">No pending requests.</p>
-                </div>
-                
-                <h2 class="text-xs font-bold uppercase text-gray-400 mb-2">My Friends (<span id="friendCount">0</span>)</h2>
-                <div id="friendsList" class="space-y-1 mb-6">
-                    <p class="text-sm italic text-gray-500">No friends yet.</p>
-                </div>
-                
-                <button id="sendFriendRequestBtn" class="w-full text-center text-sm font-semibold rounded-md p-2 bg-gray-800 text-white hover:bg-gray-700 transition">
-                    Send Friend Request
-                </button>
+            <div class="mb-8">
+                <label for="password" class="block text-sm font-medium text-gray-300 mb-2">Password</label>
+                <input type="password" id="password" class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 text-white focus:ring-indigo-500 focus:border-indigo-500 transition duration-150" placeholder="Enter your password" required>
             </div>
 
-            <!-- Current User Profile Box -->
-            <div id="currentUserProfile" class="h-16 flex items-center p-3 border-t border-[#3c3b51] cursor-pointer hover:bg-[#3c3b51]/50 transition">
-                <div id="currentUserAvatar" class="user-avatar text-lg">?</div>
-                <div class="flex-grow ml-3 overflow-hidden">
-                    <p id="currentUserIdDisplay" class="font-bold text-sm truncate">@Loading...</p>
-                    <p class="text-xs text-green-400 flex items-center">
-                        <span class="online-dot !bg-green-400"></span> Online
-                    </p>
-                </div>
-                <!-- Reduced padding and size of sign out button -->
-                <button onclick="signOut()" class="text-gray-400 hover:text-white transition p-2 rounded-full hover:bg-[#3c3b51]">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                    </svg>
+            <!-- Error Message Display Area -->
+            <div id="error-message" class="text-red-400 text-sm mb-4 hidden p-2 bg-red-900 bg-opacity-30 rounded-lg"></div>
+
+            <!-- Action Buttons -->
+            <div class="flex flex-col space-y-4">
+                <button onclick="handleLogin()" id="login-button" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition duration-300 button-pulse">
+                    Log In
+                </button>
+                <button onclick="handleRegister()" id="register-button" class="w-full py-3 border border-indigo-600 text-indigo-400 font-semibold rounded-lg hover:bg-indigo-900 transition duration-300 button-pulse">
+                    Register New Account
                 </button>
             </div>
         </div>
 
-        <!-- Main Chat Area -->
-        <div class="chat-main">
-            
-            <!-- Chat Header -->
-            <div id="chatHeader" class="chat-header flex items-center hidden">
-                <button id="toggleSidebarOpen" class="md:hidden mr-3 text-white">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h7" />
-                    </svg>
-                </button>
-                <p id="chatHeaderTitle" class="text-xl font-bold"></p>
-                <button id="closeChatBtn" class="ml-auto text-gray-400 hover:text-red-400 transition" onclick="closeChat()">
-                    &times;
-                </button>
-            </div>
-
-            <!-- Welcome/Initial State -->
-            <div id="welcomeScreen" class="flex-grow flex flex-col justify-center items-center text-center p-8">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-gray-600 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-                <h2 class="text-2xl font-semibold text-gray-300 mb-2">Select a friend to start chatting.</h2>
-                <p class="text-gray-500">Your chat and friend features are active!</p>
-            </div>
-            
-            <!-- Chat Messages Area -->
-            <div id="messagesArea" class="chat-messages hidden">
-                <!-- Messages will be rendered here -->
-            </div>
-
-            <!-- Chat Input -->
-            <div id="chatInputContainer" class="chat-input-area hidden">
-                <div class="flex items-center">
-                    <input type="text" id="messageInput" placeholder="Send a message..." class="flex-grow p-3 rounded-l-xl border-none outline-none bg-[#3c3b51] text-white placeholder-gray-400 transition focus:ring-2 focus:ring-primary-color" onkeypress="handleKeyPress(event)">
-                    <!-- Use smaller button size by inheriting from updated .btn-primary in CSS -->
-                    <button id="sendMessageBtn" class="btn-primary rounded-r-xl rounded-l-none h-full text-sm font-semibold">Send</button>
-                </div>
-            </div>
-
+        <!-- Chat View (Simulated, shown after successful login) -->
+        <div id="chat-view" class="hidden text-center p-6 bg-gray-900 rounded-lg">
+            <h2 class="text-2xl font-bold text-green-400 mb-4">Welcome to SQUIT!</h2>
+            <p id="user-info" class="text-gray-300 mb-6"></p>
+            <button onclick="handleLogout()" class="w-full py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition duration-300 button-pulse">
+                Log Out
+            </button>
         </div>
-    </div>
-    
-    <!-- Custom Modal Structure -->
-    <div id="customModalBackdrop" class="custom-modal-backdrop">
-        <div id="customModal" class="custom-modal">
-            <h3 id="modalTitle" class="modal-title"></h3>
-            <p id="modalMessage" class="text-gray-300 mb-4"></p>
-            <div class="flex justify-end">
-                <button id="modalPrimaryBtn" class="btn-primary px-4 py-2 w-full"></button>
-            </div>
-        </div>
+
     </div>
 
-    <!-- Firebase Imports -->
+    <!-- Firebase and Application Logic -->
     <script type="module">
+        // Import Firebase modules
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut as firebaseSignOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, query, where, addDoc, serverTimestamp, orderBy, limit, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
-        // --- Globals ---
-        // MANDATORY: These variables are provided by the canvas environment.
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        // Use Debug level for better error visibility in console
+        setLogLevel('Debug');
 
-        let db, auth;
-        let unsubscribeUser;
-        let unsubscribeFriends;
-        let unsubscribeChat;
+        // Global Firebase instances and user state
+        let app, db, auth;
+        let userId = null;
+        let isAuthReady = false;
 
-        // Application State
-        const appState = {
-            userId: null,
-            userProfile: null,
-            friends: [],
-            activeChat: null, // UID of the friend currently being chatted with
-            chatMessages: {}, // Local storage for mock messages (to be replaced by Firestore)
-            isAuthReady: false,
-            isProfileLoaded: false,
-        };
-
-        // --- Firebase Initialization and Authentication ---
+        // --- Utility Functions ---
 
         /**
-         * Initializes Firebase and handles authentication.
+         * Simple function to display error messages in the UI.
+         * @param {string} message - The error message to display.
          */
-        async function initializeFirebase() {
+        function displayError(message) {
+            const errorElement = document.getElementById('error-message');
+            errorElement.textContent = message;
+            errorElement.classList.remove('hidden');
+            setTimeout(() => {
+                errorElement.classList.add('hidden');
+            }, 5000);
+        }
+
+        /**
+         * Updates the UI based on the current user's state.
+         * @param {object | null} user - The Firebase User object or null.
+         */
+        function updateUI(user) {
+            const loadingState = document.getElementById('loading-state');
+            const authForm = document.getElementById('auth-form');
+            const chatView = document.getElementById('chat-view');
+            const userInfo = document.getElementById('user-info');
+            
+            loadingState.classList.add('hidden'); // Hide loading regardless
+
+            if (user) {
+                // Logged in
+                userId = user.uid;
+                authForm.classList.add('hidden');
+                chatView.classList.remove('hidden');
+                
+                const email = user.email || 'Anonymous User';
+                userInfo.innerHTML = `You are logged in as: <span class="font-mono text-sm block mt-2 text-yellow-400 break-all">${email}</span><br>Your User ID is: <span class="font-mono text-xs block mt-1 text-gray-400 break-all">${userId}</span>`;
+
+            } else {
+                // Logged out
+                userId = null;
+                authForm.classList.remove('hidden');
+                chatView.classList.add('hidden');
+            }
+        }
+
+        // --- Authentication Handlers ---
+
+        /**
+         * Handles user registration with email and password.
+         */
+        window.handleRegister = async () => {
+            if (!auth) {
+                displayError("App not initialized. Cannot register.");
+                return;
+            }
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+
+            if (!email || !password) {
+                displayError("Please enter both email and password.");
+                return;
+            }
+
             try {
-                // setLogLevel('debug'); // Uncomment for Firestore debugging
-                const app = initializeApp(firebaseConfig);
+                // Disable buttons during action
+                document.getElementById('register-button').disabled = true;
+                
+                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                console.log("Registration successful for user:", userCredential.user.uid);
+            } catch (error) {
+                console.error("Registration Error:", error.code, error.message);
+                
+                let friendlyMessage = "Registration failed. Please check your email format and ensure the password is at least 6 characters long.";
+                if (error.code === 'auth/email-already-in-use') {
+                    friendlyMessage = "This email is already registered. Try logging in.";
+                } else if (error.code === 'auth/weak-password') {
+                     friendlyMessage = "Password is too weak. Must be at least 6 characters.";
+                }
+                displayError(friendlyMessage);
+            } finally {
+                 document.getElementById('register-button').disabled = false;
+            }
+        };
+
+        /**
+         * Handles user login with email and password.
+         */
+        window.handleLogin = async () => {
+            if (!auth) {
+                displayError("App not initialized. Cannot log in.");
+                return;
+            }
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+
+            if (!email || !password) {
+                displayError("Please enter both email and password.");
+                return;
+            }
+
+            try {
+                // Disable buttons during action
+                document.getElementById('login-button').disabled = true;
+                
+                const userCredential = await signInWithEmailAndPassword(auth, email, password);
+                console.log("Login successful for user:", userCredential.user.uid);
+            } catch (error) {
+                console.error("Login Error:", error.code, error.message);
+                
+                let friendlyMessage = "Login failed. Please check your email and password.";
+                if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+                    friendlyMessage = "Invalid email or password.";
+                }
+                displayError(friendlyMessage);
+            } finally {
+                document.getElementById('login-button').disabled = false;
+            }
+        };
+
+        /**
+         * Handles user logout.
+         */
+        window.handleLogout = async () => {
+             if (!auth) return;
+            try {
+                await signOut(auth);
+                console.log("User logged out successfully.");
+            } catch (error) {
+                console.error("Logout Error:", error);
+                displayError("Failed to log out.");
+            }
+        };
+
+        // --- Initialization ---
+
+        /**
+         * Main function to initialize Firebase and set up auth listener.
+         */
+        async function initializeAppAndAuth() {
+            const loadingState = document.getElementById('loading-state');
+            
+            try {
+                // Retrieve global variables
+                // Fallbacks are necessary in case the environment doesn't define them
+                const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                const firebaseConfigJson = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
+                const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+                const firebaseConfig = JSON.parse(firebaseConfigJson);
+
+                // CRITICAL CHECK: Check for invalid configuration (Fix for auth/invalid-api-key error)
+                if (!firebaseConfig || Object.keys(firebaseConfig).length === 0 || !firebaseConfig.apiKey) {
+                    loadingState.innerHTML = `
+                        <p class="text-red-500 font-bold mb-4">
+                            CRITICAL ERROR: Firebase API Key Missing.
+                        </p>
+                        <p class="text-sm text-gray-400">
+                            The application failed to initialize because the provided 
+                            Firebase configuration is invalid. Please ensure 
+                            the environment configuration is correct.
+                        </p>
+                    `;
+                    return; // Stop initialization and prevent further errors
+                }
+
+                // Initialize services
+                app = initializeApp(firebaseConfig);
                 auth = getAuth(app);
                 db = getFirestore(app);
 
-                await authenticateUser();
-                
-            } catch (error) {
-                console.error("Error initializing Firebase:", error);
-                showModal('Error', `Error initializing app. Check console for details: ${error.message}`);
-                // Ensure loading screen is removed even on error
-                document.getElementById('loadingOverlay').classList.add('hidden');
-                document.getElementById('appContainer').classList.remove('hidden');
-            }
-        }
-
-        /**
-         * Authenticates the user using the custom token or anonymously.
-         */
-        async function authenticateUser() {
-            onAuthStateChanged(auth, async (user) => {
-                if (user) {
-                    appState.userId = user.uid;
-                    await setupUserProfile(user.uid);
-                    startListeners();
-                } else {
-                    // Sign in anonymously if no custom token is provided
-                    try {
-                        if (initialAuthToken) {
-                            await signInWithCustomToken(auth, initialAuthToken);
-                        } else {
-                            await signInAnonymously(auth);
-                        }
-                    } catch (error) {
-                        console.error("Authentication Error:", error);
-                        showModal('Authentication Failed', `Could not sign in: ${error.message}`);
-                    }
-                }
-                appState.isAuthReady = true;
-                if (appState.isProfileLoaded) {
-                    hideLoadingOverlay();
-                }
-            });
-        }
-        
-        /**
-         * Fetches or creates the user profile document.
-         * @param {string} uid The Firebase User ID.
-         */
-        async function setupUserProfile(uid) {
-            const userDocRef = doc(db, 'artifacts', appId, 'users', uid, 'profile', 'data');
-            const userDocSnap = await getDoc(userDocRef);
-
-            if (userDocSnap.exists()) {
-                appState.userProfile = userDocSnap.data();
-            } else {
-                // This is a placeholder for a real user ID logic (like a unique username)
-                const mockDisplayName = `@user_${Math.random().toString(36).substring(2, 9)}`;
-                appState.userProfile = {
-                    uid: uid,
-                    displayName: mockDisplayName,
-                    createdAt: serverTimestamp(),
-                    friends: [],
-                    pendingRequests: []
-                };
-                await setDoc(userDocRef, appState.userProfile);
-            }
-            updateUserProfileDisplay();
-            appState.isProfileLoaded = true;
-            if (appState.isAuthReady) {
-                hideLoadingOverlay();
-            }
-        }
-
-        /**
-         * Signs out the current user.
-         */
-        window.signOut = async function() {
-            try {
-                if (unsubscribeUser) unsubscribeUser();
-                if (unsubscribeFriends) unsubscribeFriends();
-                if (unsubscribeChat) unsubscribeChat();
-                await firebaseSignOut(auth);
-                location.reload(); // Simple refresh to return to the sign-in state
-            } catch (error) {
-                console.error("Sign Out Error:", error);
-                showModal('Sign Out Error', 'Failed to sign out. Please try refreshing the page.');
-            }
-        }
-
-        // --- UI Updates ---
-
-        /**
-         * Updates the current user's profile display in the sidebar.
-         */
-        function updateUserProfileDisplay() {
-            const profile = appState.userProfile;
-            if (profile) {
-                document.getElementById('currentUserIdDisplay').textContent = profile.displayName;
-                document.getElementById('currentUserAvatar').textContent = profile.displayName.charAt(1).toUpperCase();
-            }
-        }
-        
-        /**
-         * Hides the loading overlay and shows the main app container.
-         */
-        function hideLoadingOverlay() {
-            if (appState.isAuthReady && appState.isProfileLoaded) {
-                document.getElementById('loadingOverlay').classList.add('hidden');
-                document.getElementById('appContainer').classList.remove('hidden');
-            }
-        }
-
-        /**
-         * Renders the list of friends in the sidebar.
-         */
-        function renderFriendsList() {
-            const listContainer = document.getElementById('friendsList');
-            listContainer.innerHTML = '';
-            
-            if (appState.friends.length === 0) {
-                listContainer.innerHTML = '<p class="text-sm italic text-gray-500">No friends yet.</p>';
-                document.getElementById('friendCount').textContent = '0';
-                return;
-            }
-
-            appState.friends.forEach(friend => {
-                const friendItem = document.createElement('div');
-                friendItem.className = `friend-item flex items-center mb-1 ${appState.activeChat === friend.uid ? 'active' : ''}`;
-                friendItem.setAttribute('data-uid', friend.uid);
-                friendItem.onclick = () => openChat(friend.uid, friend.displayName);
-
-                const avatar = document.createElement('div');
-                avatar.className = 'user-avatar !w-10 !h-10 !text-base';
-                avatar.textContent = friend.displayName.charAt(1).toUpperCase();
-
-                const details = document.createElement('div');
-                details.className = 'flex-grow ml-3 overflow-hidden';
-                details.innerHTML = `
-                    <p class="font-semibold truncate">${friend.displayName}</p>
-                    <p class="text-xs text-green-400 flex items-center">
-                        <span class="online-dot !bg-green-400"></span> Online (Mock)
-                    </p>
-                `;
-                
-                // Mock logout icon for demo purposes
-                const logoutIcon = document.createElement('button');
-                logoutIcon.className = 'ml-2 text-gray-400 hover:text-red-400 transition p-1 rounded-full';
-                logoutIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                </svg>`;
-
-                friendItem.append(avatar, details, logoutIcon);
-                listContainer.appendChild(friendItem);
-            });
-            document.getElementById('friendCount').textContent = appState.friends.length.toString();
-        }
-
-        /**
-         * Renders messages for the currently active chat.
-         */
-        function renderMessages() {
-            const messagesArea = document.getElementById('messagesArea');
-            messagesArea.innerHTML = '';
-            
-            const receiverUid = appState.activeChat;
-            if (!receiverUid) return;
-
-            const messages = appState.chatMessages[receiverUid] || [];
-            
-            messages.forEach(msg => {
-                const isOutgoing = msg.senderUid === appState.userId;
-                
-                const messageDiv = document.createElement('div');
-                messageDiv.className = `message ${isOutgoing ? 'message-outgoing' : 'message-incoming'}`;
-                
-                const text = document.createElement('p');
-                text.textContent = msg.text;
-
-                const timestamp = document.createElement('p');
-                timestamp.className = `message-timestamp ${isOutgoing ? 'text-right' : 'text-left'}`;
-                
-                let time = '';
-                if (msg.timestamp) {
-                    // Check if timestamp is a Firestore Timestamp object or a mock string
-                    const date = msg.timestamp.toDate ? msg.timestamp.toDate() : new Date(msg.timestamp);
-                    time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                } else {
-                    time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                }
-
-                timestamp.textContent = time;
-
-                messageDiv.append(text, timestamp);
-                messagesArea.appendChild(messageDiv);
-            });
-
-            // Scroll to the bottom
-            messagesArea.scrollTop = messagesArea.scrollHeight;
-        }
-
-        // --- Core Application Logic ---
-
-        /**
-         * Sets up real-time listeners for the user's profile and friends list.
-         */
-        function startListeners() {
-            if (!db || !appState.userId) return;
-
-            // 1. Listen to the current user's profile for friend list updates (MOCK)
-            // In a real app, you would have a friend collection. We are mocking the friend structure here.
-            const userDocRef = doc(db, 'artifacts', appId, 'users', appState.userId, 'profile', 'data');
-            
-            unsubscribeUser = onSnapshot(userDocRef, (docSnap) => {
-                if (docSnap.exists()) {
-                    // Simulate having one mock friend named @gsa
-                    appState.friends = [{ uid: 'gsa_mock_uid', displayName: '@gsa' }];
-                    
-                    // Add the current user to the friends list for self-chat demo
-                    appState.friends.push({
-                        uid: appState.userId, 
-                        displayName: appState.userProfile.displayName
-                    });
-                    
-                    renderFriendsList();
-                }
-            }, (error) => {
-                console.error("Error listening to user profile:", error);
-            });
-        }
-        
-        /**
-         * Opens the chat interface for a specific friend/user.
-         * @param {string} receiverUid The UID of the friend to chat with.
-         * @param {string} displayName The display name of the friend.
-         */
-        window.openChat = function(receiverUid, displayName) {
-            appState.activeChat = receiverUid;
-            
-            // UI updates
-            document.getElementById('chatHeaderTitle').textContent = displayName;
-            document.getElementById('chatHeader').classList.remove('hidden');
-            document.getElementById('welcomeScreen').classList.add('hidden');
-            document.getElementById('messagesArea').classList.remove('hidden');
-            document.getElementById('chatInputContainer').classList.remove('hidden');
-            document.getElementById('messageInput').focus();
-            
-            // Close sidebar on mobile when chat opens
-            if (window.innerWidth <= 768) {
-                document.getElementById('sidebar').classList.remove('open');
-            }
-
-            renderFriendsList(); // Update active state highlight
-            
-            // Start real-time chat listener
-            startChatListener(appState.userId, receiverUid);
-        }
-
-        /**
-         * Closes the current chat and returns to the welcome screen.
-         */
-        window.closeChat = function() {
-            appState.activeChat = null;
-            
-            // Stop chat listener
-            if (unsubscribeChat) {
-                unsubscribeChat();
-                unsubscribeChat = null;
-            }
-
-            // UI updates
-            document.getElementById('chatHeader').classList.add('hidden');
-            document.getElementById('welcomeScreen').classList.remove('hidden');
-            document.getElementById('messagesArea').classList.add('hidden');
-            document.getElementById('chatInputContainer').classList.add('hidden');
-            renderFriendsList(); // Remove active state highlight
-        }
-
-        /**
-         * Determines the conversation ID based on the two UIDs.
-         * Sorts UIDs to create a consistent, unique room ID regardless of who started the chat.
-         * @param {string} uid1 
-         * @param {string} uid2 
-         * @returns {string} The unique conversation ID.
-         */
-        function getConversationId(uid1, uid2) {
-            return uid1 < uid2 ? `${uid1}_${uid2}` : `${uid2}_${uid1}`;
-        }
-
-        /**
-         * Attaches a real-time listener to the conversation in Firestore.
-         * @param {string} myUid 
-         * @param {string} otherUid 
-         */
-        function startChatListener(myUid, otherUid) {
-            if (unsubscribeChat) {
-                unsubscribeChat();
-            }
-
-            const conversationId = getConversationId(myUid, otherUid);
-            const chatCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'chats');
-            
-            // Query for all messages in this conversation, ordered by timestamp
-            const q = query(
-                chatCollectionRef,
-                where('conversationId', '==', conversationId),
-                orderBy('timestamp', 'asc')
-            );
-
-            unsubscribeChat = onSnapshot(q, (snapshot) => {
-                const messages = [];
-                snapshot.forEach(doc => {
-                    messages.push({ id: doc.id, ...doc.data() });
+                // Set up real-time authentication listener
+                onAuthStateChanged(auth, (user) => {
+                    isAuthReady = true;
+                    // Update UI whenever auth state changes (login/logout/token expiry)
+                    updateUI(user); 
                 });
 
-                // Update the local state with fresh messages
-                appState.chatMessages[otherUid] = messages;
+                // Authenticate with the custom token if available, otherwise sign in anonymously
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                    console.log("Signed in with custom token.");
+                } else {
+                    await signInAnonymously(auth);
+                    console.log("Signed in anonymously.");
+                }
                 
-                // Only re-render if the currently active chat matches the listener
-                if (appState.activeChat === otherUid) {
-                    renderMessages();
-                }
-            }, (error) => {
-                console.error("Error listening to chat messages:", error);
-                // Handle error gracefully
-            });
-        }
+                // Final UI update based on the initial sign-in attempt
+                updateUI(auth.currentUser);
 
-
-        /**
-         * Sends a message and saves it to Firestore.
-         */
-        window.sendMessage = async function() {
-            const input = document.getElementById('messageInput');
-            const messageText = input.value.trim();
-            const receiverUid = appState.activeChat;
-
-            if (!messageText || !receiverUid || !appState.userId) {
-                return;
-            }
-
-            const senderUid = appState.userId;
-            const conversationId = getConversationId(senderUid, receiverUid);
-            
-            const chatCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'chats');
-
-            const newMessage = {
-                senderUid: senderUid,
-                receiverUid: receiverUid,
-                text: messageText,
-                timestamp: serverTimestamp(),
-                conversationId: conversationId
-            };
-
-            // Save the new message to Firestore
-            try {
-                await addDoc(chatCollectionRef, newMessage);
-                input.value = ''; // Clear input on success
             } catch (error) {
-                console.error("Error sending message to Firestore:", error);
-                showModal('Send Failed', `Message could not be sent. Check your network connection. Error: ${error.message}`);
-            }
-            
-            // The chat listener (startChatListener) will automatically update the UI (renderMessages)
-        }
-
-        /**
-         * Handles the Enter key press in the message input.
-         * @param {KeyboardEvent} event 
-         */
-        window.handleKeyPress = function(event) {
-            if (event.key === 'Enter') {
-                sendMessage();
-            }
-        }
-        
-        /**
-         * Mock friend request function
-         */
-        document.getElementById('sendFriendRequestBtn').onclick = function() {
-            showModal('Feature Coming Soon', 'Friend request functionality is not yet implemented, but the button looks great!');
-        }
-
-        // --- Custom Modal Functions (replaces alert/confirm) ---
-
-        /**
-         * Displays a custom modal dialog.
-         * @param {string} title - The title of the modal.
-         * @param {string} message - The message content.
-         * @param {string} [buttonText='OK'] - The text for the primary button.
-         * @param {Function} [callback] - Optional function to call when the primary button is clicked.
-         */
-        function showModal(title, message, buttonText = 'OK', callback = null) {
-            document.getElementById('modalTitle').textContent = title;
-            document.getElementById('modalMessage').textContent = message;
-            document.getElementById('modalPrimaryBtn').textContent = buttonText;
-            
-            const backdrop = document.getElementById('customModalBackdrop');
-            const primaryBtn = document.getElementById('modalPrimaryBtn');
-            
-            // Remove existing listener to prevent duplicate calls
-            primaryBtn.onclick = null; 
-
-            primaryBtn.onclick = () => {
-                backdrop.classList.remove('show');
-                if (callback) {
-                    callback();
+                console.error("Firebase Initialization Error:", error);
+                
+                let errorMessage = `Error initializing the app: ${error.message}`;
+                
+                if (error.code === 'auth/invalid-api-key') {
+                    errorMessage = "Firebase Error: Invalid API Key. Please check the provided configuration.";
                 }
-            };
 
-            backdrop.classList.add('show');
+                // Display a permanent error if Firebase fails to initialize
+                loadingState.classList.remove('hidden');
+                loadingState.innerHTML = `<p class="text-red-500 font-bold">${errorMessage}</p>`;
+            }
         }
 
-        // --- Event Listeners and Initial Call ---
-        
-        // Mobile sidebar toggle logic
-        document.getElementById('toggleSidebarOpen').onclick = () => {
-            document.getElementById('sidebar').classList.add('open');
-        };
-
-        document.getElementById('toggleSidebarClose').onclick = () => {
-            document.getElementById('sidebar').classList.remove('open');
-        };
-        
-        // Send message button click
-        document.getElementById('sendMessageBtn').onclick = sendMessage;
-        
-        // Initialize the application
-        initializeFirebase();
+        // Start the application initialization when the script loads
+        initializeAppAndAuth();
 
     </script>
 </body>
