@@ -3,606 +3,541 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Discord Clone - Global Chat</title>
+    <title>SQUIT up - Discord Clone</title>
     <style>
-        /* Discord-like Color Scheme */
-        :root {
-            --background-primary: #36393f;
-            --background-secondary: #2f3136;
-            --background-tertiary: #202225;
-            --background-modifier-hover: rgba(79, 84, 92, 0.16);
-            --channeltextarea-background: #40444b;
-            --text-normal: #dcddde;
-            --text-muted: #72767d;
-            --interactive-normal: #4f46e5;
-            --interactive-hover: #3730a3;
-            --border: #202225;
-            --elevation: rgba(0, 0, 0, 0.2);
-        }
-
-        * {
+        /* General Setup */
+        body {
+            box-sizing: border-box;
             margin: 0;
             padding: 0;
+            font-family: 'Inter', sans-serif;
+            background: #36393f;
+            color: #dcddde;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Auth/Setup Containers */
+        .auth-container, .userid-container {
+            flex-grow: 1;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .auth-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 12px; /* Smoother rounded corners */
+            padding: 40px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+
+        .logo {
+            font-size: 2.5rem;
+            font-weight: 800; /* Bold logo */
+            color: #5865f2; /* Discord blue */
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1rem;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 8px; /* Consistent rounded corners */
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+            margin-bottom: 15px;
+        }
+
+        .btn-google {
+            background: #fff;
+            color: #333;
+            border: 1px solid #e1e5e9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .btn-google:hover {
+            background: #f8f9fa;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn-google:active {
+            transform: translateY(0);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #333;
+            font-weight: 500;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
             box-sizing: border-box;
         }
 
-        body {
-            font-family: 'Whitney', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-            background-color: var(--background-primary);
-            color: var(--text-normal);
-            height: 100vh;
-            display: flex;
-            overflow: hidden;
-        }
-
-        /* Left Sidebar: Servers */
-        .sidebar {
-            width: 72px;
-            background-color: var(--background-secondary);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 12px 0;
-            border-right: 1px solid var(--border);
-            position: relative;
-        }
-
-        .server-icon {
-            width: 48px;
-            height: 48px;
-            background-color: var(--background-tertiary);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 8px;
-            cursor: pointer;
-            transition: border-radius 0.1s ease-out;
-            position: relative;
-        }
-
-        .server-icon:hover {
-            background-color: var(--background-modifier-hover);
-        }
-
-        .server-icon.active {
-            border-radius: 16px;
-        }
-
-        .server-icon::after {
-            content: '';
-            position: absolute;
-            bottom: -4px;
-            right: -4px;
-            width: 20px;
-            height: 20px;
-            background: var(--interactive-normal);
-            border-radius: 50%;
-            opacity: 0;
-            transition: opacity 0.2s;
-        }
-
-        .server-icon.active::after {
-            opacity: 1;
-        }
-
-        .add-server {
-            width: 48px;
-            height: 48px;
-            background-color: var(--background-tertiary);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            margin-top: auto;
-            margin-bottom: 12px;
-            transition: background-color 0.2s;
-        }
-
-        .add-server:hover {
-            background-color: var(--background-modifier-hover);
-        }
-
-        .add-server::before {
-            content: '+';
-            font-size: 24px;
-            color: var(--text-muted);
-        }
-
-        /* Channel Sidebar */
-        .channels-sidebar {
-            width: 240px;
-            background-color: var(--background-secondary);
-            border-right: 1px solid var(--border);
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .server-header {
-            padding: 12px 16px;
-            font-size: 16px;
-            font-weight: bold;
-            color: var(--text-normal);
-            border-bottom: 1px solid var(--border);
-        }
-
-        .channel-category {
-            padding: 8px 16px;
-            font-size: 12px;
-            font-weight: 600;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .channel-list {
-            list-style: none;
-        }
-
-        .channel-item {
-            padding: 6px 16px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            transition: background-color 0.2s;
-            border-radius: 4px;
-        }
-
-        .channel-item:hover {
-            background-color: var(--background-modifier-hover);
-        }
-
-        .channel-item.active {
-            background-color: var(--background-tertiary);
-        }
-
-        .channel-icon {
-            width: 16px;
-            height: 16px;
-            margin-right: 12px;
-            color: var(--text-muted);
-        }
-
-        .channel-name {
-            font-size: 16px;
-            color: var(--text-normal);
-        }
-
-        /* Main Chat Area */
-        .main-chat {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            min-width: 0;
-        }
-
-        .chat-header {
-            padding: 12px 16px;
-            background-color: var(--background-secondary);
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .channel-title {
-            font-size: 16px;
-            font-weight: bold;
-            color: var(--text-normal);
-        }
-
-        .chat-messages {
-            flex: 1;
-            overflow-y: auto;
-            padding: 0 16px;
-            background-color: var(--background-primary);
-            display: flex;
-            flex-direction: column;
-        }
-
-        .message {
-            display: flex;
-            padding: 8px 0;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .message-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            margin-right: 16px;
-            flex-shrink: 0;
-            background-color: var(--background-tertiary);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-            color: var(--text-muted);
-        }
-
-        .message-content {
-            flex: 1;
-            min-width: 0;
-        }
-
-        .message-header {
-            display: flex;
-            align-items: baseline;
-            margin-bottom: 2px;
-        }
-
-        .message-author {
-            font-weight: 500;
-            color: var(--text-normal);
-            margin-right: 8px;
-        }
-
-        .message-time {
-            font-size: 12px;
-            color: var(--text-muted);
-        }
-
-        .message-text {
-            font-size: 16px;
-            line-height: 1.4;
-            color: var(--text-normal);
-            word-wrap: break-word;
-        }
-
-        /* Input Area */
-        .message-input-area {
-            padding: 12px 16px;
-            background-color: var(--background-secondary);
-            border-top: 1px solid var(--border);
-            display: flex;
-            align-items: flex-end;
-        }
-
-        #messageInput {
-            flex: 1;
-            padding: 10px 12px;
-            background-color: var(--channeltextarea-background);
-            color: var(--text-normal);
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            resize: none;
-            max-height: 80px;
+        .form-group input:focus {
             outline: none;
-            margin-right: 12px;
+            border-color: #5865f2;
         }
 
-        #sendButton {
-            padding: 8px 16px;
-            background-color: var(--interactive-normal);
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
+        .error-message {
+            color: #f04747; /* Discord Red */
             font-size: 14px;
-            transition: background-color 0.2s;
+            margin-top: 5px;
         }
 
-        #sendButton:hover:not(:disabled) {
-            background-color: var(--interactive-hover);
-        }
-
-        #sendButton:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        /* Right Sidebar: Members */
-        .members-sidebar {
-            width: 240px;
-            background-color: var(--background-secondary);
-            border-left: 1px solid var(--border);
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .members-header {
-            padding: 12px 16px;
-            font-size: 16px;
-            font-weight: bold;
-            color: var(--text-normal);
-            border-bottom: 1px solid var(--border);
-        }
-
-        .members-list {
-            list-style: none;
-            flex: 1;
-        }
-
-        .member-item {
-            padding: 8px 16px;
-            display: flex;
-            align-items: center;
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-
-        .member-item:hover {
-            background-color: var(--background-modifier-hover);
-        }
-
-        .member-avatar {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            margin-right: 12px;
-            background-color: var(--background-tertiary);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 14px;
-            color: var(--text-muted);
-        }
-
-        .member-name {
-            font-size: 16px;
-            color: var(--text-normal);
-        }
-
-        /* Auth Overlay */
-        .auth-overlay {
-            position: fixed;
+        .loading-overlay {
+            position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0, 0, 0, 0.8);
-            display: flex;
+            background: rgba(0, 0, 0, 0.6);
+            display: none;
             align-items: center;
             justify-content: center;
-            z-index: 1000;
-        }
-
-        .auth-box {
-            background-color: var(--background-primary);
-            padding: 40px;
-            border-radius: 8px;
-            text-align: center;
-            max-width: 400px;
-            width: 90%;
-        }
-
-        .auth-box h2 {
-            margin-bottom: 20px;
-            color: var(--text-normal);
-        }
-
-        .google-signin-btn {
-            padding: 12px 24px;
-            background-color: #4285f4;
             color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-            width: 100%;
-            transition: background-color 0.2s;
+            z-index: 1001;
+            border-radius: 12px;
+        }
+        
+        /* Main App */
+        .app-container {
+            display: none;
+            height: 100vh;
+            flex-direction: column;
         }
 
-        .google-signin-btn:hover {
-            background-color: #3367d6;
+        /* App UI Styles (Retained from previous code for consistency) */
+        .app-header {
+            background: #2f3136;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #202225;
+            min-height: 50px;
         }
 
         .user-info {
-            margin-top: 20px;
-            padding: 12px;
-            background-color: var(--background-secondary);
-            border-radius: 4px;
-            text-align: left;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-left: auto;
         }
 
-        /* Hide scrollbars */
-        ::-webkit-scrollbar {
-            width: 8px;
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #5865f2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
         }
 
-        ::-webkit-scrollbar-track {
-            background: var(--background-secondary);
+        .app-body {
+            display: flex;
+            height: calc(100vh - 50px);
         }
 
-        ::-webkit-scrollbar-thumb {
-            background: var(--text-muted);
-            border-radius: 4px;
+        .sidebar {
+            width: 240px;
+            background: #2f3136;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid #202225;
+            overflow-y: auto;
+        }
+        
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .content-body {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column-reverse; 
         }
 
-        ::-webkit-scrollbar-thumb:hover {
-            background: var(--text-normal);
+        .message-input-container {
+            padding: 20px;
+            background: #36393f;
+            flex-shrink: 0;
         }
     </style>
 </head>
 <body>
-    <!-- Auth Overlay -->
-    <div id="authOverlay" class="auth-overlay" style="display: none;">
-        <div class="auth-box">
-            <h2>Welcome to Discord Clone</h2>
-            <p style="color: var(--text-muted); margin-bottom: 20px;">Sign in to join the chat</p>
-            <button id="googleSignIn" class="google-signin-btn">Sign in with Google</button>
-            <div id="userInfo" class="user-info" style="display: none;"></div>
+    <!-- Auth Screen -->
+    <div id="authScreen" class="auth-container">
+        <div class="auth-card">
+            <div class="logo">SQUIT up</div>
+            <div class="subtitle">Connect with friends and communities</div>
+            <div class="loading-overlay" id="authLoading">
+                Signing in...
+            </div>
+            <button class="btn btn-google" onclick="signInWithGoogle()">
+                <!-- Google SVG Icon -->
+                <svg width="20" height="20" viewBox="0 0 24 24">
+                    <path fill="#4285f4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                    <path fill="#34a853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                    <path fill="#fbbc05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                    <path fill="#ea4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 15.02 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+                Sign in with Google
+            </button>
+            <p style="color:#72767d; font-size: 0.85rem; margin-top: 20px;">
+                By signing in, you agree to our terms.
+            </p>
         </div>
     </div>
 
-    <!-- Main App -->
-    <div id="mainApp" style="display: none;">
-        <!-- Left Sidebar: Servers -->
-        <div class="sidebar">
-            <div class="server-icon active" data-server="global">
-                <span style="font-size: 24px;">🌐</span>
+    <!-- Username Creation Screen -->
+    <div id="useridScreen" class="userid-container" style="display: none;">
+        <div class="auth-card">
+            <div class="logo">One Last Step</div>
+            <div class="subtitle">Choose your SQUIT Username</div>
+            <div class="loading-overlay" id="usernameLoading">
+                Saving Profile...
             </div>
-            <div class="add-server"></div>
+            <div class="form-group">
+                <label for="usernameInput">Username</label>
+                <input type="text" id="usernameInput" placeholder="e.g., CoolUser#1234" maxlength="32">
+                <div id="usernameError" class="error-message"></div>
+                <div id="usernameSuccess" class="success-message"></div>
+            </div>
+            <button class="btn btn-primary" onclick="saveUsername()" id="saveUsernameBtn">
+                Continue to SQUIT up
+            </button>
         </div>
+    </div>
 
-        <!-- Channel Sidebar -->
-        <div class="channels-sidebar">
-            <div class="server-header">Global Server</div>
-            <div class="channel-category">TEXT CHANNELS</div>
-            <ul class="channel-list">
-                <li class="channel-item active" data-channel="general">
-                    <span class="channel-icon">#</span>
-                    <span class="channel-name">general</span>
-                </li>
-                <li class="channel-item" data-channel="random">
-                    <span class="channel-icon">#</span>
-                    <span class="channel-name">random</span>
-                </li>
-                <li class="channel-item" data-channel="announcements">
-                    <span class="channel-icon">#</span>
-                    <span class="channel-name">announcements</span>
-                </li>
-            </ul>
+    <!-- Main Application UI -->
+    <div id="appScreen" class="app-container" style="display: none;">
+        <!-- Header -->
+        <div class="app-header">
+            <h1 style="font-size: 1.2rem; font-weight: 700;"># General Chat</h1>
+            <div class="user-info">
+                <span id="currentUsername">User#0000</span>
+                <div class="user-avatar" id="currentUserAvatar">U</div>
+                <button class="btn" style="background: #f04747; padding: 8px 16px; margin: 0;" onclick="signOutUser()">Sign Out</button>
+            </div>
         </div>
-
-        <!-- Main Chat -->
-        <div class="main-chat">
-            <div class="chat-header">
-                <div class="channel-title" id="currentChannelTitle">#general</div>
-                <div style="display: flex; align-items: center;">
-                    <span style="margin-right: 16px; color: var(--text-muted);">Users: <span id="onlineCount">1</span></span>
+        
+        <!-- Body -->
+        <div class="app-body">
+            <!-- Sidebar (Placeholder for Friends/DMs) -->
+            <div class="sidebar">
+                <div class="sidebar-section">
+                    <div class="sidebar-title">
+                        DIRECT MESSAGES
+                    </div>
+                    <!-- Placeholder for logged-in user to see their own ID -->
+                    <div class="sidebar-item active">
+                        <span class="online-indicator"></span>
+                        <span id="sidebarUserId">Fetching...</span>
+                    </div>
                 </div>
             </div>
-            <div class="chat-messages" id="messages"></div>
-            <div class="message-input-area">
-                <textarea id="messageInput" placeholder="Message #general" rows="1"></textarea>
-                <button id="sendButton" disabled>Send</button>
-            </div>
-        </div>
 
-        <!-- Right Sidebar: Members -->
-        <div class="members-sidebar">
-            <div class="members-header">Online — 1 Member</div>
-            <ul class="members-list" id="membersList">
-                <!-- Members will be populated here -->
-            </ul>
+            <!-- Main Content (Chat View) -->
+            <div class="main-content">
+                <div class="content-body" id="chatMessages">
+                    <!-- Messages will be injected here -->
+                    <div class="message">
+                        <div class="message-avatar">S</div>
+                        <div class="message-content">
+                            <div class="message-header">
+                                <span class="message-author">System Bot</span>
+                                <span class="message-time">Now</span>
+                            </div>
+                            <div class="message-text">Welcome to SQUIT up! Sign in to start chatting.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Message Input -->
+                <div class="message-input-container">
+                    <input type="text" id="messageInput" class="message-input" placeholder="Message #general-chat (Not implemented yet)">
+                </div>
+            </div>
         </div>
     </div>
 
-    <!-- Firebase SDKs via CDN -->
+    <!-- Firebase Scripts -->
     <script type="module">
-        // Import Firebase modules
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
-        import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-analytics.js";
-        import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp, query, orderBy, where } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Firebase Config (Your provided keys)
-        const firebaseConfig = {
-            apiKey: "AIzaSyB1zvVHaBrbzX5iA9fBVNGa_3sY1-WCSpY",
-            authDomain: "squit-up-auth.firebaseapp.com",
-            projectId: "squit-up-auth",
-            storageBucket: "squit-up-auth.firebasestorage.app",
-            messagingSenderId: "503910898443",
-            appId: "1:503910898443:web:c5a56eb24cd4f183d8600e",
-            measurementId: "G-K4LHFHSNJC"
-        };
+        // --- 1. Firebase Environment Setup (MANDATORY) ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'squit-up-auth';
+        const firebaseConfig = typeof __firebase_config !== 'undefined'
+            ? JSON.parse(__firebase_config)
+            : {
+                // Fallback config (using user's provided keys)
+                apiKey: "AIzaSyB1zvVHaBrbzX5iA9fBVNGa_3sY1-WCSpY",
+                authDomain: "squit-up-auth.firebaseapp.com",
+                projectId: "squit-up-auth",
+                storageBucket: "squit-up-auth.firebasestorage.app",
+                messagingSenderId: "503910898443",
+                appId: "1:503910898443:web:c5a56eb24cd4f183d8600e",
+            };
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const analytics = getAnalytics(app);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
+        let auth, db;
+        let currentUserId = null;
+        let currentUserData = null;
 
-        // Google Auth Provider
-        const provider = new GoogleAuthProvider();
-        provider.addScope('email');
-        provider.addScope('profile');
+        // --- 2. Utility Functions ---
 
-        // DOM Elements
-        const authOverlay = document.getElementById('authOverlay');
-        const mainApp = document.getElementById('mainApp');
-        const googleSignIn = document.getElementById('googleSignIn');
-        const userInfo = document.getElementById('userInfo');
-        const messagesDiv = document.getElementById('messages');
-        const messageInput = document.getElementById('messageInput');
-        const sendButton = document.getElementById('sendButton');
-        const currentChannelTitle = document.getElementById('currentChannelTitle');
-        const onlineCount = document.getElementById('onlineCount');
-        const membersList = document.getElementById('membersList');
-
-        // Channel Management
-        let currentChannel = 'general';
-        let unsubscribeMessages;
-        let currentUser = null;
-        const channels = ['general', 'random', 'announcements'];
-
-        // Auth State Listener
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                currentUser = user;
-                userInfo.innerHTML = `
-                    <strong>${user.displayName}</strong><br>
-                    <small style="color: var(--text-muted);">${user.email}</small>
-                `;
-                userInfo.style.display = 'block';
-                googleSignIn.style.display = 'none';
-                authOverlay.style.display = 'none';
-                mainApp.style.display = 'flex';
-                loadMembers();
-                switchChannel(currentChannel);
-                sendButton.disabled = false;
+        /**
+         * Shows a specific screen while hiding others.
+         * @param {string} screenId - The ID of the screen element to show.
+         */
+        function showScreen(screenId) {
+            document.getElementById('authScreen').style.display = 'none';
+            document.getElementById('useridScreen').style.display = 'none';
+            document.getElementById('appScreen').style.display = 'none';
+            
+            const screen = document.getElementById(screenId);
+            if (screen) {
+                // Use flex for containers that need centering/layout
+                if (screenId === 'appScreen') {
+                    screen.style.display = 'flex';
+                } else {
+                    screen.style.display = 'flex';
+                }
             } else {
-                currentUser = null;
-                userInfo.innerHTML = '';
-                userInfo.style.display = 'none';
-                googleSignIn.style.display = 'block';
-                authOverlay.style.display = 'flex';
-                mainApp.style.display = 'none';
-                if (unsubscribeMessages) unsubscribeMessages();
-                messagesDiv.innerHTML = '';
+                console.error(`Screen element not found: ${screenId}`);
             }
-        });
-
-        // Sign in with Google
-        googleSignIn.addEventListener('click', async () => {
-            try {
-                await signInWithPopup(auth, provider);
-            } catch (error) {
-                console.error('Auth error:', error);
-                alert('Sign in failed: ' + error.message);
+        }
+        
+        /**
+         * Toggles the loading state for a screen.
+         * @param {string} loadingId - The ID of the loading overlay element.
+         * @param {boolean} show - Whether to show or hide the loading overlay.
+         */
+        function toggleLoading(loadingId, show) {
+            const loadingElement = document.getElementById(loadingId);
+            if (loadingElement) {
+                loadingElement.style.display = show ? 'flex' : 'none';
             }
-        });
-
-        // Channel Switching
-        document.querySelectorAll('.channel-item').forEach(item => {
-            item.addEventListener('click', () => {
-                document.querySelectorAll('.channel-item').forEach(i => i.classList.remove('active'));
-                item.classList.add('active');
-                currentChannel = item.dataset.channel;
-                currentChannelTitle.textContent = `#${currentChannel}`;
-                switchChannel(currentChannel);
-                messageInput.placeholder = `Message #${currentChannel}`;
-                messageInput.focus();
-            });
-        });
-
-        // Switch Channel Function
-        function switchChannel(channel) {
-            if (unsubscribeMessages) unsubscribeMessages();
-            const q = query(
-                collection(db, 'messages'),
-                where('channel', '==', channel),
-                orderBy('timestamp', 'asc')
-            );
-            unsubscribeMessages = onSnapshot(q, (snapshot) => {
-                messagesDiv.innerHTML = '';
-                let visibleCount = 0;
-                snapshot.forEach((doc) => {
-                    const data = doc.data();
-                    if (data.uid) { // Only show messages from authenticated users
-                        addMessageToDOM(data);
-                        visibleCount++;
-                    }
-                });
-                onlineCount.textContent = visibleCount || 0;
-                messagesDiv.scrollTop = messagesDiv.scrollHeight;
-            });
         }
 
-        // Add Message to DOM
-        function
+        // --- 3. Authentication & Profile Management ---
+
+        /**
+         * Firebase Google Sign-In implementation.
+         */
+        window.signInWithGoogle = async () => {
+            if (!auth) return console.error("Firebase Auth not initialized.");
+            toggleLoading('authLoading', true);
+            try {
+                const provider = new GoogleAuthProvider();
+                // Optional: set custom parameters for the OAuth request
+                // provider.setCustomParameters({ prompt: 'select_account' }); 
+
+                const result = await signInWithPopup(auth, provider);
+                console.log("Signed in successfully with Google:", result.user.uid);
+                // onAuthStateChanged will handle navigation
+            } catch (error) {
+                console.error("Google Sign-In Error:", error.code, error.message);
+                // Display error to user (using a custom modal/message box instead of alert)
+                document.getElementById('authLoading').innerText = `Sign In Failed: ${error.code.replace('auth/', '')}`;
+                setTimeout(() => {
+                    document.getElementById('authLoading').innerText = 'Signing in...';
+                    toggleLoading('authLoading', false);
+                }, 3000);
+            }
+        };
+
+        /**
+         * Signs the user out.
+         */
+        window.signOutUser = async () => {
+             if (!auth) return;
+             try {
+                await signOut(auth);
+                // onAuthStateChanged will handle screen transition
+             } catch (error) {
+                console.error("Sign out error:", error);
+             }
+        }
+
+        /**
+         * Checks if the user has a username saved in Firestore.
+         * @param {string} uid - The Firebase User UID.
+         */
+        async function checkUserProfile(uid) {
+            if (!db || !uid) return;
+            const profileRef = doc(db, `/artifacts/${appId}/users/${uid}/profile/metadata`);
+            try {
+                const profileSnap = await getDoc(profileRef);
+                if (profileSnap.exists() && profileSnap.data().username) {
+                    console.log("Profile exists. Proceeding to app.");
+                    currentUserData = profileSnap.data();
+                    showMainApp(uid);
+                } else {
+                    console.log("Profile does not exist. Showing username setup.");
+                    showScreen('useridScreen');
+                }
+            } catch (error) {
+                console.error("Error fetching user profile:", error);
+                // If fetching fails, let user try to set username
+                showScreen('useridScreen');
+            }
+        }
+
+        /**
+         * Saves the chosen username to Firestore.
+         */
+        window.saveUsername = async () => {
+            if (!auth.currentUser) return;
+
+            const usernameInput = document.getElementById('usernameInput');
+            const username = usernameInput.value.trim();
+            const errorElement = document.getElementById('usernameError');
+            const successElement = document.getElementById('usernameSuccess');
+
+            errorElement.textContent = '';
+            successElement.textContent = '';
+
+            if (username.length < 3 || username.length > 32) {
+                errorElement.textContent = 'Username must be between 3 and 32 characters.';
+                return;
+            }
+
+            toggleLoading('usernameLoading', true);
+            const uid = auth.currentUser.uid;
+            
+            // Mandatory Firestore path: /artifacts/{appId}/users/{userId}/profile/metadata
+            const profileRef = doc(db, `/artifacts/${appId}/users/${uid}/profile/metadata`);
+            
+            try {
+                // Check if username is already taken (Simplified check - proper global check requires a separate collection)
+                // For simplicity, we just save it directly here as uniqueness is hard to enforce without complex indexing/transactions.
+                
+                const newProfileData = {
+                    username: username,
+                    avatarUrl: auth.currentUser.photoURL || null,
+                    createdAt: new Date().toISOString()
+                };
+
+                await setDoc(profileRef, newProfileData, { merge: true });
+                currentUserData = newProfileData;
+                successElement.textContent = 'Profile saved successfully!';
+                console.log("Username saved:", username);
+
+                // Wait a moment then transition to main app
+                setTimeout(() => {
+                    toggleLoading('usernameLoading', false);
+                    showMainApp(uid);
+                }, 1000);
+                
+            } catch (error) {
+                toggleLoading('usernameLoading', false);
+                errorElement.textContent = `Error saving profile: ${error.message}`;
+                console.error("Error saving username:", error);
+            }
+        };
+
+        /**
+         * Shows the main application screen and populates user info.
+         * @param {string} uid - The Firebase User UID.
+         */
+        function showMainApp(uid) {
+            currentUserId = uid;
+            const displayId = currentUserData?.username || `User ID: ${uid.substring(0, 8)}...`;
+            
+            document.getElementById('currentUsername').textContent = displayId;
+            document.getElementById('currentUserAvatar').textContent = displayId[0].toUpperCase();
+            
+            // MANDATORY: Show full userId for public apps
+            document.getElementById('sidebarUserId').textContent = `User ID: ${uid}`;
+
+            showScreen('appScreen');
+        }
+
+        // --- 4. Initialization ---
+
+        window.onload = async () => {
+            try {
+                // Initialize Firebase App and Services
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                
+                // Sign in with custom token or anonymously if not available
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                    console.log("Signed in with Custom Token.");
+                } else {
+                    await signInAnonymously(auth);
+                    console.log("Signed in Anonymously.");
+                }
+
+                // Set up Auth State Listener
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        currentUserId = user.uid;
+                        console.log("Auth state changed: Logged in. UID:", user.uid);
+                        // Check if the user has completed their profile setup
+                        checkUserProfile(user.uid);
+                    } else {
+                        currentUserId = null;
+                        currentUserData = null;
+                        console.log("Auth state changed: Logged out.");
+                        // Show the initial sign-in screen
+                        showScreen('authScreen');
+                    }
+                    toggleLoading('authLoading', false);
+                });
+
+            } catch (error) {
+                console.error("Firebase initialization failed:", error);
+                // Show auth screen as fallback
+                showScreen('authScreen');
+            }
+        };
+
+    </script>
+</body>
+</html>
