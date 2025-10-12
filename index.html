@@ -375,7 +375,7 @@
                         <h3 id="alert-title" class="text-xl font-bold mb-4 text-white"></h3>
                         <p id="alert-message" class="text-gray-300 mb-6"></p>
                         <button id="alert-ok-btn" class="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition duration-150">
-                            ठीक है (OK)
+                            OK
                         </button>
                     </div>
                 `;
@@ -397,7 +397,7 @@
         const appState = {
             currentView: 'loading', // 'loading', 'auth', 'profile_setup', 'dashboard'
             user: null,
-            loadingMessage: 'Firebase शुरू हो रहा है...',
+            loadingMessage: 'Starting Firebase...',
             errorMessage: null,
             activeChat: null, // New: Holds the UID of the friend currently being chatted with
             isUserIdUnique: false,
@@ -579,14 +579,16 @@
          * @param {string} targetUserId - The @UserId of the recipient.
          */
         async function sendFriendRequest(targetUserId) {
-            if (!userId) return showCustomAlert("दोस्त अनुरोध भेजने के लिए आपको लॉग इन करना होगा। (You must be logged in to send friend requests.)", "Error");
+            if (!userId) {
+                return showCustomAlert("You must be logged in to send friend requests.", "Error");
+            }
             if (targetUserId === userDisplayName) {
-                return showCustomAlert("आप खुद को दोस्त अनुरोध नहीं भेज सकते! (You can't send a friend request to yourself!)", "Error");
+                return showCustomAlert("You can't send a friend request to yourself!", "Error");
             }
             // Check if target is already a friend by checking if their UID is in my friendsList
             const isAlreadyFriend = appState.friendsList.some(uid => appState.allProfiles[uid]?.userId === targetUserId);
             if (isAlreadyFriend) {
-                return showCustomAlert(`आप पहले से ही @${targetUserId} के दोस्त हैं। (You are already friends with @${targetUserId}.)`, "Error");
+                return showCustomAlert(`You are already friends with @${targetUserId}.`, "Error");
             }
 
             appState.isSubmitting = true;
@@ -601,7 +603,7 @@
                 const querySnapshot = await getDocs(q);
 
                 if (querySnapshot.empty) {
-                    showCustomAlert(`उपयोगकर्ता @${targetUserId} नहीं मिला। (User @${targetUserId} not found.)`, "Error");
+                    showCustomAlert(`User @${targetUserId} not found.`, "Error");
                     return;
                 }
 
@@ -610,14 +612,14 @@
                 // 2. Check if a request is already pending (sent by me)
                 const targetProfile = querySnapshot.docs[0].data();
                 if (targetProfile.friendRequests && targetProfile.friendRequests.includes(userId)) {
-                    showCustomAlert(`@${targetUserId} को पहले ही दोस्त अनुरोध भेजा जा चुका है। (A friend request has already been sent to @${targetUserId}.)`, "Info");
+                    showCustomAlert(`A friend request has already been sent to @${targetUserId}.`, "Info");
                     return;
                 }
                 
                 // 3. Check if I already have a pending request from them 
                 if (appState.pendingFriendRequests.includes(targetUid)) {
                     // This means they sent a request to me, and I'm trying to send one to them.
-                    showCustomAlert(`@${targetUserId} ने आपको पहले ही अनुरोध भेज दिया है! कृपया इसे 'Pending Requests' सेक्शन में स्वीकार करें। (@${targetUserId} has already sent you a request! Please accept it in the Pending Requests section.)`, "Info");
+                    showCustomAlert(`@${targetUserId} has already sent you a request! Please accept it in the Pending Requests section.`, "Info");
                     return;
                 }
 
@@ -628,11 +630,11 @@
                     friendRequests: arrayUnion(userId)
                 });
 
-                showCustomAlert(`दोस्त अनुरोध @${targetUserId} को भेजा गया! (Friend request sent to @${targetUserId}!)`, "Success");
+                showCustomAlert(`Friend request sent to @${targetUserId}!`, "Success");
 
             } catch (error) {
                 console.error("Error sending friend request:", error);
-                showCustomAlert("सर्वर त्रुटि के कारण अनुरोध भेजने में विफल रहा। (Failed to send request due to a server error.)", "Error");
+                showCustomAlert("Failed to send request due to a server error.", "Error");
             } finally {
                 appState.isSubmitting = false;
                 renderApp();
@@ -667,11 +669,11 @@
                 
                 const requesterUserId = appState.allProfiles[requesterUid]?.userId || 'User';
 
-                showCustomAlert(`आप अब @${requesterUserId} के दोस्त हैं! (You are now friends with @${requesterUserId}!)`, "Success");
+                showCustomAlert(`You are now friends with @${requesterUserId}!`, "Success");
 
             } catch (error) {
                 console.error("Error accepting friend request:", error);
-                showCustomAlert("सर्वर त्रुटि के कारण अनुरोध स्वीकार करने में विफल रहा। (Failed to accept request due to a server error.)", "Error");
+                showCustomAlert("Failed to accept request due to a server error.", "Error");
             } finally {
                 appState.isSubmitting = false;
                 renderApp();
@@ -700,7 +702,7 @@
                     await updateDoc(userDocRef, {
                         friendRequests: arrayRemove(targetUid)
                     });
-                    showCustomAlert(`@${targetUserId} से अनुरोध अस्वीकार कर दिया गया। (Declined request from @${targetUserId}.)`, "Info");
+                    showCustomAlert(`Declined request from @${targetUserId}.`, "Info");
                 } else if (type === 'friend') {
                     // 1. Remove friend from my list
                     await updateDoc(userDocRef, {
@@ -710,12 +712,12 @@
                     await updateDoc(targetDocRef, {
                         friends: arrayRemove(userId)
                     });
-                    showCustomAlert(`आपने @${targetUserId} को अनफ्रेंड कर दिया है। (You have unfriended @${targetUserId}.)`, "Info");
+                    showCustomAlert(`You have unfriended @${targetUserId}.`, "Info");
                 }
 
             } catch (error) {
                 console.error(`Error removing ${type}:`, error);
-                showCustomAlert(`सर्वर त्रुटि के कारण कार्रवाई संसाधित करने में विफल रहा। (Failed to process action due to a server error.)`, "Error");
+                showCustomAlert(`Failed to process action due to a server error.`, "Error");
             } finally {
                 appState.isSubmitting = false;
                 renderApp();
@@ -744,13 +746,13 @@
 
                     setupUserProfileListener(user.uid);
                     router.setView('dashboard');
-                    showCustomAlert(`वापस स्वागत है, @${userDisplayName}! (Welcome back, @${userDisplayName}!)`, "WELCOME!");
+                    showCustomAlert(`Welcome back, @${userDisplayName}!`, "WELCOME!");
                 } else {
                     router.setView('profile_setup');
                 }
             } catch (error) {
                 console.error("Error checking user profile:", error);
-                router.setError("उपयोगकर्ता डेटा तक पहुंचने में त्रुटि। (Error accessing user data.)");
+                router.setError("Error accessing user data.");
             }
         }
         
@@ -761,7 +763,7 @@
                 // Auth state change listener handles view routing
             } catch (error) {
                 console.error("Google Sign-In Failed:", error);
-                router.setError("Google से साइन इन विफल रहा। (Failed to sign in with Google.)");
+                router.setError("Failed to sign in with Google.");
             }
         }
         
@@ -776,10 +778,10 @@
                 
                 await signOut(auth);
                 // Auth state change listener handles view routing
-                showCustomAlert("आपको साइन आउट कर दिया गया है। (You have been signed out.)", "Goodbye!");
+                showCustomAlert("You have been signed out.", "Goodbye!");
             } catch (error) {
                 console.error("Sign-Out Failed:", error);
-                router.setError("साइन आउट विफल रहा। (Failed to sign out.)");
+                router.setError("Failed to sign out.");
             }
         }
 
@@ -836,12 +838,12 @@
             event.preventDefault();
             
             if (!appState.isUserIdUnique || appState.isIdConflict || !appState.pendingUserId) {
-                showCustomAlert("कृपया एक अद्वितीय और मान्य @उपयोगकर्ता आईडी चुनें। (Please choose a unique and valid @User ID.)", "Error");
+                showCustomAlert("Please choose a unique and valid @User ID.", "Error");
                 return;
             }
 
             if (!appState.user) {
-                router.setError("प्रमाणीकरण सत्र समाप्त हो गया है। कृपया फिर से साइन इन करें। (Authentication session lost. Please sign in again.)");
+                router.setError("Authentication session lost. Please sign in again.");
                 return;
             }
             
@@ -864,9 +866,9 @@
                     // --- NEW PROFILE FIELDS ---
                     pfpUrl: appState.user.photoURL || '', // Use Google PFP as default
                     bannerUrl: '', // Default empty banner
-                    bio: 'नमस्ते! मैं एक Squit Up! उपयोगकर्ता हूँ। (Hi! I am a Squit Up! user.)', // Default bio
-                    statusText: 'ऑनलाइन (Online)', // Default status text
-                    pronouns: 'वे/उनका (They/Them)', // Default pronouns
+                    bio: 'Hi! I am a Squit Up! user.', // Default bio
+                    statusText: 'Online', // Default status text
+                    pronouns: 'They/Them', // Default pronouns
                     // --- END NEW PROFILE FIELDS ---
 
                     // Initialize empty arrays for friend features
@@ -891,11 +893,11 @@
 
                 setupUserProfileListener(appState.user.uid);
                 router.setView('dashboard');
-                showCustomAlert(`स्वागत है, @${userDisplayName}! आपकी प्रोफ़ाइल तैयार है। (Welcome, @${userDisplayName}! Your profile is ready.)`, "WELCOME!");
+                showCustomAlert(`Welcome, @${userDisplayName}! Your profile is ready.`, "WELCOME!");
 
             } catch (error) {
                 console.error("Error creating profile:", error);
-                router.setError("पंजीकरण पूरा करने में विफल रहा। (Failed to complete registration.)");
+                router.setError("Failed to complete registration.");
             } finally {
                 appState.isSubmitting = false;
                 renderApp();
@@ -915,8 +917,8 @@
                 pfpUrl: userProfile.pfpUrl || '',
                 bannerUrl: userProfile.bannerUrl || '',
                 bio: userProfile.bio || '',
-                statusText: userProfile.statusText || 'ऑनलाइन (Online)',
-                pronouns: userProfile.pronouns || 'वे/उनका (They/Them)'
+                statusText: userProfile.statusText || 'Online',
+                pronouns: userProfile.pronouns || 'They/Them'
             };
             
             // Re-render to ensure the modal content is correct before showing
@@ -956,11 +958,11 @@
                 });
                 
                 modal.classList.add('hidden');
-                showCustomAlert("प्रोफ़ाइल सफलतापूर्वक अपडेट हो गई है! (Profile successfully updated!)", "Success");
+                showCustomAlert("Profile successfully updated!", "Success");
 
             } catch (error) {
                 console.error("Error updating profile:", error);
-                showCustomAlert("प्रोफ़ाइल अपडेट करने में विफल रहा (Failed to update profile due to a server error.)", "Error");
+                showCustomAlert("Failed to update profile due to a server error.", "Error");
             } finally {
                 appState.isSubmitting = false;
                 renderApp(); // Update button state
@@ -982,18 +984,18 @@
             return `
                 <div class="auth-container">
                     <h1 class="app-title">SQUIT UP!</h1>
-                    <p class="subtitle">चैटिंग और चिलिंग लाउंज दोस्तों (chatting and chilling lounge friends)</p>
-                    <h2 class="text-2xl font-semibold mb-6 text-center text-white">खाता कनेक्ट करें (CONNECT ACCOUNT)</h2>
+                    <p class="subtitle">Chatting and Chilling Lounge for Friends</p>
+                    <h2 class="text-2xl font-semibold mb-6 text-center text-white">CONNECT ACCOUNT</h2>
 
                     ${appState.errorMessage ? `<div class="error-message">${appState.errorMessage}</div>` : ''}
 
                     <button class="btn-google w-full" onclick="window.handleGoogleSignIn()">
                         <img src="https://img.icons8.com/color/24/000000/google-logo.png" alt="Google Logo"/>
-                        Google के साथ जारी रखें (Continue with Google)
+                        Continue with Google
                     </button>
 
                     <div class="mt-8 text-center text-gray-400 text-sm">
-                        <p>दोस्तों और समुदायों से जुड़ने के लिए साइन इन करें। (Sign in to connect with friends and communities.)</p>
+                        <p>Sign in to connect with friends and communities.</p>
                     </div>
                 </div>
             `;
@@ -1003,21 +1005,21 @@
             const inputId = 'profile-user-id';
             const statusColor = appState.isIdConflict ? 'text-red-500' : (appState.isUserIdUnique ? 'text-green-500' : 'text-gray-500');
             const statusMessage = appState.isIdConflict 
-                ? 'यह @उपयोगकर्ता आईडी लिया गया है। (This @User ID is taken.)' 
+                ? 'This @User ID is taken.' 
                 : (appState.isUserIdUnique && appState.pendingUserId.length > 0
-                    ? 'उपलब्ध है! (Available!)' 
-                    : 'एक अद्वितीय आईडी चुनें (उदा. @squit_dev) (Choose a unique ID (e.g., @squit_dev))');
+                    ? 'Available!' 
+                    : 'Choose a unique ID (e.g., @squit_dev)');
             const isButtonDisabled = !appState.isUserIdUnique || appState.isIdConflict || appState.pendingUserId.length < 3 || appState.isSubmitting;
             
             return `
                 <div class="auth-container">
                     <h1 class="app-title">SQUIT UP!</h1>
-                    <p class="subtitle">अंतिम चरण: अपनी @उपयोगकर्ता आईडी चुनें (Final Step: Choose Your @User ID)</p>
+                    <p class="subtitle">Final Step: Choose Your @User ID</p>
                     
                     ${appState.errorMessage ? `<div class="error-message">${appState.errorMessage}</div>` : ''}
 
                     <form onsubmit="window.handleProfileSetup(event)">
-                        <label for="${inputId}" class="block text-sm font-medium mb-2 text-white">आपकी प्रोफ़ाइल का नाम (Your Profile Name)</label>
+                        <label for="${inputId}" class="block text-sm font-medium mb-2 text-white">Your Profile Name</label>
                         
                         <div class="relative mb-2">
                             <span class="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">@</span>
@@ -1038,12 +1040,12 @@
                             class="btn-register w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition duration-150"
                             ${isButtonDisabled ? 'disabled' : ''}
                         >
-                            ${appState.isSubmitting ? 'पंजीकरण हो रहा है... (Registering...)' : 'पंजीकरण पूरा करें (Complete Registration)'}
+                            ${appState.isSubmitting ? 'Registering...' : 'Complete Registration'}
                         </button>
                     </form>
 
                     <p class="text-center text-gray-400 text-xs mt-4">
-                        आपकी @उपयोगकर्ता आईडी से दोस्त आपको ढूंढेंगे। (Your @User ID is how friends will find you.)
+                        Your @User ID is how friends will find you.
                     </p>
                 </div>
             `;
@@ -1070,12 +1072,12 @@
                             <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 9.75a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H7.5m2.25 0H12m4.5 0a.375.375 0 100-.75.375.375 0 000 .75z" />
                             <path stroke-linecap="round" stroke-linejoin="round" d="M15 15.75H9m3-6h.008v.008H12V9.75zm0 0l-1.5 1.5m1.5-1.5l1.5 1.5M12 9.75a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H11m2.25 0H14m-1.5 1.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H11m2.25 0H14m-1.5 1.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zM12 21a9 9 0 100-18 9 9 0 000 18z" />
                         </svg>
-                        <p class="text-xl font-bold mb-2">किसी दोस्त को चुनें (Select a Friend)</p>
-                        <p class="text-md">साइडबार में किसी दोस्त पर क्लिक करें और बातचीत शुरू करें।</p>
+                        <p class="text-xl font-bold mb-2">Select a Friend</p>
+                        <p class="text-md">Click on a friend in the sidebar to start a conversation.</p>
                     </div>
                     <!-- Empty message input when no chat is active -->
                     <div class="message-input-area">
-                        <input type="text" placeholder="चैट शुरू करने के लिए किसी दोस्त को चुनें..." class="input-field flex-grow px-4 py-3 rounded-lg border-0" disabled>
+                        <input type="text" placeholder="Select a friend to start chatting..." class="input-field flex-grow px-4 py-3 rounded-lg border-0" disabled>
                     </div>
                 `;
             }
@@ -1090,7 +1092,7 @@
                         <button 
                             onclick="window.setActiveChat(null)" 
                             class="text-red-400 hover:text-red-300 transition duration-150"
-                            title="चैट बंद करें (Close Chat)"
+                            title="Close Chat"
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -1102,16 +1104,16 @@
                     <div class="chat-area">
                         <!-- Current Chat Messages (Mock/Placeholder) -->
                         <div class="flex flex-col h-full justify-end pt-4">
-                            <p class="text-center text-gray-600 italic text-sm mb-2">आपकी @${friendProfile.userId} के साथ बातचीत</p>
+                            <p class="text-center text-gray-600 italic text-sm mb-2">Your chat with @${friendProfile.userId}</p>
                             <!-- Start of mock messages -->
                             <div class="flex justify-start mb-2">
                                 <div class="bg-indigo-600/70 p-3 rounded-xl rounded-tl-sm max-w-xs text-white shadow-md">
-                                    <p>नमस्ते! यह ${friendProfile.userId} के साथ आपकी पहली चैट है। (Hi! This is your first chat with ${friendProfile.userId}.)</p>
+                                    <p>Hi! This is your first chat with ${friendProfile.userId}.</p>
                                 </div>
                             </div>
                             <div class="flex justify-end mb-2">
                                 <div class="bg-[#2a2a4a] p-3 rounded-xl rounded-br-sm max-w-xs text-white shadow-md">
-                                    <p>वाह! चैट अब काम कर रही है! (Wow! Chat is working now!)</p>
+                                    <p>Wow! Chat is working now!</p>
                                 </div>
                             </div>
                             <!-- End of mock messages -->
@@ -1120,9 +1122,9 @@
 
                     <!-- Message Input -->
                     <div class="message-input-area">
-                        <input type="text" placeholder="एक संदेश भेजें... (Send a message...)" class="input-field flex-grow px-4 py-3 rounded-l-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 border-r-0">
+                        <input type="text" placeholder="Send a message..." class="input-field flex-grow px-4 py-3 rounded-l-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 border-r-0">
                         <button class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-6 py-3 rounded-r-lg transition duration-150">
-                            भेजें (Send)
+                            Send
                         </button>
                     </div>
                 </div>
@@ -1152,24 +1154,24 @@
                             </div>
 
                             <!-- Friend Requests Section -->
-                            <h3 class="sidebar-section-header">लंबित अनुरोध (Pending Requests) (${pendingRequests.length})</h3>
+                            <h3 class="sidebar-section-header">Pending Requests (${pendingRequests.length})</h3>
                             <div id="pending-requests-list">
                                 ${pendingRequests.length > 0 
                                     ? pendingRequests.map(profile => `
                                         <div class="request-item sidebar-item flex justify-between items-center bg-purple-900/50 hover:bg-purple-800/50">
                                             <span class="truncate pr-2">@${profile.userId}</span>
                                             <div class="flex space-x-2">
-                                                <button onclick="window.acceptFriendRequest('${profile.uid}')" class="text-green-400 hover:text-green-300 font-bold" title="स्वीकार करें (Accept)">✓</button>
-                                                <button onclick="window.removeUser('${profile.uid}', 'request')" class="text-red-400 hover:text-red-300 font-bold" title="अस्वीकार करें (Decline)">✕</button>
+                                                <button onclick="window.acceptFriendRequest('${profile.uid}')" class="text-green-400 hover:text-green-300 font-bold" title="Accept">✓</button>
+                                                <button onclick="window.removeUser('${profile.uid}', 'request')" class="text-red-400 hover:text-red-300 font-bold" title="Decline">✕</button>
                                             </div>
                                         </div>
                                     `).join('')
-                                    : '<p class="text-sm text-gray-500 italic px-2">कोई लंबित अनुरोध नहीं। (No pending requests.)</p>'
+                                    : '<p class="text-sm text-gray-500 italic px-2">No pending requests.</p>'
                                 }
                             </div>
                             
                             <!-- Friends List Section -->
-                            <h3 class="sidebar-section-header">मेरे दोस्त (My Friends) (${friends.length})</h3>
+                            <h3 class="sidebar-section-header">My Friends (${friends.length})</h3>
                             <div id="friends-list">
                                 ${friends.length > 0
                                     ? friends.map(profile => `
@@ -1181,14 +1183,14 @@
                                             <span class="truncate">@${profile.userId}</span>
                                         </button>
                                     `).join('')
-                                    : '<p class="text-sm text-gray-500 italic px-2">अभी तक कोई दोस्त नहीं। (No friends yet.)</p>'
+                                    : '<p class="text-sm text-gray-500 italic px-2">No friends yet.</p>'
                                 }
                             </div>
                             
                             <!-- Add Friend Button -->
                             <div class="mt-6">
                                 <button onclick="window.showAddFriendModal()" class="sidebar-item add-friend-btn">
-                                    दोस्त अनुरोध भेजें (Send Friend Request)
+                                    Send Friend Request
                                 </button>
                             </div>
                         </div>
@@ -1198,7 +1200,7 @@
                             <div 
                                 class="user-profile-card bg-[#1a1a2e] p-0 pb-3" 
                                 onclick="window.showProfileEditModal()" 
-                                title="प्रोफ़ाइल संपादित करें (Edit Profile)"
+                                title="Edit Profile"
                             >
                                 <!-- Banner -->
                                 <img src="${userProfile.bannerUrl || 'https://placehold.co/280x50/3f3f6e/1a1a2e?text=Banner'}" 
@@ -1212,10 +1214,10 @@
                                     ? `<img src="${userProfile.pfpUrl}" 
                                             alt="Profile Picture" 
                                             class="user-pfp"
-                                            onerror="this.onerror=null;this.src='https://placehold.co/50x50/8c8cd9/ffffff?text=${userDisplayName.charAt(1).toUpperCase()}'"
+                                            onerror="this.onerror=null;this.src='https://placehold.co/50x50/8c8cd9/ffffff?text=${userDisplayName.charAt(0).toUpperCase()}'"
                                        >`
                                     : `<div class="user-pfp pfp-placeholder flex items-center justify-center text-white">
-                                            ${userDisplayName.charAt(1).toUpperCase()}
+                                            ${userDisplayName.charAt(0).toUpperCase()}
                                        </div>`
                                 }
                                 
@@ -1223,7 +1225,7 @@
                                     <!-- User ID and Sign Out Button -->
                                     <div class="flex items-center justify-between">
                                         <p class="text-lg font-bold truncate text-white">@${userDisplayName}</p>
-                                        <button onclick="event.stopPropagation(); window.handleSignOut()" class="text-gray-400 hover:text-red-500 transition duration-150" title="साइन आउट (Sign Out)">
+                                        <button onclick="event.stopPropagation(); window.handleSignOut()" class="text-gray-400 hover:text-red-500 transition duration-150" title="Sign Out">
                                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                                             </svg>
@@ -1231,13 +1233,13 @@
                                     </div>
                                     
                                     <!-- Status Text and Pronouns -->
-                                    <p class="text-sm text-green-400 font-medium mt-1 truncate">${userProfile.statusText || 'ऑनलाइन (Online)'}</p>
+                                    <p class="text-sm text-green-400 font-medium mt-1 truncate">${userProfile.statusText || 'Online'}</p>
                                     <p class="text-xs text-gray-400">
                                         ${userProfile.pronouns ? `<span class="italic text-indigo-300 mr-2">[${userProfile.pronouns}]</span>` : ''}
                                     </p>
                                     
                                     <!-- Bio -->
-                                    <p class="text-xs text-gray-300 mt-2 line-clamp-2">${userProfile.bio || 'यह उपयोगकर्ता ने अभी तक कोई बायो सेट नहीं किया है। (This user has not set a bio yet.)'}</p>
+                                    <p class="text-xs text-gray-300 mt-2 line-clamp-2">${userProfile.bio || 'This user has not set a bio yet.'}</p>
                                 </div>
                             </div>
                         </div>
@@ -1259,11 +1261,11 @@
                 <div id="${modalId}" class="modal-overlay hidden">
                     <div class="modal-content">
                         <div class="flex justify-between items-center mb-6">
-                            <h3 class="text-xl font-bold text-white">दोस्त अनुरोध भेजें (Send Friend Request)</h3>
+                            <h3 class="text-xl font-bold text-white">Send Friend Request</h3>
                             <button onclick="document.getElementById('${modalId}').classList.add('hidden')" class="text-gray-400 hover:text-white">&times;</button>
                         </div>
                         <form onsubmit="event.preventDefault(); window.submitAddFriendRequest()">
-                            <label for="${inputId}" class="block text-sm font-medium mb-2 text-gray-300">दोस्त की @उपयोगकर्ता आईडी (Friend's @User ID):</label>
+                            <label for="${inputId}" class="block text-sm font-medium mb-2 text-gray-300">Friend's @User ID:</label>
                             <div class="relative mb-4">
                                 <span class="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">@</span>
                                 <input 
@@ -1279,7 +1281,7 @@
                                 class="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition duration-150"
                                 ${appState.isSubmitting ? 'disabled' : ''}
                             >
-                                ${appState.isSubmitting ? 'भेजा जा रहा है... (Sending...)' : 'अनुरोध भेजें (Send Request)'}
+                                ${appState.isSubmitting ? 'Sending...' : 'Send Request'}
                             </button>
                         </form>
                     </div>
@@ -1296,13 +1298,13 @@
                 <div id="${modalId}" class="modal-overlay hidden">
                     <div class="modal-content">
                         <div class="flex justify-between items-center mb-6">
-                            <h3 class="text-xl font-bold text-white">प्रोफ़ाइल संपादित करें (Edit Your Profile)</h3>
+                            <h3 class="text-xl font-bold text-white">Edit Your Profile</h3>
                             <button onclick="document.getElementById('${modalId}').classList.add('hidden')" class="text-gray-400 hover:text-white">&times;</button>
                         </div>
                         <form onsubmit="window.handleProfileUpdate(event)">
                             
                             <!-- Banner URL -->
-                            <label for="edit-banner-url" class="block text-sm font-medium mb-1 mt-3 text-gray-300">बैनर इमेज URL (Banner Image URL) (वैकल्पिक)</label>
+                            <label for="edit-banner-url" class="block text-sm font-medium mb-1 mt-3 text-gray-300">Banner Image URL (Optional)</label>
                             <input 
                                 type="url" 
                                 id="edit-banner-url" 
@@ -1312,7 +1314,7 @@
                             >
                             
                             <!-- PFP URL -->
-                            <label for="edit-pfp-url" class="block text-sm font-medium mb-1 mt-3 text-gray-300">प्रोफ़ाइल चित्र URL (Profile Picture URL) (PNG/JPG/GIF)</label>
+                            <label for="edit-pfp-url" class="block text-sm font-medium mb-1 mt-3 text-gray-300">Profile Picture URL (PNG/JPG/GIF)</label>
                             <input 
                                 type="url" 
                                 id="edit-pfp-url" 
@@ -1322,7 +1324,7 @@
                             >
                             
                             <!-- Bio -->
-                            <label for="edit-bio" class="block text-sm font-medium mb-1 mt-3 text-gray-300">बायो (Bio - अधिकतम 150 वर्ण)</label>
+                            <label for="edit-bio" class="block text-sm font-medium mb-1 mt-3 text-gray-300">Bio (Max 150 characters)</label>
                             <textarea
                                 id="edit-bio" 
                                 class="input-field w-full px-3 py-2 rounded-lg focus:ring-indigo-500"
@@ -1333,13 +1335,13 @@
                             <div class="flex space-x-4">
                                 <!-- Status Text -->
                                 <div class="w-1/2">
-                                    <label for="edit-status-text" class="block text-sm font-medium mb-1 mt-3 text-gray-300">स्टेटस टेक्स्ट (Status Text)</label>
+                                    <label for="edit-status-text" class="block text-sm font-medium mb-1 mt-3 text-gray-300">Status Text</label>
                                     <input 
                                         type="text" 
                                         id="edit-status-text" 
                                         class="input-field w-full px-3 py-2 rounded-lg focus:ring-indigo-500"
                                         placeholder="Playing SQUIT UP!"
-                                        value="${data.statusText || 'ऑनलाइन (Online)'}"
+                                        value="${data.statusText || 'Online'}"
                                         maxlength="30"
                                     >
                                 </div>
@@ -1352,7 +1354,7 @@
                                         id="edit-pronouns" 
                                         class="input-field w-full px-3 py-2 rounded-lg focus:ring-indigo-500"
                                         placeholder="she/her"
-                                        value="${data.pronouns || 'वे/उनका (They/Them)'}"
+                                        value="${data.pronouns || 'They/Them'}"
                                         maxlength="15"
                                     >
                                 </div>
@@ -1363,7 +1365,7 @@
                                 class="w-full py-3 mt-6 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition duration-150"
                                 ${isSubmitting ? 'disabled' : ''}
                             >
-                                ${isSubmitting ? 'अपडेट हो रहा है... (Updating...)' : 'बदलाव सहेजें (Save Changes)'}
+                                ${isSubmitting ? 'Updating...' : 'Save Changes'}
                             </button>
                         </form>
                     </div>
@@ -1376,13 +1378,27 @@
             document.getElementById('add-friend-user-id').value = '';
         }
         
+        /**
+         * Wrapper function for submitting the friend request from the modal.
+         * Handles clearing the input and closing the modal only on success.
+         */
         async function submitAddFriendRequest() {
+            const modalId = 'add-friend-modal';
             const inputElement = document.getElementById('add-friend-user-id');
             const targetUserId = inputElement.value.trim().toLowerCase();
             
-            if (targetUserId) {
-                document.getElementById('add-friend-modal').classList.add('hidden');
-                await sendFriendRequest(targetUserId);
+            if (!targetUserId) return;
+
+            // sendFriendRequest already handles setting appState.isSubmitting and showing alerts
+            await sendFriendRequest(targetUserId);
+            
+            // Check if the submission was successful (the error handler inside sendFriendRequest
+            // would have shown an alert and returned false, thus not closing the modal)
+            
+            // If the user ID was found and the request was sent or found to be pending,
+            // the alert would have been shown, so we can now safely close the modal and clear the input.
+            if (!appState.isSubmitting) {
+                document.getElementById(modalId).classList.add('hidden');
                 inputElement.value = ''; // Clear input after submission attempt
             }
         }
