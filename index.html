@@ -202,6 +202,19 @@
             background-color: #5e3b5e;
             transform: translateY(-1px);
         }
+        
+        /* New style for the sidebar section headers (Pimping them up!) */
+        .sidebar-section-header {
+            color: #b3ccff; /* Bright light blue/periwinkle */
+            font-weight: 700;
+            text-shadow: 0 0 4px rgba(179, 204, 255, 0.5); /* Subtle glow */
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+            padding-bottom: 0.25rem;
+            border-bottom: 1px solid #3f3f6e;
+            text-transform: uppercase;
+            font-size: 0.8rem;
+        }
     </style>
     <!-- Google Fonts Inter -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
@@ -228,7 +241,8 @@
             updateDoc,
             arrayUnion,
             arrayRemove,
-            Timestamp 
+            Timestamp,
+            getDocs 
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         setLogLevel('Debug');
@@ -403,652 +417,625 @@
                     renderApp();
                 } else {
                     console.error("Profile not found for UID:", uid);
-                    // Should theoretically not happen if user is logged in and registration was successful
-                    router.setView('profile_setup'); 
+                    // Should theoretically not happen
+                    router.setView('profile_setup');
                 }
             }, (error) => {
-                console.error("Error setting up profile listener:", error);
-                router.setError("Connection error to profile data.");
+                console.error("Error listening to user profile:", error);
+                router.setError("Error loading profile data.");
             });
         }
         
         /**
-         * Fetches profiles for a list of UIDs and stores them in appState.allProfiles.
-         * This helps display names instead of UIDs in the sidebar.
+         * Fetches profiles for a list of UIDs and updates allProfiles map in state.
+         * @param {string[]} uids - Array of UIDs (friend UIDs and pending request UIDs).
          */
         async function fetchProfilesByIds(uids) {
             if (uids.length === 0) return;
             
-            // Filter out duplicates and already fetched profiles
-            const uniqueUids = [...new Set(uids)].filter(uid => !appState.allProfiles[uid]);
-            if (uniqueUids.length === 0) return;
-            
+            const uniqueUids = [...new Set(uids)];
             const appId = explicitFirebaseConfig.projectId;
-            const newProfiles = { ...appState.allProfiles };
-
-            // We can't query by an array of IDs efficiently here, so we fetch them one by one.
-            // In a production app, we would batch this.
-            for (const uidToFetch of uniqueUids) {
-                try {
-                    const docRef = doc(db, `artifacts/${appId}/public/data/profiles/${uidToFetch}`);
-                    const docSnap = await getDoc(docRef);
+            const profilesRef = collection(db, `artifacts/${appId}/public/data/profiles`);
+            
+            // Set up listeners for each unique profile
+            uniqueUids.forEach(uidToListen => {
+                const docRef = doc(profilesRef, uidToListen);
+                onSnapshot(docRef, (docSnap) => {
                     if (docSnap.exists()) {
                         const profileData = docSnap.data();
-                        newProfiles[uidToFetch] = {
-                            uid: uidToFetch,
-                            userId: profileData.userId,
-                            status: profileData.status || 'offline',
+                        appState.allProfiles = {
+                            ...appState.allProfiles,
+                            [uidToListen]: {
+                                uid: uidToListen,
+                                userId: profileData.userId,
+                                displayName: profileData.displayName,
+                                status: profileData.status || 'Offline' // Default status
+                            }
                         };
+                        renderApp();
                     } else {
-                        newProfiles[uidToFetch] = { userId: `@unknown_${uidToFetch.substring(0, 4)}`, status: 'offline' };
+                        // Profile was deleted or is invalid
+                        appState.allProfiles = {
+                            ...appState.allProfiles,
+                            [uidToListen]: {
+                                uid: uidToListen,
+                                userId: 'Deleted User',
+                                displayName: 'Deleted User',
+                                status: 'Offline'
+                            }
+                        };
+                        renderApp();
                     }
-                } catch (error) {
-                    console.error("Error fetching individual profile:", uidToFetch, error);
-                    newProfiles[uidToFetch] = { userId: `@error_fetching`, status: 'offline' };
-                }
+                });
+            });
+        }
+
+        /**
+         * Sends a friend request to a user by their @UserId.
+         * @param {string} targetUserId - The @UserId of the recipient.
+         */
+        async function sendFriendRequest(targetUserId) {
+            if (!userId) return showCustomAlert("You must be logged in to send friend requests.", "Error");
+            if (targetUserId === userDisplayName) {
+                return showCustomAlert("You can't send a friend request to yourself!", "Error");
             }
-            appState.allProfiles = newProfiles;
-            renderApp(); // Rerender to show fetched names
-        }
-
-
-        async function checkUserProfile(user) {
-            try {
-                const appId = explicitFirebaseConfig.projectId;
-                const docRef = doc(db, `artifacts/${appId}/public/data/profiles/${user.uid}`);
-                const docSnap = await getDoc(docRef);
-
-                if (docSnap.exists()) {
-                    userProfile = docSnap.data();
-                    userDisplayName = userProfile.userId || user.displayName || 'User';
-                    setupUserProfileListener(user.uid); // Start listening to profile changes
-                    router.setView('dashboard');
-                } else {
-                    router.setView('profile_setup');
-                }
-            } catch (error) {
-                console.error("Error during user profile check:", error);
-                showCustomAlert("Critical Error: Cannot check profile. Ensure Cloud Firestore is created and security rules are published.", "Database Error");
-                router.setError("Database check failed. See console.");
+            if (appState.friendsList.includes(targetUserId)) {
+                return showCustomAlert(`You are already friends with @${targetUserId}.`, "Error");
             }
-        }
-        
-        async function checkUserIdUniquenessBlocking(checkUserId) {
-             try {
-                const appId = explicitFirebaseConfig.projectId;
-                const profilesCollection = collection(db, `artifacts/${appId}/public/data/profiles`);
-                const q = query(profilesCollection, where("userId", "==", checkUserId));
-                const snapshot = await getDocs(q);
-                return snapshot.empty; 
-             } catch (error) {
-                 console.error("Error performing blocking uniqueness check:", error);
-                 router.setError("Critical error during final ID check. Please try again.");
-                 return false; 
-             }
-        }
-        
-        window.handleProfileRegistration = async (event) => {
-            if (event) event.preventDefault(); 
-            
-            if (appState.isSubmitting) return; 
+
             appState.isSubmitting = true;
-            router.clearError();
             renderApp();
 
-            const inputElement = document.getElementById('user-id-input');
-            const newUserId = inputElement.value.trim();
-
-            if (!newUserId || !newUserId.startsWith('@') || newUserId.length < 3) {
-                showCustomAlert("User ID must start with '@' and be at least 3 characters long (excluding @).", "Error");
-                appState.isSubmitting = false;
-                renderApp();
-                return;
-            }
-
-            const isTrulyUnique = await checkUserIdUniquenessBlocking(newUserId);
-            
-            if (!isTrulyUnique) {
-                appState.isIdConflict = true; 
-                showCustomAlert(`The ID ${newUserId} is already taken. Please choose another one.`, "Error");
-                appState.isUserIdUnique = false;
-                appState.isSubmitting = false;
-                renderApp();
-                return;
-            }
-            
-            if (!appState.user || !appState.user.uid) {
-                showCustomAlert("Authentication error. Please try logging in again.", "Error");
-                router.setView('auth');
-                appState.isSubmitting = false;
-                return;
-            }
-
             try {
                 const appId = explicitFirebaseConfig.projectId;
-                const profileRef = doc(db, `artifacts/${appId}/public/data/profiles/${appState.user.uid}`);
+                const profilesRef = collection(db, `artifacts/${appId}/public/data/profiles`);
                 
-                const profileData = {
-                    userId: newUserId,
-                    email: appState.user.email,
-                    uid: appState.user.uid,
-                    displayName: appState.user.displayName,
-                    createdAt: Timestamp.now(),
-                    status: 'online',
-                    friends: [],
-                    friendRequests: [],
-                };
+                // 1. Find the target UID by their unique @UserId
+                const q = query(profilesRef, where("userId", "==", targetUserId.toLowerCase()));
+                const querySnapshot = await getDocs(q);
 
-                await setDoc(profileRef, profileData);
-
-                userDisplayName = newUserId;
-                // Start listening to the newly created profile
-                setupUserProfileListener(appState.user.uid); 
-                
-                showCustomAlert(`Your unique profile, ${newUserId}, has been successfully created. Enjoy SQUIT UP!`, "WELCOME!");
-                router.setView('dashboard');
-
-            } catch (error) {
-                console.error("Error saving profile to Firestore:", error);
-                router.setError(`Registration failed: ${error.message}. Check console for details.`);
-            } finally {
-                appState.isSubmitting = false;
-                renderApp();
-            }
-        };
-
-        // --- Friend Feature Core Logic ---
-
-        /**
-         * Opens the modal to send a friend request.
-         */
-        window.openSendRequestModal = () => {
-            const container = document.getElementById('app-container');
-            let modal = document.getElementById('send-request-modal');
-
-            if (!modal) {
-                modal = document.createElement('div');
-                modal.id = 'send-request-modal';
-                modal.className = 'modal-overlay';
-                modal.innerHTML = `
-                    <div class="modal-content">
-                        <h3 class="text-xl font-bold mb-6 text-white text-center">Send Friend Request</h3>
-                        <form id="send-request-form">
-                            <div class="mb-6">
-                                <label for="friend-id-input" class="block text-sm font-medium text-gray-400 mb-2">Friend's @User ID</label>
-                                <input 
-                                    type="text" 
-                                    id="friend-id-input" 
-                                    class="input-field w-full px-4 py-3 rounded-lg" 
-                                    placeholder="@friend_id" 
-                                    required
-                                />
-                                <p id="request-error-message" class="text-red-400 text-sm mt-2 hidden"></p>
-                            </div>
-                            <div class="flex justify-end space-x-4">
-                                <button type="button" onclick="document.getElementById('send-request-modal').remove()" class="py-2 px-4 bg-gray-600 hover:bg-gray-700 text-white font-semibold rounded-lg transition duration-150">
-                                    Cancel
-                                </button>
-                                <button type="submit" id="request-send-btn" class="py-2 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition duration-150">
-                                    Send Request
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                `;
-                container.appendChild(modal);
-            }
-            
-            // Set up form submission handler
-            document.getElementById('send-request-form').onsubmit = handleSendFriendRequest;
-            document.getElementById('friend-id-input').value = '';
-            document.getElementById('request-error-message').classList.add('hidden');
-            modal.style.display = 'flex';
-        }
-
-        /**
-         * Core logic to send the request (updates target user's profile).
-         */
-        async function handleSendFriendRequest(event) {
-            event.preventDefault();
-            const inputElement = document.getElementById('friend-id-input');
-            const errorMessageElement = document.getElementById('request-error-message');
-            const sendButton = document.getElementById('request-send-btn');
-            
-            const targetUserId = inputElement.value.trim();
-            const currentUserId = userDisplayName; // The sender's @ID
-            
-            errorMessageElement.classList.add('hidden');
-            sendButton.disabled = true;
-            sendButton.textContent = 'Sending...';
-
-            if (targetUserId.toLowerCase() === currentUserId.toLowerCase()) {
-                errorMessageElement.textContent = "You cannot send a friend request to yourself.";
-                errorMessageElement.classList.remove('hidden');
-                sendButton.disabled = false;
-                sendButton.textContent = 'Send Request';
-                return;
-            }
-            
-            if (!targetUserId.startsWith('@')) {
-                 errorMessageElement.textContent = "User ID must start with '@'.";
-                errorMessageElement.classList.remove('hidden');
-                sendButton.disabled = false;
-                sendButton.textContent = 'Send Request';
-                return;
-            }
-
-            try {
-                const appId = explicitFirebaseConfig.projectId;
-                const profilesCollection = collection(db, `artifacts/${appId}/public/data/profiles`);
-                
-                // 1. Find the target user's profile document based on their @User ID
-                const q = query(profilesCollection, where("userId", "==", targetUserId));
-                const snapshot = await getDocs(q);
-                
-                if (snapshot.empty) {
-                    errorMessageElement.textContent = `User ${targetUserId} not found.`;
-                    errorMessageElement.classList.remove('hidden');
+                if (querySnapshot.empty) {
+                    showCustomAlert(`User @${targetUserId} not found.`, "Error");
                     return;
                 }
-                
-                const targetDoc = snapshot.docs[0];
-                const targetUid = targetDoc.id;
-                const targetProfile = targetDoc.data();
-                
-                // 2. Check if already friends or if request is pending
-                if (targetProfile.friends && targetProfile.friends.includes(userId)) {
-                    errorMessageElement.textContent = `${targetUserId} is already your friend!`;
-                    errorMessageElement.classList.remove('hidden');
-                    return;
-                }
-                
+
+                const targetUid = querySnapshot.docs[0].id;
+
+                // 2. Check if a request is already pending (sent by me)
+                // Since this uses arrayUnion, Firestore handles duplicate prevention, but checking the target's profile first is cleaner.
+                const targetProfile = querySnapshot.docs[0].data();
                 if (targetProfile.friendRequests && targetProfile.friendRequests.includes(userId)) {
-                    errorMessageElement.textContent = `Request already sent to ${targetUserId}.`;
-                    errorMessageElement.classList.remove('hidden');
+                    showCustomAlert(`A friend request has already been sent to @${targetUserId}.`, "Info");
                     return;
                 }
                 
-                // 3. Update the target user's profile to add the current user's UID to their friendRequests array
+                // 3. Check if I already have a pending request from them (if so, this is a reciprocal acceptance scenario)
+                if (appState.pendingFriendRequests.includes(targetUid)) {
+                    // This means they sent a request to me, and I'm sending one to them.
+                    // This scenario should be handled by the 'Accept Request' button, but we'll show a helpful message.
+                    showCustomAlert(`@${targetUserId} has already sent you a request! Please accept it in the Pending Requests section.`, "Info");
+                    return;
+                }
+
+
+                // 4. Send the request (add current user's UID to target's friendRequests array)
                 const targetDocRef = doc(db, `artifacts/${appId}/public/data/profiles/${targetUid}`);
                 await updateDoc(targetDocRef, {
-                    friendRequests: arrayUnion(userId) // Add the sender's UID
+                    friendRequests: arrayUnion(userId)
                 });
-                
-                // Success
-                document.getElementById('send-request-modal').remove();
-                showCustomAlert(`Friend request successfully sent to ${targetUserId}!`, "Success");
+
+                showCustomAlert(`Friend request sent to @${targetUserId}!`, "Success");
 
             } catch (error) {
                 console.error("Error sending friend request:", error);
-                errorMessageElement.textContent = `Error: Failed to send request. ${error.message}`;
-                errorMessageElement.classList.remove('hidden');
+                showCustomAlert("Failed to send request due to a server error.", "Error");
             } finally {
-                sendButton.disabled = false;
-                sendButton.textContent = 'Send Request';
+                appState.isSubmitting = false;
+                renderApp();
             }
         }
         
         /**
-         * Opens a modal to manage (Accept/Decline) a specific friend request.
+         * Accepts a friend request from a pending user.
+         * @param {string} requesterUid - The UID of the user who sent the request.
          */
-        window.openManageRequestModal = (requesterUid) => {
-            const requesterProfile = appState.allProfiles[requesterUid];
-            if (!requesterProfile) {
-                showCustomAlert("Error: Requester profile data not loaded.", "Error");
-                return;
-            }
-            
-            const requesterId = requesterProfile.userId;
-            const container = document.getElementById('app-container');
-            let modal = document.getElementById('manage-request-modal');
-            
-            if (!modal) {
-                modal = document.createElement('div');
-                modal.id = 'manage-request-modal';
-                modal.className = 'modal-overlay';
-                // Placeholder content, updated dynamically later
-                modal.innerHTML = `
-                    <div class="modal-content">
-                        <h3 id="manage-title" class="text-xl font-bold mb-4 text-white text-center"></h3>
-                        <p id="manage-message" class="text-gray-300 mb-6 text-center"></p>
-                        <div class="flex justify-center space-x-4">
-                            <button id="decline-btn" class="py-2 px-4 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition duration-150">
-                                Decline
-                            </button>
-                            <button id="accept-btn" class="py-2 px-4 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition duration-150">
-                                Accept
-                            </button>
-                        </div>
-                    </div>
-                `;
-                container.appendChild(modal);
-            }
-            
-            document.getElementById('manage-title').textContent = "Manage Friend Request";
-            document.getElementById('manage-message').innerHTML = `**${requesterId}** wants to be your friend.`;
+        async function acceptFriendRequest(requesterUid) {
+            if (!userId) return;
 
-            // Setup buttons
-            document.getElementById('decline-btn').onclick = () => {
-                handleFriendRequestAction(requesterUid, 'decline');
-                modal.remove();
-            };
-            document.getElementById('accept-btn').onclick = () => {
-                handleFriendRequestAction(requesterUid, 'accept');
-                modal.remove();
-            };
-            
-            modal.style.display = 'flex';
-        }
-        
-        /**
-         * Accepts or declines a friend request and updates both profiles if accepted.
-         * @param {string} requesterUid - UID of the user who sent the request.
-         * @param {string} action - 'accept' or 'decline'.
-         */
-        async function handleFriendRequestAction(requesterUid, action) {
-            if (!userId) return; 
+            appState.isSubmitting = true;
+            renderApp();
 
             try {
                 const appId = explicitFirebaseConfig.projectId;
                 const userDocRef = doc(db, `artifacts/${appId}/public/data/profiles/${userId}`);
                 const requesterDocRef = doc(db, `artifacts/${appId}/public/data/profiles/${requesterUid}`);
-                const requesterId = appState.allProfiles[requesterUid]?.userId || "The user";
 
-                // 1. Remove the request from the current user's profile
+                // 1. Update current user's profile: remove request, add friend
                 await updateDoc(userDocRef, {
-                    friendRequests: arrayRemove(requesterUid)
+                    friendRequests: arrayRemove(requesterUid),
+                    friends: arrayUnion(requesterUid)
+                });
+
+                // 2. Update requester's profile: add current user as friend
+                await updateDoc(requesterDocRef, {
+                    friends: arrayUnion(userId)
                 });
                 
-                if (action === 'accept') {
-                    // 2. Add to friends list on both profiles
-                    await updateDoc(userDocRef, {
-                        friends: arrayUnion(requesterUid) // Add requester to my friends
-                    });
-                    await updateDoc(requesterDocRef, {
-                        friends: arrayUnion(userId) // Add me to requester's friends
-                    });
+                const requesterUserId = appState.allProfiles[requesterUid]?.userId || 'User';
 
-                    showCustomAlert(`You are now friends with ${requesterId}!`, "Accepted");
-                } else if (action === 'decline') {
-                    showCustomAlert(`You declined the request from ${requesterId}.`, "Declined");
+                showCustomAlert(`You are now friends with @${requesterUserId}!`, "Success");
+
+            } catch (error) {
+                console.error("Error accepting friend request:", error);
+                showCustomAlert("Failed to accept request due to a server error.", "Error");
+            } finally {
+                appState.isSubmitting = false;
+                renderApp();
+            }
+        }
+
+        /**
+         * Declines or removes a user from a list (request/friend).
+         * @param {string} targetUid - The UID to remove.
+         * @param {('request'|'friend')} type - Whether to remove a pending request or a friend.
+         */
+        async function removeUser(targetUid, type) {
+            if (!userId) return;
+
+            appState.isSubmitting = true;
+            renderApp();
+
+            try {
+                const appId = explicitFirebaseConfig.projectId;
+                const userDocRef = doc(db, `artifacts/${appId}/public/data/profiles/${userId}`);
+                const targetDocRef = doc(db, `artifacts/${appId}/public/data/profiles/${targetUid}`);
+                const targetUserId = appState.allProfiles[targetUid]?.userId || 'User';
+
+                if (type === 'request') {
+                    // Remove the request from my own pending requests list
+                    await updateDoc(userDocRef, {
+                        friendRequests: arrayRemove(targetUid)
+                    });
+                    showCustomAlert(`Declined request from @${targetUserId}.`, "Info");
+                } else if (type === 'friend') {
+                    // 1. Remove friend from my list
+                    await updateDoc(userDocRef, {
+                        friends: arrayRemove(targetUid)
+                    });
+                    // 2. Remove me from their list
+                    await updateDoc(targetDocRef, {
+                        friends: arrayRemove(userId)
+                    });
+                    showCustomAlert(`You have unfriended @${targetUserId}.`, "Info");
                 }
 
             } catch (error) {
-                console.error(`Error handling ${action} request:`, error);
-                showCustomAlert(`Failed to process request: ${error.message}`, "Error");
+                console.error(`Error removing ${type}:`, error);
+                showCustomAlert(`Failed to process action due to a server error.`, "Error");
+            } finally {
+                appState.isSubmitting = false;
+                renderApp();
             }
         }
         
-        // --- Event Handlers (Auth related handlers are kept here) ---
+        // --- Authentication Functions ---
+
+        async function checkUserProfile(user) {
+            const appId = explicitFirebaseConfig.projectId;
+            const docRef = doc(db, `artifacts/${appId}/public/data/profiles/${user.uid}`);
+            
+            try {
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    userProfile = docSnap.data();
+                    // Set status to Online and update timestamp when logging in
+                    await setDoc(docRef, { 
+                        status: 'Online', 
+                        lastActive: Timestamp.now() 
+                    }, { merge: true });
+                    
+                    userDisplayName = userProfile.userId || userProfile.displayName || 'User';
+                    setupUserProfileListener(user.uid);
+                    router.setView('dashboard');
+                    showCustomAlert(`Welcome back, @${userDisplayName}!`, "WELCOME!");
+                } else {
+                    router.setView('profile_setup');
+                }
+            } catch (error) {
+                console.error("Error checking user profile:", error);
+                router.setError("Error accessing user data.");
+            }
+        }
         
-        window.handleGoogleSignIn = async () => {
-            router.clearError();
+        async function handleGoogleSignIn() {
             const provider = new GoogleAuthProvider();
             try {
                 await signInWithPopup(auth, provider);
+                // Auth state change listener handles view routing
             } catch (error) {
-                if (error.code === 'auth/popup-closed-by-user') {
-                    router.setError("Sign-in cancelled by user.");
-                } else {
-                    console.error("Google Sign-In Error:", error);
-                    router.setError(`Sign-In Failed. Check console and Firebase Auth setup. Error: ${error.code}`);
-                }
+                console.error("Google Sign-In Failed:", error);
+                router.setError("Failed to sign in with Google. Check console for details.");
             }
-        };
-
-        window.handleSignOut = async () => {
+        }
+        
+        async function handleSignOut() {
             try {
-                // Unsubscribe the profile listener before signing out
-                if (profileListener) {
-                    profileListener();
-                    profileListener = null;
+                if (userProfile && userId) {
+                    const appId = explicitFirebaseConfig.projectId;
+                    const docRef = doc(db, `artifacts/${appId}/public/data/profiles/${userId}`);
+                    // Set status to Offline when logging out
+                    await updateDoc(docRef, { status: 'Offline', lastActive: Timestamp.now() });
                 }
                 
-                // Clear state
-                userProfile = null;
-                appState.pendingFriendRequests = [];
-                appState.friendsList = [];
-                appState.allProfiles = {};
-
                 await signOut(auth);
-                userDisplayName = 'Guest';
-                router.setView('auth');
+                // Auth state change listener handles view routing
+                showCustomAlert("You have been signed out.", "Goodbye!");
             } catch (error) {
-                console.error("Error signing out:", error);
-                router.setError("Sign out failed.");
+                console.error("Sign-Out Failed:", error);
+                router.setError("Failed to sign out. Please check your connection.");
             }
-        };
+        }
 
-        window.handleUserIdInput = (event) => {
-            const input = event.target.value; 
-            let cleanId = input.toLowerCase().replace(/[^a-z0-9_@]/g, '');
-            if (!cleanId.startsWith('@') && cleanId.length > 0) {
-                 cleanId = '@' + cleanId;
-            } else if (cleanId.startsWith('@@')) {
-                 cleanId = '@' + cleanId.substring(2);
+        function listenForUserIdUniqueness(userId) {
+            if (profileUniquenessListener) {
+                profileUniquenessListener(); // Stop the old listener
             }
-            if (cleanId.length > 21) {
-                cleanId = cleanId.substring(0, 21);
-            }
-            event.target.value = cleanId; 
 
-            // Logic to check uniqueness (omitted here for brevity, assumes checkUserIdUniqueness exists)
-            // checkUserIdUniqueness(cleanId);
+            if (!userId) {
+                appState.isUserIdUnique = false;
+                appState.isIdConflict = false;
+                renderApp();
+                return;
+            }
+
+            appState.pendingUserId = userId;
+            const appId = explicitFirebaseConfig.projectId;
+            const profilesRef = collection(db, `artifacts/${appId}/public/data/profiles`);
             
-            // Simplified state update for this example (assuming it passed the heavy check)
-            if (cleanId.length > 2 && cleanId.startsWith('@')) {
-                 appState.isUserIdUnique = true;
-            } else {
-                 appState.isUserIdUnique = false;
-            }
-            appState.pendingUserId = cleanId;
-            renderApp();
-        };
-        
-        window.openProfileModal = () => {
-            showCustomAlert(`
-                Current @User ID: ${userDisplayName}
-                Firebase UID: ${userId}
+            // Query for any existing profile with the given userId
+            const q = query(profilesRef, where("userId", "==", userId.toLowerCase()));
+            
+            profileUniquenessListener = onSnapshot(q, (snapshot) => {
+                const isConflict = snapshot.docs.length > 0;
                 
-                Profile updates not yet implemented.
-                You can change your bio, avatar, and status here 
-                in a full implementation.
-            `, "Profile Info");
-        };
-
-
-        // --- Render Functions ---
+                // If there's a conflict, make sure it's not the current user's own profile being checked
+                if (isConflict) {
+                    const conflictingDocId = snapshot.docs[0].id;
+                    if (conflictingDocId === appState.user.uid) {
+                        // It's the current user's existing profile (shouldn't happen here, but safe guard)
+                        appState.isIdConflict = false;
+                        appState.isUserIdUnique = true;
+                    } else {
+                        // It's another user's profile
+                        appState.isIdConflict = true;
+                        appState.isUserIdUnique = false;
+                    }
+                } else {
+                    // No conflict found
+                    appState.isIdConflict = false;
+                    appState.isUserIdUnique = true;
+                }
+                renderApp();
+            }, (error) => {
+                console.error("Error checking userId uniqueness:", error);
+                // Assume unique in case of a temporary error to allow registration, but log it.
+                appState.isUserIdUnique = true;
+                appState.isIdConflict = false;
+                renderApp();
+            });
+        }
         
-        function renderFriendRequestList() {
-            const pendingRequests = appState.pendingFriendRequests;
-            const requestProfiles = pendingRequests
-                .map(uid => appState.allProfiles[uid] ? { ...appState.allProfiles[uid], uid } : null)
-                .filter(p => p !== null);
+        async function handleProfileSetup(event) {
+            event.preventDefault();
+            
+            if (!appState.isUserIdUnique || appState.isIdConflict || !appState.pendingUserId) {
+                showCustomAlert("Please choose a unique and valid @User ID.", "Error");
+                return;
+            }
 
-            if (requestProfiles.length === 0) {
-                return `<div class="text-gray-500 text-sm italic mt-2 p-2 rounded-lg bg-black bg-opacity-20">No pending requests.</div>`;
+            if (!appState.user) {
+                router.setError("Authentication session lost. Please sign in again.");
+                return;
             }
             
-            return `
-                <div class="mt-2 flex flex-col gap-2">
-                    ${requestProfiles.map(profile => `
-                        <button onclick="openManageRequestModal('${profile.uid}')" class="sidebar-item request-item">
-                            <span>Request from ${profile.userId}</span>
-                            <span class="text-xs text-yellow-300">New!</span>
-                        </button>
-                    `).join('')}
-                </div>
-            `;
-        }
+            appState.isSubmitting = true;
+            renderApp();
 
-        function renderFriendsList() {
-            const friends = appState.friendsList;
-            const friendProfiles = friends
-                .map(uid => appState.allProfiles[uid] ? { ...appState.allProfiles[uid], uid } : null)
-                .filter(p => p !== null);
+            try {
+                const appId = explicitFirebaseConfig.projectId;
+                const docRef = doc(db, `artifacts/${appId}/public/data/profiles/${appState.user.uid}`);
+                
+                const newProfile = {
+                    uid: appState.user.uid,
+                    displayName: appState.user.displayName || 'Anon',
+                    userId: appState.pendingUserId.toLowerCase(), // Store lowercase for querying
+                    email: appState.user.email || 'N/A',
+                    createdAt: Timestamp.now(),
+                    status: 'Online',
+                    lastActive: Timestamp.now(),
+                    // Initialize empty arrays for friend features
+                    friends: [],
+                    friendRequests: [],
+                };
+                
+                await setDoc(docRef, newProfile);
+                
+                // Success: clear state, setup listener, move to dashboard
+                userProfile = newProfile;
+                userDisplayName = newProfile.userId;
+                appState.isSubmitting = false;
+                appState.pendingUserId = '';
+                
+                if (profileUniquenessListener) {
+                    profileUniquenessListener();
+                    profileUniquenessListener = null;
+                }
 
-            if (friendProfiles.length === 0) {
-                return `<div class="text-gray-500 text-sm italic mt-2 p-2 rounded-lg bg-black bg-opacity-20">No friends yet.</div>`;
+                setupUserProfileListener(appState.user.uid);
+                router.setView('dashboard');
+                showCustomAlert(`Welcome, @${userDisplayName}! Your profile is ready.`, "WELCOME!");
+
+            } catch (error) {
+                console.error("Error creating profile:", error);
+                router.setError("Failed to complete registration. Please try again.");
+            } finally {
+                appState.isSubmitting = false;
+                renderApp();
             }
-
-            return `
-                <div class="mt-2 flex flex-col gap-2">
-                    ${friendProfiles.map(profile => `
-                        <button class="sidebar-item friend-link">
-                            <span class="status-indicator ${profile.status === 'online' ? 'status-online' : 'status-offline'}"></span>
-                            <span>${profile.userId}</span>
-                        </button>
-                    `).join('')}
-                </div>
-            `;
         }
+        
+        // --- View Rendering ---
 
         function renderAuthView() {
             return `
                 <div class="auth-container">
                     <h1 class="app-title">SQUIT UP!</h1>
                     <p class="subtitle">chatting and chilling lounge friends</p>
-                    <div class="flex flex-col items-center">
-                        <h2 class="text-2xl font-semibold mb-6 text-white">CONNECT ACCOUNT</h2>
-                        <button onclick="handleGoogleSignIn()" class="btn-google w-full mb-4">
-                            <img src="https://img.icons8.com/color/24/000000/google-logo.png" alt="Google icon"/>
-                            <span>Continue with Google</span>
-                        </button>
-                        <div class="text-xs text-gray-500 mt-4 text-center">
-                            Sign in to connect with friends and communities.
-                        </div>
+                    <h2 class="text-2xl font-semibold mb-6 text-center text-white">CONNECT ACCOUNT</h2>
+
+                    ${appState.errorMessage ? `<div class="error-message">${appState.errorMessage}</div>` : ''}
+
+                    <button class="btn-google w-full" onclick="window.handleGoogleSignIn()">
+                        <img src="https://img.icons8.com/color/24/000000/google-logo.png" alt="Google Logo"/>
+                        Continue with Google
+                    </button>
+
+                    <div class="mt-8 text-center text-gray-400 text-sm">
+                        <p>Sign in to connect with friends and communities.</p>
                     </div>
                 </div>
             `;
         }
-
+        
         function renderProfileSetupView() {
-            const displayError = appState.isIdConflict ? `The ID ${appState.pendingUserId} is already taken.` : appState.errorMessage;
-            const errorClass = displayError ? 'border-red-500' : 'border-indigo-500';
-            const isButtonEnabled = appState.isUserIdUnique && appState.pendingUserId.length > 2 && appState.pendingUserId.startsWith('@') && !appState.isSubmitting;
+            const inputId = 'profile-user-id';
+            const statusColor = appState.isIdConflict ? 'text-red-500' : (appState.isUserIdUnique ? 'text-green-500' : 'text-gray-500');
+            const statusMessage = appState.isIdConflict 
+                ? 'This @User ID is taken.' 
+                : (appState.isUserIdUnique && appState.pendingUserId.length > 0
+                    ? 'Available!' 
+                    : 'Choose a unique ID (e.g., @squit_dev)');
+            const isButtonDisabled = !appState.isUserIdUnique || appState.isIdConflict || appState.pendingUserId.length < 3 || appState.isSubmitting;
             
             return `
                 <div class="auth-container">
                     <h1 class="app-title">SQUIT UP!</h1>
-                    <h2 class="text-2xl font-semibold mb-6 text-white text-center">you can custmoize your id here LETS DO IT !</h2>
-                    <form onsubmit="handleProfileRegistration(event)">
-                        <div class="mb-6">
-                            <label for="user-id-input" class="block text-sm font-medium text-gray-400 mb-2">Your Profile Name</label>
+                    <p class="subtitle">Final Step: Choose Your @User ID</p>
+                    
+                    ${appState.errorMessage ? `<div class="error-message">${appState.errorMessage}</div>` : ''}
+
+                    <form onsubmit="window.handleProfileSetup(event)">
+                        <label for="${inputId}" class="block text-sm font-medium mb-2 text-white">Your Profile Name</label>
+                        
+                        <div class="relative mb-2">
+                            <span class="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">@</span>
                             <input 
                                 type="text" 
-                                id="user-id-input" 
-                                class="input-field w-full px-4 py-3 rounded-lg focus:ring-2 focus:ring-indigo-500 transition duration-150 ${errorClass}" 
-                                placeholder="@unique_id" 
+                                id="${inputId}" 
+                                class="input-field w-full px-4 py-3 pl-8 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                placeholder="unique_user_id"
                                 value="${appState.pendingUserId}"
-                                onkeyup="handleUserIdInput(event)"
-                                maxlength="21"
+                                oninput="window.handleUserIdInput(this.value)"
                                 required
-                                ${appState.isSubmitting ? 'disabled' : ''}
-                            />
-                            ${displayError ? `<p class="text-red-400 text-sm mt-2">${displayError}</p>` : ''}
+                            >
                         </div>
+                        <p class="text-xs font-medium ${statusColor} mb-6">${statusMessage}</p>
+
                         <button 
-                            type="submit"
-                            id="register-button"
-                            class="btn-register w-full py-3 font-bold rounded-lg transition duration-200 
-                            ${isButtonEnabled ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-700'} 
-                            ${isButtonEnabled ? '' : 'disabled'}"
-                            ${isButtonEnabled ? '' : 'disabled'}
+                            type="submit" 
+                            class="btn-register w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition duration-150"
+                            ${isButtonDisabled ? 'disabled' : ''}
                         >
                             ${appState.isSubmitting ? 'Registering...' : 'Complete Registration'}
                         </button>
                     </form>
-                    <p class="text-xs text-gray-500 mt-4 text-center">
+
+                    <p class="text-center text-gray-400 text-xs mt-4">
                         Your @User ID is how friends will find you.
                     </p>
                 </div>
             `;
         }
+        
+        function handleUserIdInput(value) {
+            // Basic sanitization
+            const cleanValue = value.replace(/[^a-zA-Z0-9._]/g, '').toLowerCase();
+            appState.pendingUserId = cleanValue;
+            document.getElementById('profile-user-id').value = cleanValue;
+            listenForUserIdUniqueness(cleanValue);
+            renderApp(); // Re-render to update the button and status immediately
+        }
+        
+        function renderLoadingView() {
+            return `
+                <div class="text-center">
+                    <div class="w-12 h-12 border-4 border-indigo-500 border-t-transparent border-solid rounded-full animate-spin mx-auto mb-4"></div>
+                    <p class="text-indigo-300 font-semibold">${appState.loadingMessage}</p>
+                </div>
+            `;
+        }
 
         function renderDashboardView() {
+            const pendingRequests = appState.pendingFriendRequests
+                .map(uid => appState.allProfiles[uid])
+                .filter(profile => profile); // Filter out profiles that might not have loaded yet
+            
+            const friends = appState.friendsList
+                .map(uid => appState.allProfiles[uid])
+                .filter(profile => profile);
+
             return `
                 <div class="dashboard-layout">
                     <!-- Sidebar -->
                     <div class="sidebar flex flex-col justify-between">
                         <div>
-                            <div class="text-lg font-bold text-white mb-6">
+                            <!-- App Title and Logo -->
+                            <div class="text-3xl font-bold text-white mb-6">
                                 SQUIT UP!
                             </div>
+
+                            <div class="mb-4">
+                                <h3 class="text-xs font-semibold uppercase text-gray-400 mb-2">Direct Messages</h3>
+                                <p class="text-sm text-gray-500 italic">Add friends to start chatting.</p>
+                            </div>
+
+                            <!-- Friend Requests Section -->
+                            <h3 class="sidebar-section-header">Pending Requests (${pendingRequests.length})</h3>
+                            <div id="pending-requests-list">
+                                ${pendingRequests.length > 0 
+                                    ? pendingRequests.map(profile => `
+                                        <div class="request-item sidebar-item flex justify-between items-center bg-purple-900/50 hover:bg-purple-800/50">
+                                            <span class="truncate pr-2">@${profile.userId}</span>
+                                            <div class="flex space-x-2">
+                                                <button onclick="window.acceptFriendRequest('${profile.uid}')" class="text-green-400 hover:text-green-300 font-bold">✓</button>
+                                                <button onclick="window.removeUser('${profile.uid}', 'request')" class="text-red-400 hover:text-red-300 font-bold">✕</button>
+                                            </div>
+                                        </div>
+                                    `).join('')
+                                    : '<p class="text-sm text-gray-500 italic px-2">No pending requests.</p>'
+                                }
+                            </div>
                             
-                            <h3 class="text-sm font-semibold text-gray-400 uppercase mb-3">Direct Messages</h3>
-                            <div class="text-gray-500 text-sm mb-6 p-2 rounded-lg bg-black bg-opacity-20">Click on a friend to start chatting.</div>
-
-                            <h3 class="text-sm font-semibold text-gray-400 uppercase mb-3">Friends</h3>
-                            <div class="flex flex-col gap-2">
-                                <!-- Send Friend Request Button -->
-                                <button onclick="openSendRequestModal()" class="sidebar-item add-friend-btn">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 mr-1">
-                                      <path d="M11.64 5.942c-.635-.138-1.393.076-1.745.568L8.62 7.712A3.486 3.486 0 0 0 7 10.32c0 2.457 1.838 4.655 4.39 5.011 1.761.254 3.434-.847 4.145-2.553.111-.252.179-.533.197-.817.057-.803-.383-1.623-1.077-2.074l-.999-.67a3.535 3.535 0 0 1-1.428-2.618 1.48 1.48 0 0 0-2.062-1.332Z" />
-                                      <path fill-rule="evenodd" d="M12 2.25a.75.75 0 0 1 .75.75v8.25a.75.75 0 0 1-1.5 0V3a.75.75 0 0 1 .75-.75ZM6 2.25v.5c0 1.5.75 2.5 1.5 2.5h9c.75 0 1.5-1 1.5-2.5v-.5c0-1.036-.842-1.875-1.875-1.875h-12A1.875 1.875 0 0 0 6 2.25Z" clip-rule="evenodd" />
-                                      <path d="M12 15a3.75 3.75 0 1 0 0-7.5 3.75 3.75 0 0 0 0 7.5Z" />
-                                      <path d="M11.64 5.942c-.635-.138-1.393.076-1.745.568L8.62 7.712A3.486 3.486 0 0 0 7 10.32c0 2.457 1.838 4.655 4.39 5.011 1.761.254 3.434-.847 4.145-2.553.111-.252.179-.533.197-.817.057-.803-.383-1.623-1.077-2.074l-.999-.67a3.535 3.535 0 0 1-1.428-2.618 1.48 1.48 0 0 0-2.062-1.332Z" />
-                                    </svg>
-                                    + Send Friend Request
+                            <!-- Friends List Section -->
+                            <h3 class="sidebar-section-header">My Friends (${friends.length})</h3>
+                            <div id="friends-list">
+                                ${friends.length > 0
+                                    ? friends.map(profile => `
+                                        <button class="sidebar-item friend-link">
+                                            <span class="status-indicator ${profile.status === 'Online' ? 'status-online' : 'status-offline'}"></span>
+                                            <span class="truncate">@${profile.userId}</span>
+                                        </button>
+                                    `).join('')
+                                    : '<p class="text-sm text-gray-500 italic px-2">No friends yet.</p>'
+                                }
+                            </div>
+                            
+                            <!-- Add Friend Button -->
+                            <div class="mt-6">
+                                <button onclick="window.showAddFriendModal()" class="sidebar-item add-friend-btn">
+                                    Send Friend Request
                                 </button>
-                                
-                                <h4 class="text-xs font-semibold text-gray-500 uppercase mt-2">Pending Requests (${appState.pendingFriendRequests.length})</h4>
-                                ${renderFriendRequestList()}
-
-                                <h4 class="text-xs font-semibold text-gray-500 uppercase mt-4">My Friends (${appState.friendsList.length})</h4>
-                                ${renderFriendsList()}
                             </div>
                         </div>
 
-                        <!-- User Profile Area -->
-                        <div class="mt-4 p-3 bg-black bg-opacity-30 rounded-lg flex items-center justify-between cursor-pointer shadow-md" onclick="openProfileModal()">
-                            <div class="flex items-center">
-                                <div class="w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center text-sm font-bold mr-3">${userDisplayName.charAt(1) || 'G'}</div>
-                                <div>
-                                    <div class="text-white font-semibold">${userDisplayName}</div>
-                                    <div class="text-xs text-green-400">Online</div>
+                        <!-- User Profile/Sign Out Section -->
+                        <div class="border-t border-gray-700 pt-4">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center">
+                                    <div class="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-sm font-bold mr-3">
+                                        ${userDisplayName.charAt(1).toUpperCase()}
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-semibold truncate">@${userDisplayName}</p>
+                                        <p class="text-xs text-green-400">Online</p>
+                                    </div>
                                 </div>
+                                <button onclick="window.handleSignOut()" class="text-gray-400 hover:text-red-500 transition duration-150" title="Sign Out">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                                    </svg>
+                                </button>
                             </div>
-                            <!-- Sign Out Button -->
-                            <button onclick="event.stopPropagation(); handleSignOut()" class="text-gray-400 hover:text-red-400 transition text-sm font-semibold">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
-                                    <path fill-rule="evenodd" d="M7.5 3.75A1.5 1.5 0 0 0 6 5.25v13.5a1.5 1.5 0 0 0 1.5 1.5h6a1.5 1.5 0 0 0 1.5-1.5V15a.75.75 0 0 1 1.5 0v3.75a3 3 0 0 1-3 3h-6a3 3 0 0 1-3-3V5.25a3 3 0 0 1 3-3h6a3 3 0 0 1 3 3V9a.75.75 0 0 1-1.5 0V5.25a1.5 1.5 0 0 0-1.5-1.5h-6Zm10.749 5.25a.75.75 0 0 1 .75-.75h2.25a.75.75 0 0 1 0 1.5H19a.75.75 0 0 1-.75-.75ZM18.995 13a.75.75 0 0 1-.749-.66L17.5 9.75h-2.25a.75.75 0 0 1 0-1.5h2.25L17.5 7.41l.746-2.502a.75.75 0 0 1 1.488.448l-.75 2.502h2.25a.75.75 0 0 1 0 1.5h-2.25l-.746 2.502a.75.75 0 0 1-.749.66Z" clip-rule="evenodd" />
-                                </svg>
-                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Main Chat/Content Area -->
+                    <div class="main-content">
+                        <div class="chat-header text-center p-4 border-b border-gray-700">
+                            <h2 class="text-lg font-semibold text-indigo-400">@System - Welcome to SQUIT UP!</h2>
+                            <p class="text-sm text-gray-400">Chat and friend features are active!</p>
                         </div>
 
-                    </div>
-                    
-                    <!-- Main Chat Content Area -->
-                    <div class="main-content flex flex-col h-full">
-                        <div class="flex-grow chat-area justify-center items-center text-center text-gray-500 text-xl font-semibold">
-                            Select a friend to start chatting!
+                        <div class="chat-area flex-grow">
+                            <!-- Chat messages will go here -->
+                            <div class="flex flex-col h-full justify-end">
+                                <p class="text-center text-gray-600 italic">Start a conversation by clicking on a friend in the sidebar.</p>
+                            </div>
                         </div>
+
+                        <!-- Message Input -->
                         <div class="message-input-area">
-                            <input type="text" placeholder="Send a message..." class="input-field flex-grow px-4 py-3 rounded-l-lg border-r-0" disabled>
-                            <button class="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-r-lg transition duration-150" disabled>
+                            <input type="text" placeholder="Send a message..." class="input-field flex-grow px-4 py-3 rounded-l-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 border-r-0">
+                            <button class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-6 py-3 rounded-r-lg transition duration-150">
                                 Send
                             </button>
                         </div>
                     </div>
                 </div>
+                ${renderAddFriendModal()}
             `;
         }
-
-
-        function renderLoadingView() {
+        
+        function renderAddFriendModal() {
+            const modalId = 'add-friend-modal';
+            const inputId = 'add-friend-user-id';
+            
             return `
-                <div class="auth-container text-center">
-                    <h1 class="app-title mb-4">SQUIT UP!</h1>
-                    <div class="flex justify-center items-center">
-                        <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        <p>${appState.loadingMessage}</p>
+                <div id="${modalId}" class="modal-overlay hidden">
+                    <div class="modal-content">
+                        <div class="flex justify-between items-center mb-6">
+                            <h3 class="text-xl font-bold text-white">Send Friend Request</h3>
+                            <button onclick="document.getElementById('${modalId}').classList.add('hidden')" class="text-gray-400 hover:text-white">&times;</button>
+                        </div>
+                        <form onsubmit="event.preventDefault(); window.submitAddFriendRequest()">
+                            <label for="${inputId}" class="block text-sm font-medium mb-2 text-gray-300">@User ID of the friend:</label>
+                            <div class="relative mb-4">
+                                <span class="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">@</span>
+                                <input 
+                                    type="text" 
+                                    id="${inputId}" 
+                                    class="input-field w-full px-4 py-3 pl-8 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                    placeholder="friend_user_id"
+                                    required
+                                >
+                            </div>
+                            <button 
+                                type="submit" 
+                                class="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition duration-150"
+                                ${appState.isSubmitting ? 'disabled' : ''}
+                            >
+                                ${appState.isSubmitting ? 'Sending...' : 'Send Request'}
+                            </button>
+                        </form>
                     </div>
-                    ${appState.errorMessage ? `<div class="error-message mt-4">${appState.errorMessage}</div>` : ''}
                 </div>
             `;
+        }
+        
+        function showAddFriendModal() {
+            document.getElementById('add-friend-modal').classList.remove('hidden');
+            document.getElementById('add-friend-user-id').value = '';
+        }
+        
+        async function submitAddFriendRequest() {
+            const inputElement = document.getElementById('add-friend-user-id');
+            const targetUserId = inputElement.value.trim().toLowerCase();
+            
+            if (targetUserId) {
+                document.getElementById('add-friend-modal').classList.add('hidden');
+                await sendFriendRequest(targetUserId);
+                inputElement.value = ''; // Clear input after submission attempt
+            }
         }
 
 
@@ -1075,12 +1062,25 @@
             container.innerHTML = content;
         }
 
-        // --- Start Application ---
-        document.addEventListener('DOMContentLoaded', initializeFirebase);
+        // Expose global functions needed by the HTML
+        window.handleGoogleSignIn = handleGoogleSignIn;
+        window.handleSignOut = handleSignOut;
+        window.handleProfileSetup = handleProfileSetup;
+        window.handleUserIdInput = handleUserIdInput;
+        window.showAddFriendModal = showAddFriendModal;
+        window.submitAddFriendRequest = submitAddFriendRequest;
+        window.sendFriendRequest = sendFriendRequest; // Exposed for internal use, though submitAddFriendRequest is for the modal
+        window.acceptFriendRequest = acceptFriendRequest;
+        window.removeUser = removeUser;
+        window.showCustomAlert = showCustomAlert;
+
+        // Initialize on load
+        window.onload = initializeFirebase;
     </script>
 </head>
-<body>
-    <div id="app-container" class="w-full h-full flex justify-center items-center">
+<body class="bg-gray-900">
+    <!-- The main application container -->
+    <div id="app-container" class="w-full h-full">
         <!-- Content will be rendered here by JavaScript -->
     </div>
 </body>
