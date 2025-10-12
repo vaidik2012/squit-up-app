@@ -1,1148 +1,553 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Squit Up! Chat Platform</title>
-    <!-- Load Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Inter Font -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --sidebar-width: 280px;
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInWithCustomToken, onAuthStateChanged, signOut } from 'firebase/auth';
+import { 
+    getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs, onSnapshot,
+    serverTimestamp, updateDoc, deleteDoc, runTransaction
+} from 'firebase/firestore';
+
+// --- Global Variables (provided by the Canvas environment) ---
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+// --- End Global Variables ---
+
+// Initialize Firebase App and Services
+let app;
+let db;
+let auth;
+
+// Helper to use exponential backoff for Firestore calls
+const firestoreRetry = async (fn, retries = 5, delay = 1000) => {
+    for (let i = 0; i < retries; i++) {
+        try {
+            return await fn();
+        } catch (error) {
+            if (i === retries - 1) throw error;
+            await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, i)));
         }
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #111827; /* Darkest Blue-Gray */
-            color: #f3f4f6; /* Light text */
-            margin: 0;
-            padding: 0;
-            height: 100vh;
-            overflow: hidden; /* Remove global scroll */
-        }
+    }
+};
 
-        /* Full screen layout for dashboard */
-        .dashboard-layout {
-            display: grid;
-            grid-template-columns: var(--sidebar-width) 1fr;
-            height: 100vh;
-        }
+const App = () => {
+    const [user, setUser] = useState(null); // Firebase user object
+    const [username, setUsername] = useState(null); // The user's custom @user_id
+    const [isAuthReady, setIsAuthReady] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [view, setView] = useState('Auth'); // 'Auth', 'Main', 'Friends'
+    const [message, setMessage] = useState('');
 
-        /* Custom Styles for Dashboard and Components */
-        .sidebar {
-            background-color: #1f2937; /* Slightly lighter dark gray */
-            box-shadow: 4px 0 10px rgba(0, 0, 0, 0.4);
-            display: flex;
-            flex-direction: column;
-            overflow-y: auto;
-        }
+    const [friendRequests, setFriendRequests] = useState([]);
+    const [friendsList, setFriendsList] = useState([]);
 
-        .main-content {
-            background-color: #111827;
-            display: flex;
-            flex-direction: column;
-            height: 100vh; /* Ensure it takes full height */
-            overflow: hidden;
-        }
+    // 1. Initial Firebase Setup and Persistent Auth Listener
+    useEffect(() => {
+        try {
+            app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+            // setLogLevel('Debug'); // Uncomment for debugging
 
-        .sidebar-header {
-            background-color: #1f2937;
-            border-bottom: 1px solid #374151;
-            padding: 1rem;
-            position: sticky;
-            top: 0;
-            z-index: 10;
-        }
-
-        /* Profile Card Hover Effect */
-        .profile-card:hover {
-            box-shadow: 0 0 15px rgba(134, 49, 255, 0.5); /* Purple shadow on hover */
-            cursor: pointer;
-            transform: scale(1.01);
-        }
-
-        /* Section Header Styling (Dull Button Fix) */
-        .sidebar-section-header {
-            color: #f3f4f6; /* Bright white text */
-            text-shadow: 0 0 5px rgba(134, 49, 255, 0.5); /* Subtle purple glow */
-        }
-
-        /* Button Styling (Large Button Fix) */
-        .btn-primary {
-            background-image: linear-gradient(145deg, #6366f1, #8b5cf6); /* Indigo to Violet gradient */
-            color: #ffffff;
-            font-weight: 600;
-            border-radius: 0.5rem;
-            padding: 0.75rem 1.5rem; 
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-        
-        .btn-primary-small {
-            background-image: linear-gradient(145deg, #6366f1, #8b5cf6); /* Indigo to Violet gradient */
-            color: #ffffff;
-            font-weight: 600;
-            border-radius: 0.5rem;
-            padding: 0.5rem 1.25rem; 
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-
-        .btn-primary:hover, .btn-primary-small:hover {
-            opacity: 0.9;
-            box-shadow: 0 6px 8px rgba(0, 0, 0, 0.2);
-        }
-
-        .btn-secondary {
-            background-color: #374151;
-            color: #d1d5db;
-            font-weight: 500;
-            border-radius: 0.5rem;
-            padding: 0.5rem 1rem;
-            transition: background-color 0.3s ease;
-        }
-
-        .btn-secondary:hover {
-            background-color: #4b5563;
-        }
-        
-        /* Google Button Style */
-        .btn-google {
-            background-color: #4285f4; /* Google Blue */
-            color: white;
-            padding: 0.75rem 1.5rem;
-            border-radius: 0.5rem;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: background-color 0.3s;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-        .btn-google:hover {
-            background-color: #357ae8;
-        }
-
-        /* Chat Message Styling */
-        .message-container {
-            display: flex;
-            flex-direction: column;
-            padding: 1rem;
-            overflow-y: auto; /* Scrollable chat area */
-            flex-grow: 1;
-        }
-
-        .message-bubble {
-            max-width: 70%;
-            padding: 0.6rem 1rem;
-            border-radius: 1rem;
-            margin-bottom: 0.5rem;
-            word-wrap: break-word;
-            font-size: 0.9rem;
-        }
-
-        .self-message {
-            background-color: #4f46e5; /* Indigo */
-            align-self: flex-end;
-            border-bottom-right-radius: 0.2rem;
-        }
-
-        .friend-message {
-            background-color: #374151; /* Dark Gray */
-            align-self: flex-start;
-            border-bottom-left-radius: 0.2rem;
-        }
-
-        /* Modal Styles */
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.7);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 50;
-        }
-
-        .modal-content {
-            background-color: #1f2937;
-            padding: 2rem;
-            border-radius: 1rem;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
-            max-width: 500px;
-            width: 90%;
-            transition: transform 0.3s ease-out;
-            max-height: 90vh; /* Added to prevent overflow on small screens */
-            overflow-y: auto;
-        }
-
-        /* Loading Spinner Center Fix */
-        .loading-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: #111827;
-            display: flex;
-            flex-direction: column;
-            justify-content: center; /* Center vertically */
-            align-items: center; /* Center horizontally */
-            z-index: 100;
-        }
-
-        .spinner {
-            border: 4px solid rgba(255, 255, 255, 0.1);
-            border-top: 4px solid #8b5cf6;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        /* Auth Container Sizing Fix */
-        .auth-container {
-            width: 100%; 
-            max-width: 450px;
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-        }
-        
-        /* Responsive adjustments for the layout */
-        @media (max-width: 768px) {
-            .dashboard-layout {
-                grid-template-columns: 1fr; /* Stack sidebar and main content */
-            }
-
-            .sidebar {
-                display: none; /* Hide sidebar by default on mobile */
-            }
-            
-            .sidebar.mobile-open {
-                display: flex;
-                position: absolute;
-                width: 100%;
-                z-index: 20;
-            }
-        }
-    </style>
-</head>
-<body>
-
-    <!-- Main App Container -->
-    <div id="app-container" class="hidden h-screen w-screen">
-        <div id="dashboard-layout" class="dashboard-layout">
-            <!-- Sidebar -->
-            <div id="sidebar" class="sidebar"></div>
-            <!-- Main Content Area -->
-            <div id="main-content" class="main-content"></div>
-        </div>
-    </div>
-
-    <!-- Modals go here -->
-    <div id="modal-container"></div>
-    
-    <!-- Loading Screen -->
-    <div id="loadingOverlay" class="loading-overlay">
-        <div class="spinner mb-4"></div>
-        <p class="text-xl font-semibold">Starting SQUIT UP!</p>
-    </div>
-
-    <!-- Auth/Profile Setup View (Initially centered) -->
-    <div id="auth-view-container" class="auth-container p-6 bg-gray-800 rounded-xl shadow-2xl transition-all duration-500 hidden"></div>
-
-    <script type="module">
-        // --- Firebase Imports ---
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { 
-            getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, 
-            signOut as firebaseSignOut, GoogleAuthProvider, signInWithPopup 
-        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { 
-            getFirestore, doc, getDoc, setDoc, updateDoc, 
-            onSnapshot, collection, query, where, arrayUnion, 
-            arrayRemove, setLogLevel, writeBatch,
-            addDoc, serverTimestamp, orderBy
-        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        
-        setLogLevel('Debug');
-
-        // --- Global State ---
-        let app, db, auth;
-        
-        // Canvas environment variables (MUST be used)
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        
-        // Use the provided config if available, otherwise use your hardcoded one as fallback
-        const customFirebaseConfig = {
-             apiKey: "AIzaSyB1zvVHaBrbzX5iA9fBVNGa_3sY1-WCSpY",
-             authDomain: "squit-up-auth.firebaseapp.com",
-             projectId: "squit-up-auth",
-             storageBucket: "squit-up-auth.firebasestorage.app",
-             messagingSenderId: "503910898443",
-             appId: "1:503910898443:web:c5a56eb24cd4f183d8600e",
-             measurementId: "G-K4LHFHSNJC"
-        };
-        // CRITICAL FIX: Use the Canvas provided config if it exists
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : customFirebaseConfig;
-
-
-        let appState = {
-            userId: null,
-            userProfile: null,
-            friends: [],
-            pendingRequests: [],
-            sentRequests: [],
-            usersList: [],
-            view: 'loading', // 'loading', 'auth', 'dashboard'
-            activeChatId: null, // UID of the friend currently chatting with
-            chatMessages: {}, // Keyed by friendId: [{sender: uid, text: "msg", timestamp: "ISO"}] 
-            isAuthReady: false,
-            isProfileModalOpen: false,
-            isAddFriendModalOpen: false,
-        };
-
-        // --- Firestore Paths ---
-        const PUBLIC_COLLECTION = `artifacts/${appId}/public/data/users`;
-        const CHAT_COLLECTION = `artifacts/${appId}/public/data/chats`;
-
-        /** Gets the user document reference */
-        const getUserDocRef = (uid) => doc(db, PUBLIC_COLLECTION, uid);
-        
-        /** Gets the chat collection reference for the two users.
-         * The document ID is always UIDA_UIDB where UIDA < UIDB lexicographically.
-         */
-        function getChatDocRef(uidA, uidB) {
-            const sortedUids = [uidA, uidB].sort();
-            const chatId = sortedUids.join('_');
-            return collection(db, CHAT_COLLECTION, chatId, 'messages');
-        }
-
-        // --- Utility Functions ---
-
-        /** Shows a custom, transient alert message */
-        window.showCustomAlert = function(message, type = 'info') {
-            const container = document.getElementById('modal-container');
-            let bgColor, icon;
-
-            if (type === 'success') {
-                bgColor = 'bg-green-600';
-                icon = '<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>';
-            } else if (type === 'error') {
-                bgColor = 'bg-red-600';
-                icon = '<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>';
-            } else {
-                bgColor = 'bg-indigo-600';
-                icon = '<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>';
-            }
-
-            const alertDiv = document.createElement('div');
-            alertDiv.className = `fixed top-4 right-4 ${bgColor} text-white p-4 rounded-lg shadow-xl flex items-center space-x-3 transition-transform transform translate-x-full duration-300 z-50`;
-            alertDiv.innerHTML = `${icon} <span>${message}</span>`;
-
-            container.appendChild(alertDiv);
-
-            // Animate in
-            setTimeout(() => {
-                alertDiv.classList.remove('translate-x-full');
-            }, 10);
-
-            // Animate out and remove
-            setTimeout(() => {
-                alertDiv.classList.add('translate-x-full');
-                alertDiv.addEventListener('transitionend', () => alertDiv.remove());
-            }, 3000);
-        }
-
-        // --- View Rendering ---
-
-        /** Renders the entire application based on the current view state */
-        function renderApp() {
-            document.getElementById('loadingOverlay').classList.add('hidden');
-            document.getElementById('app-container').classList.add('hidden');
-            document.getElementById('auth-view-container').classList.add('hidden');
-            
-            if (appState.view === 'loading') {
-                document.getElementById('loadingOverlay').classList.remove('hidden');
-            } else if (appState.view === 'auth' || !appState.userProfile) {
-                renderAuthView();
-                document.getElementById('auth-view-container').classList.remove('hidden');
-            } else if (appState.view === 'dashboard') {
-                document.getElementById('app-container').classList.remove('hidden');
-                renderDashboardView();
-            }
-            
-            // Re-render modals if they should be open
-            if (appState.isProfileModalOpen) {
-                renderModal('editProfile');
-            } else if (appState.isAddFriendModalOpen) {
-                renderModal('addFriend');
-            } else {
-                document.getElementById('modal-container').innerHTML = ''; // Clear modals if none are open
-            }
-        }
-
-        function renderAuthView() {
-            const container = document.getElementById('auth-view-container');
-            
-            container.innerHTML = `
-                <div class="text-center">
-                    <h2 class="text-4xl font-extrabold text-indigo-400 mb-8 tracking-wider">SQUIT UP! 🚀</h2>
-                    
-                    ${appState.userId && !appState.userProfile ? 
-                        // --- Profile Setup View ---
-                        (() => {
-                            const tempProfile = {
-                                displayName: auth.currentUser?.displayName || (auth.currentUser?.email ? auth.currentUser.email.split('@')[0] : 'New User'),
-                                email: auth.currentUser?.email || '',
-                                pfpUrl: auth.currentUser?.photoURL || '',
-                                bio: '', pronouns: '', status: 'online', bannerUrl: ''
-                            };
-                            return `
-                                <h3 class="text-2xl font-bold mb-4 text-white">Welcome, ${tempProfile.displayName}!</h3>
-                                <p class="text-gray-300 mb-6">First time? Complete your SQUIT profile.</p>
-                                <div class="bg-gray-700 p-6 rounded-lg space-y-4">
-                                    ${renderProfileForm(tempProfile, true)}
-                                    <button onclick="saveProfile(true)" class="btn-primary w-full">Save Profile and Enter SQUIT</button>
-                                </div>
-                                <button onclick="signOut()" class="text-gray-400 hover:text-red-400 mt-4 text-sm">Sign Out</button>
-                            `;
-                        })()
-                        : 
-                        // --- Login Options View ---
-                        `
-                            <p class="text-gray-300 mb-8">Sign in to start chatting with friends.</p>
-                            <div class="space-y-4">
-                                <!-- Google Sign-in Button -->
-                                <button onclick="signInWithGoogle()" class="btn-google w-full">
-                                    <svg class="w-5 h-5 mr-3" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                        <path d="M44.5 20H24V28.5H35.3C34.5 32.5 30.2 35.3 24 35.3C16.8 35.3 11 29.5 11 22.3C11 15.1 16.8 9.3 24 9.3C27.5 9.3 30.4 10.6 32.7 12.8L38.8 6.7C34.8 3.1 29.7 1 24 1C11.8 1 2 10.8 2 23C2 35.2 11.8 45 24 45C36.2 45 46 35.2 46 23C46 21.6 45.8 20.3 45.5 19H44.5Z" fill="#FFC107"/>
-                                        <path d="M11 22.3C11 15.1 16.8 9.3 24 9.3C27.5 9.3 30.4 10.6 32.7 12.8L38.8 6.7C34.8 3.1 29.7 1 24 1C11.8 1 2 10.8 2 23C2 35.2 11.8 45 24 45C29.7 45 34.8 42.9 38.8 39.3L32.7 33.2C30.4 35.4 27.5 36.7 24 36.7C16.8 36.7 11 30.9 11 23.7V22.3Z" fill="#34A853"/>
-                                        <path d="M44.5 20H24V28.5H35.3C34.5 32.5 30.2 35.3 24 35.3C16.8 35.3 11 29.5 11 22.3C11 15.1 16.8 9.3 24 9.3C27.5 9.3 30.4 10.6 32.7 12.8L38.8 6.7C34.8 3.1 29.7 1 24 1C11.8 1 2 10.8 2 23C2 35.2 11.8 45 24 45C36.2 45 46 35.2 46 23C46 21.6 45.8 20.3 45.5 19H44.5Z" fill="#4285F4"/>
-                                        <path d="M24 1H2C2 10.8 11.8 23 24 23V1Z" fill="#FBBC04"/>
-                                        <path d="M24 45H2C2 35.2 11.8 23 24 23V45Z" fill="#EA4335"/>
-                                    </svg>
-                                    Sign In with Google
-                                </button>
-
-                                <div class="flex items-center">
-                                    <hr class="flex-grow border-gray-600">
-                                    <span class="px-3 text-gray-500 text-sm">OR</span>
-                                    <hr class="flex-grow border-gray-600">
-                                </div>
-                                
-                                <!-- Anonymous Sign-in (Fallback) -->
-                                <button onclick="signInAnonymouslyManual()" class="btn-secondary w-full">
-                                    Try Anonymous (No data persistence)
-                                </button>
-                                
-                                <p class="text-xs text-gray-500 mt-4">Note: Your account will be tied to your Google profile for persistence.</p>
-                            </div>
-                        `
+            // Handle initial custom token sign-in (for persistence on refresh)
+            const handleInitialAuth = async () => {
+                if (initialAuthToken) {
+                    try {
+                        // Attempt to sign in with the provided token for persistence
+                        await signInWithCustomToken(auth, initialAuthToken);
+                        console.log("Signed in with custom token for persistence.");
+                    } catch (error) {
+                        console.error("Custom token sign-in failed:", error);
+                        // Cannot proceed without custom token/UID, force Auth state
+                        setIsAuthReady(true);
+                        setLoading(false);
                     }
-                </div>
-            `;
+                } else {
+                    // No initial token, means the system didn't authenticate the session.
+                    setIsAuthReady(true);
+                    setLoading(false);
+                }
+            };
+
+            handleInitialAuth();
+
+            // Setup Auth State Listener for persistence
+            const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
+                setUser(currentUser);
+                if (currentUser) {
+                    // Check if the current Firebase UID has a registered @username
+                    const userProfileRef = doc(db, 'artifacts', appId, 'public', 'data', 'userProfiles', currentUser.uid);
+                    const docSnap = await firestoreRetry(() => getDoc(userProfileRef));
+
+                    if (docSnap.exists()) {
+                        const profileData = docSnap.data();
+                        setUsername(profileData.username);
+                        setView('Main'); // User is logged in with a valid @user_id
+                        console.log(`User logged in as @${profileData.username}`);
+                    } else {
+                        // User is authenticated (e.g., via custom token) but has no @user_id. Must register one.
+                        setUsername(null);
+                        setView('Auth');
+                    }
+                } else {
+                    setUsername(null);
+                    setView('Auth'); // No Firebase user, force login/registration
+                }
+                setIsAuthReady(true);
+                setLoading(false);
+            });
+
+            return () => unsubscribeAuth();
+
+        } catch (error) {
+            console.error("Firebase Initialization Error:", error);
+            setMessage("Error initializing app.");
+            setLoading(false);
+        }
+    }, []); // Run only once on mount
+
+    // 2. Real-time Listeners for Friends and Requests
+    useEffect(() => {
+        if (!isAuthReady || view !== 'Main' || !user?.uid) {
+            setFriendRequests([]);
+            setFriendsList([]);
+            return;
         }
 
-        function renderProfileForm(profile, isSetup = false) {
-            // Default PFP URL if not provided
-            const defaultPfp = 'https://placehold.co/40x40/4f46e5/ffffff?text=U';
+        const currentUserId = user.uid;
+        
+        // Listener for incoming friend requests (Private Collection)
+        const requestsQuery = query(
+            collection(db, 'artifacts', appId, 'users', currentUserId, 'friendRequests'),
+            where('status', '==', 'pending')
+        );
 
-            return `
-                <div class="space-y-3 text-left">
-                    <label class="block text-sm font-medium text-gray-300">Display Name</label>
-                    <input id="displayNameInput" type="text" value="${profile.displayName || ''}" placeholder="Choose a unique display name" class="w-full p-2 rounded-lg bg-gray-600 border border-gray-500 text-white focus:ring-indigo-500">
-                    
-                    <label class="block text-sm font-medium text-gray-300">Bio (Status)</label>
-                    <textarea id="bioInput" placeholder="What's on your mind? (Max 100 chars)" maxlength="100" class="w-full p-2 rounded-lg bg-gray-600 border border-gray-500 text-white focus:ring-indigo-500">${profile.bio || ''}</textarea>
-                    
-                    <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-300">Pronouns</label>
-                            <input id="pronounsInput" type="text" value="${profile.pronouns || ''}" placeholder="e.g. they/them" class="w-full p-2 rounded-lg bg-gray-600 border border-gray-500 text-white focus:ring-indigo-500">
-                        </div>
-                         <div>
-                            <label class="block text-sm font-medium text-gray-300">Status</label>
-                            <select id="statusInput" class="w-full p-2 rounded-lg bg-gray-600 border border-gray-500 text-white focus:ring-indigo-500">
-                                <option value="online" ${profile.status === 'online' ? 'selected' : ''}>Online</option>
-                                <option value="idle" ${profile.status === 'idle' ? 'selected' : ''}>Idle</option>
-                                <option value="dnd" ${profile.status === 'dnd' ? 'selected' : ''}>Do Not Disturb</option>
-                                <option value="offline" ${profile.status === 'offline' ? 'selected' : ''}>Offline</option>
-                            </select>
-                        </div>
-                    </div>
+        const unsubscribeRequests = onSnapshot(requestsQuery, (snapshot) => {
+            const requests = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            setFriendRequests(requests);
+        }, (error) => console.error("Error fetching friend requests:", error));
 
-                    <label class="block text-sm font-medium text-gray-300">PFP URL (PNG/JPG)</label>
-                    <input id="pfpUrlInput" type="text" value="${profile.pfpUrl || ''}" placeholder="Image URL for profile picture (e.g., ${defaultPfp})" class="w-full p-2 rounded-lg bg-gray-600 border border-gray-500 text-white focus:ring-indigo-500">
-                    
-                    <label class="block text-sm font-medium text-gray-300">Banner URL (PNG/JPG)</label>
-                    <input id="bannerUrlInput" type="text" value="${profile.bannerUrl || ''}" placeholder="Image URL for profile banner" class="w-full p-2 rounded-lg bg-gray-600 border border-gray-500 text-white focus:ring-indigo-500">
-                </div>
-            `;
+        // Listener for confirmed friends (Private Collection)
+        const friendsQuery = collection(db, 'artifacts', appId, 'users', currentUserId, 'friends');
+
+        const unsubscribeFriends = onSnapshot(friendsQuery, (snapshot) => {
+            const friends = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            setFriendsList(friends);
+        }, (error) => console.error("Error fetching friends list:", error));
+
+        return () => {
+            unsubscribeRequests();
+            unsubscribeFriends();
+        };
+
+    }, [isAuthReady, view, user?.uid]);
+
+    // 3. User ID Registration / Login Logic (Auth View)
+    const handleRegisterOrLogin = async (inputUsername) => {
+        if (!user) {
+            setMessage("System Error: Not authenticated. Cannot register ID.");
+            return;
         }
         
-        function renderDashboardView() {
-            const sidebar = document.getElementById('sidebar');
-            const mainContent = document.getElementById('main-content');
-            
-            // --- Render Sidebar ---
-            
-            const profile = appState.userProfile;
-            const statusColor = profile.status === 'online' ? 'bg-green-500' : profile.status === 'idle' ? 'bg-yellow-500' : profile.status === 'dnd' ? 'bg-red-500' : 'bg-gray-500';
-            const defaultPfp = 'https://placehold.co/40x40/4f46e5/ffffff?text=U';
+        const cleanUsername = inputUsername.toLowerCase().trim().replace(/[^a-z0-9_]/g, '');
 
+        if (cleanUsername.length < 3) {
+            setMessage("Username must be at least 3 characters long (a-z, 0-9, _).");
+            return;
+        }
 
-            sidebar.innerHTML = `
-                <div class="sidebar-header flex justify-between items-center">
-                    <h2 class="text-xl font-extrabold text-white">SQUIT!</h2>
-                    <button onclick="openModal('addFriend')" class="text-gray-400 hover:text-white transition p-1 rounded-full hover:bg-[#374151]">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path></svg>
+        setLoading(true);
+        setMessage('');
+
+        try {
+            // Check if username exists in the public userProfiles collection
+            const usernameQuery = query(
+                collection(db, 'artifacts', appId, 'public', 'data', 'userProfiles'),
+                where('username', '==', cleanUsername)
+            );
+            const querySnapshot = await firestoreRetry(() => getDocs(usernameQuery));
+
+            // Check if the current user already has a profile document linked to their UID
+            const currentUserProfileRef = doc(db, 'artifacts', appId, 'public', 'data', 'userProfiles', user.uid);
+            const currentUserProfileSnap = await firestoreRetry(() => getDoc(currentUserProfileRef));
+
+            if (currentUserProfileSnap.exists()) {
+                // Scenario 1: User is trying to re-register or change ID, but they already have one.
+                const existingUsername = currentUserProfileSnap.data().username;
+                if (existingUsername === cleanUsername) {
+                    setMessage(`Welcome back, @${cleanUsername}!`);
+                    setUsername(cleanUsername);
+                    setView('Main');
+                } else {
+                    setMessage(`Your account is already registered as @${existingUsername}. Please log out to use a different ID.`);
+                }
+            } else if (!querySnapshot.empty) {
+                // Scenario 2: Username is taken by another user's UID (preventing collision)
+                setMessage(`The ID @${cleanUsername} is already taken. Please try another one.`);
+            } else {
+                // Scenario 3: Username is available and the current user has no ID. REGISTER!
+                
+                // Use a transaction to ensure atomicity: check again and create if still available.
+                await runTransaction(db, async (transaction) => {
+                    const freshQuerySnap = await transaction.get(usernameQuery);
+                    
+                    if (!freshQuerySnap.empty) {
+                         throw new Error("Username was just taken. Please try again.");
+                    }
+
+                    // 1. Create the new user profile in the public mapping (UID -> @username)
+                    transaction.set(currentUserProfileRef, {
+                        uid: user.uid,
+                        username: cleanUsername,
+                        createdAt: serverTimestamp(),
+                    });
+                });
+                
+                setMessage(`Success! Your new ID @${cleanUsername} has been created.`);
+                setUsername(cleanUsername);
+                setView('Main');
+            }
+        } catch (error) {
+            console.error("Registration/Login error:", error);
+            setMessage(`Failed to process: ${error.message || 'Server error'}.`);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // 4. Friend Request Logic
+    const sendFriendRequest = async (targetUsername) => {
+        if (!username || !user?.uid) return;
+        
+        const cleanTargetUsername = targetUsername.toLowerCase().trim().replace(/[^a-z0-9_]/g, '');
+        if (cleanTargetUsername === username) {
+            setMessage("You cannot send a friend request to yourself!");
+            return;
+        }
+
+        setLoading(true);
+        setMessage('');
+
+        try {
+            // 1. Find the target user's UID using the public username profile
+            const targetQuery = query(
+                collection(db, 'artifacts', appId, 'public', 'data', 'userProfiles'),
+                where('username', '==', cleanTargetUsername)
+            );
+            const targetSnapshot = await firestoreRetry(() => getDocs(targetQuery));
+
+            if (targetSnapshot.empty) {
+                setMessage(`User @${cleanTargetUsername} not found.`);
+                return;
+            }
+
+            const targetUserDoc = targetSnapshot.docs[0];
+            const targetUid = targetUserDoc.data().uid;
+
+            // 2. Check if already friends
+            const friendRef = doc(db, 'artifacts', appId, 'users', user.uid, 'friends', targetUid);
+            const friendSnap = await firestoreRetry(() => getDoc(friendRef));
+            if (friendSnap.exists()) {
+                setMessage(`You are already friends with @${cleanTargetUsername}.`);
+                return;
+            }
+
+            // 3. Send the request (add a document to the target user's private friendRequests collection)
+            const requestRef = doc(db, 'artifacts', appId, 'users', targetUid, 'friendRequests', user.uid);
+            await firestoreRetry(() => setDoc(requestRef, {
+                senderUid: user.uid,
+                senderUsername: username,
+                status: 'pending',
+                sentAt: serverTimestamp(),
+            }));
+            
+            setMessage(`Friend request sent to @${cleanTargetUsername}!`);
+
+        } catch (error) {
+            console.error("Error sending friend request:", error);
+            setMessage(`Failed to send request: ${error.message}`);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleFriendRequest = async (requestId, action) => {
+        if (!user?.uid) return;
+
+        const senderUid = requestId;
+        const targetUid = user.uid; // Current user
+
+        setLoading(true);
+        setMessage('');
+
+        try {
+            const requestRef = doc(db, 'artifacts', appId, 'users', targetUid, 'friendRequests', senderUid);
+            const requestSnap = await firestoreRetry(() => getDoc(requestRef));
+
+            if (!requestSnap.exists()) {
+                setMessage("Request not found or already processed.");
+                return;
+            }
+
+            const senderUsername = requestSnap.data().senderUsername;
+            
+            if (action === 'accept') {
+                // 1. Add sender to current user's friends list
+                const currentUserFriendRef = doc(db, 'artifacts', appId, 'users', targetUid, 'friends', senderUid);
+                await firestoreRetry(() => setDoc(currentUserFriendRef, {
+                    friendUid: senderUid,
+                    friendUsername: senderUsername,
+                    addedAt: serverTimestamp(),
+                }));
+
+                // 2. Add current user to sender's friends list (mutual)
+                const senderProfileRef = doc(db, 'artifacts', appId, 'public', 'data', 'userProfiles', targetUid);
+                const senderProfileSnap = await firestoreRetry(() => getDoc(senderProfileRef));
+                const targetUsername = senderProfileSnap.data()?.username || 'Unknown';
+                
+                const senderFriendRef = doc(db, 'artifacts', appId, 'users', senderUid, 'friends', targetUid);
+                await firestoreRetry(() => setDoc(senderFriendRef, {
+                    friendUid: targetUid,
+                    friendUsername: targetUsername,
+                    addedAt: serverTimestamp(),
+                }));
+
+                // 3. Remove the pending request
+                await firestoreRetry(() => deleteDoc(requestRef));
+                setMessage(`You are now friends with @${senderUsername}!`);
+
+            } else if (action === 'reject') {
+                // Just remove the pending request
+                await firestoreRetry(() => deleteDoc(requestRef));
+                setMessage(`Request from @${senderUsername} rejected.`);
+            }
+
+        } catch (error) {
+            console.error(`Error handling request (${action}):`, error);
+            setMessage(`Failed to ${action} request: ${error.message}`);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // 5. Logout Functionality
+    const handleLogout = async () => {
+        setLoading(true);
+        try {
+            await signOut(auth);
+            setUsername(null);
+            setView('Auth');
+            setMessage('You have been successfully logged out.');
+        } catch (error) {
+            console.error("Logout error:", error);
+            setMessage("Logout failed. Please try again.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // --- UI Components ---
+
+    const AuthView = () => {
+        const [inputUsername, setInputUsername] = useState('');
+        
+        // This component is shown if the user is not fully registered with an @user_id.
+        return (
+            <div className="flex flex-col space-y-4 p-6 bg-white shadow-xl rounded-xl w-full max-w-sm">
+                <h2 className="text-2xl font-extrabold text-indigo-700 text-center">
+                    {user ? 'Register Your @ID' : 'Welcome'}
+                </h2>
+                <p className="text-sm text-gray-500 text-center">
+                    {user ? 'Create a unique @user_id to start making friends.' : 'Please wait for authentication...'}
+                </p>
+
+                {user && (
+                    <>
+                        <div className="relative">
+                            <input
+                                type="text"
+                                placeholder="Choose your ID (e.g., cool_user123)"
+                                value={inputUsername}
+                                onChange={(e) => setInputUsername(e.target.value)}
+                                className="w-full pl-8 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-150"
+                                disabled={loading}
+                            />
+                            <span className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400 font-semibold">@</span>
+                        </div>
+                        
+                        <button
+                            onClick={() => handleRegisterOrLogin(inputUsername)}
+                            className={`w-full py-2 px-4 rounded-lg font-bold transition duration-300 ${
+                                loading
+                                    ? 'bg-indigo-400 cursor-not-allowed'
+                                    : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-md hover:shadow-lg'
+                            }`}
+                            disabled={loading || inputUsername.length < 3}
+                        >
+                            {loading ? 'Processing...' : 'Create or Log In with @ID'}
+                        </button>
+                    </>
+                )}
+            </div>
+        );
+    };
+
+    const MainView = () => {
+        const [searchId, setSearchId] = useState('');
+
+        const RequestItem = ({ request }) => (
+            <div className="flex items-center justify-between p-3 bg-indigo-50 rounded-lg shadow-sm">
+                <p className="font-semibold text-gray-700">Request from <span className="text-indigo-600">@{request.senderUsername}</span></p>
+                <div className="flex space-x-2">
+                    <button
+                        onClick={() => handleFriendRequest(request.id, 'accept')}
+                        className="p-2 text-white bg-green-500 hover:bg-green-600 rounded-full text-xs shadow transition"
+                        disabled={loading}
+                        title="Accept"
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
+                    </button>
+                    <button
+                        onClick={() => handleFriendRequest(request.id, 'reject')}
+                        className="p-2 text-white bg-red-500 hover:bg-red-600 rounded-full text-xs shadow transition"
+                        disabled={loading}
+                        title="Reject"
+                    >
+                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                     </button>
                 </div>
+            </div>
+        );
 
-                <div class="flex-grow overflow-y-auto p-3 space-y-4">
-                    
-                    <!-- Pending Requests -->
-                    <div class="space-y-2">
-                        <p class="sidebar-section-header text-xs font-bold uppercase tracking-wider mb-2">Pending Requests (${appState.pendingRequests.length})</p>
-                        ${appState.pendingRequests.length === 0 ? `<p class="text-xs text-gray-400 p-2">No pending requests.</p>` : appState.pendingRequests.map(req => `
-                            <div class="flex items-center justify-between p-2 rounded-lg hover:bg-gray-700 transition">
-                                <div class="text-sm text-gray-300">${req.displayName}</div>
-                                <div class="space-x-2">
-                                    <button onclick="acceptFriendRequest('${req.uid}')" class="text-green-400 hover:text-green-300">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-                                    </button>
-                                    <button onclick="rejectFriendRequest('${req.uid}')" class="text-red-400 hover:text-red-300">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                                    </button>
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
+        const FriendItem = ({ friend }) => (
+             <div className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg shadow-sm">
+                <p className="font-bold text-gray-700">@{friend.friendUsername}</p>
+                <span className="text-xs text-green-500">Friend since {new Date(friend.addedAt?.toDate()).toLocaleDateString()}</span>
+            </div>
+        );
 
-                    <!-- Friends List -->
-                    <div class="space-y-2">
-                        <p class="sidebar-section-header text-xs font-bold uppercase tracking-wider mb-2">My Friends (${appState.friends.length})</p>
-                        ${appState.friends.length === 0 ? `<p class="text-xs text-gray-400 p-2">Add friends to chat!</p>` : appState.friends.map(friend => `
-                            <div onclick="setActiveChat('${friend.uid}')" 
-                                class="flex items-center p-2 rounded-lg cursor-pointer transition 
-                                ${appState.activeChatId === friend.uid ? 'bg-indigo-700/50' : 'hover:bg-gray-700'}">
-                                
-                                <div class="relative">
-                                    <img src="${friend.pfpUrl || defaultPfp}" alt="${friend.displayName}" class="w-10 h-10 rounded-full object-cover" onerror="this.onerror=null;this.src='${defaultPfp}';">
-                                    <span class="absolute right-0 bottom-0 w-3 h-3 ${friend.status === 'online' ? 'bg-green-500' : 'bg-gray-500'} rounded-full border-2 border-[#1f2937]"></span>
-                                </div>
-                                <div class="ml-3">
-                                    <p class="text-sm font-semibold text-white truncate">${friend.displayName}</p>
-                                    <p class="text-xs text-gray-400 truncate">${friend.bio || friend.status}</p>
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
-
+        return (
+            <div className="flex flex-col space-y-6 p-6 bg-white shadow-2xl rounded-xl w-full max-w-lg">
+                <div className="flex justify-between items-center pb-4 border-b">
+                    <h2 className="text-3xl font-extrabold text-indigo-700">
+                        Hello, <span className="text-indigo-500">@{username}</span>
+                    </h2>
+                    <button
+                        onClick={handleLogout}
+                        className="py-1 px-3 bg-red-500 hover:bg-red-600 text-white text-sm font-semibold rounded-full shadow transition duration-300"
+                        disabled={loading}
+                    >
+                        Logout
+                    </button>
                 </div>
                 
-                <!-- Profile Card Footer -->
-                <div onclick="openModal('editProfile')" class="profile-card p-3 bg-gray-900 border-t border-gray-700 flex items-center transition duration-200">
-                    <div class="relative">
-                        <img src="${profile.pfpUrl || defaultPfp}" alt="PFP" class="w-10 h-10 rounded-full object-cover" onerror="this.onerror=null;this.src='${defaultPfp}';">
-                        <span class="absolute right-0 bottom-0 w-3 h-3 ${statusColor} rounded-full border-2 border-gray-900"></span>
-                    </div>
-                    <div class="ml-3 overflow-hidden flex-grow">
-                        <p class="text-sm font-bold text-white truncate">${profile.displayName}</p>
-                        <p class="text-xs text-gray-400 truncate">${profile.email.split('@')[0]}</p>
-                    </div>
-                    <!-- Sign Out Button (Icon only) -->
-                    <button onclick="signOut(event)" class="text-gray-400 hover:text-white transition p-2 rounded-full hover:bg-[#374151]">
-                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3v-4a3 3 0 013-3h4a3 3 0 013 3v1" />
-                        </svg>
-                    </button>
-                </div>
-            `;
-            
-            // --- Render Main Content ---
-            if (appState.activeChatId) {
-                renderChatView(mainContent, appState.activeChatId);
-            } else {
-                // Initial message when no chat is selected
-                mainContent.innerHTML = `
-                    <div class="flex flex-col justify-center items-center h-full text-gray-500 p-8">
-                        <svg class="w-20 h-20 mb-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.549A9.957 9.957 0 0012 22c4.97 0 9-3.582 9-8s-4.03-8-9-8-9 3.582-9 8h.082a8.07 8.07 0 00.322 1.353v.065"></path></svg>
-                        <h3 class="text-xl font-semibold mb-2 text-white">Select a Friend to Chat</h3>
-                        <p class="text-center">Click on any friend in the sidebar to open a conversation and start messaging.</p>
-                        <div class="mt-4 text-xs text-indigo-400">Your User ID: ${appState.userId}</div>
-                    </div>
-                `;
-            }
-        }
-
-        function renderChatView(container, friendUid) {
-            const friend = appState.friends.find(f => f.uid === friendUid) || {
-                uid: friendUid,
-                displayName: 'Unknown User',
-                status: 'offline',
-                pfpUrl: 'https://placehold.co/40x40/374151/ffffff?text=?',
-                bio: 'User data not found.'
-            };
-            
-            // Retrieve messages from the PERSISTENT local state cache
-            const messages = appState.chatMessages[friendUid] || [];
-            const myUid = appState.userId;
-            const defaultPfp = 'https://placehold.co/40x40/4f46e5/ffffff?text=U';
-
-
-            container.innerHTML = `
-                <!-- Chat Header -->
-                <div class="chat-header p-4 flex items-center bg-gray-800 border-b border-gray-700 shadow-md">
-                    <img src="${friend.pfpUrl || defaultPfp}" alt="${friend.displayName}" class="w-10 h-10 rounded-full object-cover" onerror="this.onerror=null;this.src='${defaultPfp}';">
-                    <div class="ml-3">
-                        <p class="text-lg font-bold text-white">${friend.displayName}</p>
-                        <p class="text-xs text-gray-400 truncate">${friend.bio || friend.status}</p>
-                    </div>
-                </div>
-
-                <!-- Messages Container -->
-                <div id="messagesContainer" class="message-container flex-grow overflow-y-auto">
-                    ${messages.length === 0 ? `<p class="text-center text-gray-500 pt-10">Start a new conversation!</p>` : messages.map(msg => `
-                        <div class="flex ${msg.sender === myUid ? 'justify-end' : 'justify-start'}">
-                            <div class="message-bubble ${msg.sender === myUid ? 'self-message' : 'friend-message'}">
-                                ${msg.text}
-                                <span class="block text-xs text-white/50 mt-1 text-right">
-                                    ${new Date(msg.timestamp?.toDate ? msg.timestamp.toDate() : msg.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                                </span>
-                            </div>
+                {/* Friend Request Section */}
+                <div className="space-y-3">
+                    <h3 className="text-xl font-bold text-gray-800 flex items-center">
+                        Friend Requests 
+                        <span className={`ml-2 text-sm font-extrabold px-2 py-0.5 rounded-full ${friendRequests.length > 0 ? 'bg-red-500 text-white' : 'bg-gray-200 text-gray-500'}`}>
+                            {friendRequests.length}
+                        </span>
+                    </h3>
+                    {friendRequests.length > 0 ? (
+                        <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
+                            {friendRequests.map(req => (
+                                <RequestItem key={req.id} request={req} />
+                            ))}
                         </div>
-                    `).join('')}
+                    ) : (
+                        <p className="text-gray-500 text-sm italic">No pending friend requests.</p>
+                    )}
                 </div>
 
-                <!-- Chat Input/Footer - WIRED UP -->
-                <div class="chat-footer p-4 flex items-center bg-gray-700/50">
-                    <input type="text" id="chatInput" placeholder="Message to @${friend.displayName}..." 
-                        class="flex-grow p-3 rounded-l-lg bg-gray-800 text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition duration-150"
-                        onkeypress="if(event.key === 'Enter') sendMessage(event)">
-                    <button onclick="sendMessage(event)" class="btn-primary-small flex items-center space-x-2 rounded-r-lg shadow-lg">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
-                        </svg>
-                        <span>Send</span>
-                    </button>
-                </div>
-            `;
-            // Scroll to bottom immediately after rendering
-            setTimeout(() => {
-                const messagesContainer = document.getElementById('messagesContainer');
-                if (messagesContainer) {
-                    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-                }
-            }, 50);
-        }
-
-        // --- Modals ---
-
-        window.openModal = function(type) {
-            closeModal(); // Close any existing modal first
-            if (type === 'editProfile') appState.isProfileModalOpen = true;
-            if (type === 'addFriend') appState.isAddFriendModalOpen = true;
-            renderModal(type);
-        }
-
-        window.closeModal = function() {
-            appState.isProfileModalOpen = false;
-            appState.isAddFriendModalOpen = false;
-            renderApp(); // Rerender to remove modal
-        }
-        
-        function renderModal(type) {
-            const container = document.getElementById('modal-container');
-            if (!container) return;
-            
-            let title = '';
-            let content = '';
-
-            if (type === 'editProfile') {
-                title = 'Edit Your Profile';
-                content = `
-                    ${renderProfileForm(appState.userProfile)}
-                    <button onclick="saveProfile(false)" class="btn-primary w-full mt-4">Save Changes</button>
-                `;
-            } else if (type === 'addFriend') {
-                title = 'Add Friend';
-                content = `
-                    <p class="text-gray-400 mb-4">Enter a friend's User ID (the long string of letters and numbers).</p>
-                    <input id="friendIdInput" type="text" placeholder="Friend's User ID" class="w-full p-3 rounded-lg bg-gray-800 border border-gray-600 text-white focus:ring-indigo-500">
-                    <button onclick="sendFriendRequest()" class="btn-primary w-full mt-4">Send Friend Request</button>
-                    
-                    <p class="text-xs text-gray-500 mt-6 pt-3 border-t border-gray-700">Your User ID (Share this with friends):</p>
-                    <div class="flex items-center space-x-2 bg-gray-900 p-2 rounded-lg">
-                        <span id="myUserIdDisplay" class="text-sm font-mono flex-grow select-all break-all">${appState.userId}</span>
-                        <button onclick="copyToClipboard('myUserIdDisplay')" class="text-indigo-400 hover:text-indigo-300 transition" title="Copy ID">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5H6M10 7H8M18 6h-4a2 2 0 00-2 2v2M18 6V4M14 6V4"></path></svg>
+                {/* Send Request Section */}
+                <div className="space-y-2 pt-4 border-t">
+                    <h3 className="text-xl font-bold text-gray-800">Send Friend Request</h3>
+                    <div className="flex space-x-2">
+                         <div className="relative flex-grow">
+                            <input
+                                type="text"
+                                placeholder="Enter @user_id to add"
+                                value={searchId}
+                                onChange={(e) => setSearchId(e.target.value)}
+                                className="w-full pl-8 pr-4 py-2 border border-indigo-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-150"
+                                disabled={loading}
+                            />
+                            <span className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400 font-semibold">@</span>
+                        </div>
+                        <button
+                            onClick={() => sendFriendRequest(searchId)}
+                            className={`py-2 px-4 rounded-lg font-bold transition duration-300 ${
+                                loading
+                                    ? 'bg-gray-400 cursor-not-allowed'
+                                    : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-md hover:shadow-lg'
+                            }`}
+                            disabled={loading || searchId.length < 3}
+                        >
+                            Send
                         </button>
                     </div>
-                `;
-            } else {
-                return; // Nothing to render
-            }
-
-            container.innerHTML = `
-                <div class="modal-overlay" onclick="closeModal()">
-                    <div class="modal-content" onclick="event.stopPropagation()">
-                        <div class="flex justify-between items-start border-b border-gray-700 pb-3 mb-4">
-                            <h3 class="text-xl font-bold text-white">${title}</h3>
-                            <button onclick="closeModal()" class="text-gray-400 hover:text-white transition">
-                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                            </button>
-                        </div>
-                        ${content}
-                    </div>
                 </div>
-            `;
-        }
 
-        // --- Action Handlers (Firebase integration) ---
+                {/* Friends List */}
+                <div className="space-y-3 pt-4 border-t">
+                    <h3 className="text-xl font-bold text-gray-800">My Friends ({friendsList.length})</h3>
+                    {friendsList.length > 0 ? (
+                        <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
+                            {friendsList.map(friend => (
+                                <FriendItem key={friend.id} friend={friend} />
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-gray-500 text-sm italic">You don't have any friends yet. Send a request!</p>
+                    )}
+                </div>
+            </div>
+        );
+    };
 
-        /** Signs in using Google OAuth. */
-        window.signInWithGoogle = async function() {
-            const provider = new GoogleAuthProvider();
-            try {
-                await signInWithPopup(auth, provider);
-                // The onAuthStateChanged listener will handle the rest
-            } catch (error) {
-                console.error("Google Sign-In Error:", error);
-                showCustomAlert("Google Sign-in failed. Please check your Firebase setup.", 'error');
-            }
-        }
-        
-        /** Fallback anonymous sign in. */
-        window.signInAnonymouslyManual = async function() {
-            try {
-                await signInAnonymously(auth);
-                // The onAuthStateChanged listener will handle the rest
-            } catch (error) {
-                console.error("Anonymous Sign-In Error:", error);
-                showCustomAlert("Failed to sign in anonymously.", 'error');
-            }
-        }
+    // --- Main Render ---
 
+    if (loading && !isAuthReady) {
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-gray-50">
+                <div className="text-xl font-semibold text-indigo-600">Loading Application...</div>
+            </div>
+        );
+    }
 
-        /** Sends a message by saving it to Firestore and updating local state. */
-        window.sendMessage = async function(event) {
-            // Check if triggered by Enter keypress
-            if (event.type === 'keypress' && event.key !== 'Enter') return;
-            if (event.key === 'Enter' || event.type === 'click') event.preventDefault(); 
+    return (
+        <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 font-sans">
+            <style>
+                {`
+                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+                    .font-sans { font-family: 'Inter', sans-serif; }
+                `}
+            </style>
             
-            const input = document.getElementById('chatInput');
-            const messageText = input.value.trim();
-            const receiverUid = appState.activeChatId;
+            {/* Main Application Area */}
+            {view === 'Auth' ? <AuthView /> : <MainView />}
 
-            if (messageText === "" || !receiverUid) return;
-
-            const messageData = {
-                sender: appState.userId,
-                text: messageText,
-                timestamp: serverTimestamp() // Firestore timestamp
-            };
+            {/* Global Message Box */}
+            {message && (
+                <div className="mt-4 p-3 bg-yellow-100 border border-yellow-400 text-yellow-800 rounded-lg shadow-md max-w-lg w-full text-center">
+                    {message}
+                </div>
+            )}
             
-            try {
-                const chatCollectionRef = getChatDocRef(appState.userId, receiverUid);
-                // Add the document to the chat collection
-                await addDoc(chatCollectionRef, messageData);
+            {/* User ID Display for Debugging/Reference */}
+            {user && (
+                <div className="mt-4 p-2 bg-gray-800 text-white text-xs rounded-lg max-w-lg w-full text-center break-words">
+                    Internal UID: <span className="font-mono text-gray-300">{user.uid}</span>
+                </div>
+            )}
+        </div>
+    );
+};
 
-                // Clear the input only after successful sending
-                input.value = "";
-                // The onSnapshot listener will handle the rendering of the new message
-            } catch (error) {
-                console.error("Error sending message:", error);
-                showCustomAlert("Failed to send message.", 'error');
-            }
-        }
-
-        let chatUnsubscribe = null;
-
-        /** Sets the active chat and attaches the Firestore listener for messages. */
-        window.setActiveChat = function(friendUid) {
-            // 1. Clean up previous listener if it exists
-            if (chatUnsubscribe) {
-                chatUnsubscribe();
-                chatUnsubscribe = null;
-            }
-            
-            // 2. Set the new active chat ID
-            appState.activeChatId = friendUid;
-            
-            // 3. Setup the new chat listener
-            if (friendUid) {
-                chatUnsubscribe = setupChatListener(friendUid);
-            }
-            
-            // 4. Render the new chat view (which will initially show old messages or loading state)
-            renderDashboardView(); 
-        }
-
-        /** Utility to copy text to clipboard */
-        window.copyToClipboard = function(elementId) {
-            const element = document.getElementById(elementId);
-            if (!element) return;
-            try {
-                // Use execCommand('copy') for better iframe compatibility
-                const range = document.createRange();
-                range.selectNode(element);
-                window.getSelection().removeAllRanges();
-                window.getSelection().addRange(range);
-                document.execCommand('copy');
-                window.getSelection().removeAllRanges();
-                showCustomAlert('User ID copied to clipboard!', 'success');
-            } catch (err) {
-                console.error('Failed to copy text: ', err);
-                showCustomAlert('Could not copy ID automatically.', 'error');
-            }
-        }
-        
-        /** Signs the user out of Firebase and resets the app state. */
-        window.signOut = async function(event) {
-            if (event) event.stopPropagation(); // Prevent profile card click event
-            try {
-                // Clean up chat listener before signing out
-                if (chatUnsubscribe) chatUnsubscribe();
-                await firebaseSignOut(auth);
-                // The onAuthStateChanged listener will handle state reset
-            } catch (error) {
-                console.error("Sign Out Error:", error);
-                showCustomAlert("Failed to sign out.", 'error');
-            }
-        }
-
-        /** Saves or updates the user profile data to Firestore. */
-        window.saveProfile = async function(isInitialSetup) {
-            const displayName = document.getElementById('displayNameInput').value.trim();
-            const bio = document.getElementById('bioInput').value.trim();
-            const pronouns = document.getElementById('pronounsInput').value.trim();
-            const status = document.getElementById('statusInput').value;
-            const pfpUrl = document.getElementById('pfpUrlInput').value.trim();
-            const bannerUrl = document.getElementById('bannerUrlInput').value.trim();
-
-            if (!displayName || displayName.length < 3) {
-                return showCustomAlert("Display Name must be at least 3 characters.", 'error');
-            }
-            
-            // Determine email based on auth type
-            const userEmail = auth.currentUser?.isAnonymous ? 'Anonymous User' : auth.currentUser?.email || 'N/A';
-            
-            const profileData = {
-                uid: appState.userId,
-                email: userEmail, 
-                displayName: displayName,
-                bio: bio,
-                pronouns: pronouns,
-                status: status,
-                pfpUrl: pfpUrl || auth.currentUser?.photoURL || 'https://placehold.co/40x40/4f46e5/ffffff?text=U',
-                bannerUrl: bannerUrl || '',
-                lastUpdated: new Date().toISOString()
-            };
-
-            try {
-                // Use setDoc to create or overwrite the document
-                await setDoc(getUserDocRef(appState.userId), profileData, { merge: true });
-                showCustomAlert(isInitialSetup ? "Profile created successfully!" : "Profile updated successfully!", 'success');
-                appState.userProfile = profileData; // Update local state immediately
-                closeModal(); // Close modal if open
-                appState.view = 'dashboard';
-                renderApp();
-            } catch (error) {
-                console.error("Error saving profile:", error);
-                showCustomAlert("Failed to save profile. See console.", 'error');
-            }
-        }
-
-        /** Sends a friend request to a target user ID. */
-        window.sendFriendRequest = async function() {
-            const friendIdInput = document.getElementById('friendIdInput');
-            const targetUid = friendIdInput.value.trim();
-
-            if (!targetUid || targetUid === appState.userId) {
-                return showCustomAlert("Please enter a valid, different User ID.", 'error');
-            }
-
-            // 1. Check if user already friends, pending, or sent
-            if (appState.friends.some(f => f.uid === targetUid)) {
-                return showCustomAlert("You are already friends with this user.", 'info');
-            }
-            if (appState.sentRequests.some(r => r.uid === targetUid)) {
-                return showCustomAlert("Friend request already sent.", 'info');
-            }
-            if (appState.pendingRequests.some(r => r.uid === targetUid)) {
-                return showCustomAlert("This user has already sent you a request. Check Pending Requests.", 'info');
-            }
-
-            try {
-                const targetUserDoc = await getDoc(getUserDocRef(targetUid));
-
-                if (!targetUserDoc.exists()) {
-                    return showCustomAlert("User ID not found.", 'error');
-                }
-
-                // 2. Add current user's UID to the target's 'pending' array
-                await updateDoc(getUserDocRef(targetUid), {
-                    pending: arrayUnion(appState.userId)
-                });
-
-                // 3. Add target user's UID to the current user's 'sent' array (for tracking)
-                await updateDoc(getUserDocRef(appState.userId), {
-                    sent: arrayUnion(targetUid)
-                });
-                
-                friendIdInput.value = ''; // Clear input
-                showCustomAlert(`Friend request sent to ${targetUserDoc.data().displayName}!`, 'success');
-                // The onSnapshot listener will update appState.sentRequests automatically
-            } catch (error) {
-                console.error("Error sending friend request:", error);
-                showCustomAlert("Failed to send friend request.", 'error');
-            }
-        }
-
-        /** Accepts a pending friend request. */
-        window.acceptFriendRequest = async function(requesterUid) {
-            try {
-                const batch = writeBatch(db);
-                const myRef = getUserDocRef(appState.userId);
-                const requesterRef = getUserDocRef(requesterUid);
-
-                // 1. Remove from my 'pending' array, add to my 'friends' array
-                batch.update(myRef, {
-                    pending: arrayRemove(requesterUid),
-                    friends: arrayUnion(requesterUid)
-                });
-
-                // 2. Remove from requester's 'sent' array, add to their 'friends' array
-                batch.update(requesterRef, {
-                    sent: arrayRemove(appState.userId),
-                    friends: arrayUnion(appState.userId)
-                });
-
-                await batch.commit();
-                showCustomAlert("Friend request accepted!", 'success');
-                // Listeners will handle state update
-            } catch (error) {
-                console.error("Error accepting request:", error);
-                showCustomAlert("Failed to accept friend request.", 'error');
-            }
-        }
-
-        /** Rejects a pending friend request. */
-        window.rejectFriendRequest = async function(requesterUid) {
-            try {
-                const batch = writeBatch(db);
-                const myRef = getUserDocRef(appState.userId);
-                const requesterRef = getUserDocRef(requesterUid);
-
-                // 1. Remove from my 'pending' array
-                batch.update(myRef, {
-                    pending: arrayRemove(requesterUid)
-                });
-
-                // 2. Remove from requester's 'sent' array
-                batch.update(requesterRef, {
-                    sent: arrayRemove(appState.userId)
-                });
-
-                await batch.commit();
-                showCustomAlert("Friend request rejected.", 'info');
-                // Listeners will handle state update
-            } catch (error) {
-                console.error("Error rejecting request:", error);
-                showCustomAlert("Failed to reject friend request.", 'error');
-            }
-        }
-        
-        // --- Listeners & Data Fetching ---
-
-        /** Sets up real-time listener for messages between the two users. */
-        function setupChatListener(friendUid) {
-            if (!db || !appState.userId || !friendUid) return;
-
-            const messagesRef = getChatDocRef(appState.userId, friendUid);
-            
-            // Query for messages, sorted by timestamp ascending
-            const q = query(messagesRef, orderBy('timestamp'));
-
-            return onSnapshot(q, (snapshot) => {
-                const messages = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                }));
-                
-                // Update the local state cache for the active chat
-                appState.chatMessages[friendUid] = messages;
-                
-                // Re-render the chat view if we are actively viewing this chat
-                if (appState.activeChatId === friendUid) {
-                    renderDashboardView();
-                }
-            }, (error) => {
-                console.error("Error listening to chat messages:", error);
-                showCustomAlert("Failed to load chat messages.", 'error');
-            });
-        }
-
-
-        /** Sets up real-time listener for all public user profiles (excluding current user). */
-        function setupAllUsersListener() {
-            if (!db) return;
-            // The query is simple here, mainly for demonstration of the listener setup
-            const q = query(collection(db, PUBLIC_COLLECTION)); 
-            
-            return onSnapshot(q, (snapshot) => {
-                // Not heavily used yet, but keeps data connections open
-            }, (error) => {
-                console.error("Error fetching all users:", error);
-            });
-        }
-        
-        /** Sets up real-time listener for the current user's profile and social data. */
-        function setupUserProfileListener(uid) {
-            if (!db || !uid) return;
-
-            return onSnapshot(getUserDocRef(uid), async (docSnapshot) => {
-                if (docSnapshot.exists()) {
-                    const data = docSnapshot.data();
-                    appState.userProfile = data;
-                    
-                    // Update social arrays
-                    const friendUids = data.friends || [];
-                    const pendingUids = data.pending || [];
-                    const sentUids = data.sent || [];
-                    
-                    // Fetch profile data for UIDs in the arrays
-                    appState.friends = await fetchProfilesByUids(friendUids);
-                    appState.pendingRequests = await fetchProfilesByUids(pendingUids);
-                    appState.sentRequests = await fetchProfilesByUids(sentUids);
-
-                    // If we were on the auth view, transition to dashboard
-                    if (appState.view === 'auth' || appState.view === 'loading') {
-                        appState.view = 'dashboard';
-                    }
-                    
-                    // If the active chat is no longer a friend, clear it.
-                    if (appState.activeChatId && !appState.friends.some(f => f.uid === appState.activeChatId)) {
-                         setActiveChat(null); // Will clean up listener and clear chat view
-                    }
-                    
-                } else {
-                    // User document doesn't exist, prompt for profile setup
-                    appState.userProfile = null;
-                    appState.view = 'auth';
-                }
-                renderApp();
-            }, (error) => {
-                console.error("Error listening to user profile:", error);
-                showCustomAlert("Failed to load profile data in real-time.", 'error');
-            });
-        }
-
-        /** Helper to fetch multiple profiles efficiently (not real-time). */
-        async function fetchProfilesByUids(uids) {
-            if (uids.length === 0) return [];
-
-            const profiles = [];
-            for (const uid of uids) {
-                try {
-                    const docSnap = await getDoc(getUserDocRef(uid));
-                    if (docSnap.exists()) {
-                        profiles.push(docSnap.data());
-                    }
-                } catch (e) {
-                    console.error("Error fetching profile for UID:", uid, e);
-                }
-            }
-            return profiles;
-        }
-
-        // --- Initialization ---
-        let profileUnsubscribe = null;
-        let usersUnsubscribe = null;
-
-        /** Handles Firebase initialization and authentication status changes. */
-        async function initializeAppAndAuth() {
-            if (!app) {
-                try {
-                    app = initializeApp(firebaseConfig);
-                    db = getFirestore(app);
-                    auth = getAuth(app);
-                } catch (e) {
-                    console.error("Firebase Initialization Failed:", e);
-                    // Critical Error UI update
-                    document.getElementById('loadingOverlay').innerHTML = `<h3 class="text-xl text-red-400">Error: Failed to initialize Firebase. Check console for config error.</h3>`;
-                    return;
-                }
-            }
-
-            // Centralized listener for authentication state
-            onAuthStateChanged(auth, async (user) => {
-                // Clean up previous listeners
-                if (profileUnsubscribe) profileUnsubscribe();
-                if (usersUnsubscribe) usersUnsubscribe();
-                if (chatUnsubscribe) chatUnsubscribe(); // Clean up chat listener
-                
-                // Clear state on any auth change to prevent stale data
-                appState.userId = null;
-                appState.userProfile = null;
-                appState.friends = [];
-                appState.pendingRequests = [];
-                appState.sentRequests = [];
-                appState.activeChatId = null;
-                appState.chatMessages = {}; 
-
-                if (user) {
-                    appState.userId = user.uid;
-                    
-                    // If the user signed in via Google, their basic profile data (display name, email, pfp)
-                    // will be pre-filled for the profile setup screen if they don't have a Firestore profile yet.
-                    
-                    // 1. Setup listeners for the authenticated user's profile and social data
-                    profileUnsubscribe = setupUserProfileListener(user.uid);
-                    usersUnsubscribe = setupAllUsersListener();
-                    appState.isAuthReady = true;
-                    // The listeners will trigger the first render
-                    
-                } else {
-                    // User is signed out (or initially anonymous/platform token user)
-                    
-                    // 2. Platform Token Handling (Automatically sign-in if token is provided)
-                    const initialToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-                    
-                    if (initialToken) {
-                        try {
-                            await signInWithCustomToken(auth, initialToken);
-                            // This will trigger the 'user' block above
-                        } catch (error) {
-                            console.warn("Custom token sign-in failed. Displaying manual sign-in options.", error.message);
-                            appState.view = 'auth';
-                            appState.isAuthReady = true;
-                            renderApp();
-                        }
-                    } else {
-                        // 3. Show manual login options (Google/Anonymous)
-                        appState.view = 'auth';
-                        appState.isAuthReady = true;
-                        renderApp();
-                    }
-                }
-            });
-        }
-
-        initializeAppAndAuth();
-    </script>
-</body>
-</html>
+export default App;
