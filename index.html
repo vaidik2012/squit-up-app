@@ -390,8 +390,12 @@
         
         /**
          * Saves the new user profile to Firestore and completes registration.
+         * NOTE: This is called by the form submit handler now.
          */
-        window.handleProfileRegistration = async () => {
+        window.handleProfileRegistration = async (event) => {
+            // This is the critical change: prevent the default form submission/refresh
+            if (event) event.preventDefault(); 
+            
             router.clearError();
             const inputElement = document.getElementById('user-id-input');
             const newUserId = inputElement.value.trim();
@@ -401,6 +405,7 @@
                 return;
             }
             if (!appState.isUserIdUnique) {
+                // If the button was clicked but the check is still pending or failed
                 showCustomAlert("Please choose a unique User ID. That one is already taken or still being checked.");
                 return;
             }
@@ -468,18 +473,8 @@
             }
         };
 
-        // FIX: Updated from oninput to onkeyup and added Enter key prevention.
+        // Corrected input handler: Removed Enter key logic (now handled by form submit)
         window.handleUserIdInput = (event) => {
-             // 1. Prevent form submission (refresh/click) on Enter key press
-            if (event.key === 'Enter' || event.keyCode === 13) {
-                event.preventDefault(); 
-                // Optionally trigger registration if the button is enabled
-                if (!document.getElementById('register-button').disabled) {
-                    handleProfileRegistration();
-                }
-                return;
-            }
-
             const input = event.target.value.trim();
             // Basic sanitization/format enforcement
             let cleanId = input.toLowerCase().replace(/[^a-z0-9_@]/g, '');
@@ -543,31 +538,35 @@
                     <h1 class="app-title">SQUIT UP!</h1>
                     <h2 class="text-2xl font-semibold mb-6 text-white text-center">you can custmoize your id here LETS DO IT !</h2>
 
-                    <div class="mb-6">
-                        <label for="user-id-input" class="block text-sm font-medium text-gray-400 mb-2">Your Profile Name</label>
-                        <input 
-                            type="text" 
-                            id="user-id-input" 
-                            class="input-field w-full px-4 py-3 rounded-lg focus:ring-2 focus:ring-indigo-500 transition duration-150 ${errorClass}" 
-                            placeholder="@unique_id" 
-                            value="${appState.pendingUserId}"
-                            onkeyup="handleUserIdInput(event)"
-                            maxlength="21"
-                        />
-                        ${appState.errorMessage ? `<p class="text-red-400 text-sm mt-2">${appState.errorMessage}</p>` : ''}
-                    </div>
+                    <!-- WRAPPING INPUT AND BUTTON IN A FORM WITH ONSUBMIT PREVENTDEFAULT -->
+                    <form onsubmit="handleProfileRegistration(event)">
+                        <div class="mb-6">
+                            <label for="user-id-input" class="block text-sm font-medium text-gray-400 mb-2">Your Profile Name</label>
+                            <input 
+                                type="text" 
+                                id="user-id-input" 
+                                class="input-field w-full px-4 py-3 rounded-lg focus:ring-2 focus:ring-indigo-500 transition duration-150 ${errorClass}" 
+                                placeholder="@unique_id" 
+                                value="${appState.pendingUserId}"
+                                onkeyup="handleUserIdInput(event)"
+                                maxlength="21"
+                                required
+                            />
+                            ${appState.errorMessage ? `<p class="text-red-400 text-sm mt-2">${appState.errorMessage}</p>` : ''}
+                        </div>
 
-                    <!-- Registration Button (Enabled only if unique and valid) -->
-                    <button 
-                        onclick="handleProfileRegistration()" 
-                        id="register-button"
-                        class="btn-register w-full py-3 font-bold rounded-lg transition duration-200 
-                        ${isButtonEnabled ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-700'} 
-                        ${isButtonEnabled ? '' : 'disabled'}"
-                        ${isButtonEnabled ? '' : 'disabled'}
-                    >
-                        Complete Registration
-                    </button>
+                        <!-- Registration Button (type="submit" for form binding) -->
+                        <button 
+                            type="submit"
+                            id="register-button"
+                            class="btn-register w-full py-3 font-bold rounded-lg transition duration-200 
+                            ${isButtonEnabled ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-700'} 
+                            ${isButtonEnabled ? '' : 'disabled'}"
+                            ${isButtonEnabled ? '' : 'disabled'}
+                        >
+                            Complete Registration
+                        </button>
+                    </form>
 
                     <p class="text-xs text-gray-500 mt-4 text-center">
                         Your @User ID is how friends will find you.
