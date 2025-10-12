@@ -1,4 +1,3 @@
-```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -38,13 +37,27 @@
             overflow: hidden;
         }
 
-        /* Auth Screen */
+        /* Auth Screen - First Appearance */
         #authScreen {
             display: flex;
             align-items: center;
             justify-content: center;
             height: 100vh;
             background: linear-gradient(135deg, var(--background-primary), var(--background-secondary));
+            position: relative;
+        }
+
+        #authScreen::before {
+            content: 'SQUIT UP! - Chatting and Chilling Lounge Friends';
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--text-normal);
+            text-shadow: var(--shadow-medium);
+            z-index: 1;
         }
 
         .auth-container {
@@ -55,13 +68,14 @@
             width: 90%;
             max-width: 400px;
             text-align: center;
+            z-index: 2;
         }
 
         .auth-title {
             font-size: 24px;
             margin-bottom: 20px;
             color: var(--text-normal);
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            text-shadow: var(--shadow-medium);
         }
 
         .auth-tabs {
@@ -87,6 +101,7 @@
         .auth-tab.active {
             background: var(--interactive-normal);
             color: white;
+            box-shadow: var(--shadow-light);
         }
 
         .auth-form {
@@ -112,7 +127,7 @@
         .auth-input:focus {
             outline: none;
             border-color: var(--interactive-normal);
-            box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+            box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2), var(--shadow-medium);
         }
 
         .auth-button {
@@ -136,6 +151,11 @@
             transform: translateY(-1px);
         }
 
+        .auth-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
         .google-btn {
             background: #4285f4;
             margin-top: 10px;
@@ -150,6 +170,14 @@
             font-size: 14px;
             margin-top: 10px;
             display: none;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+        }
+
+        .success-msg {
+            color: #57f287;
+            font-size: 14px;
+            margin-top: 10px;
+            display: none;
         }
 
         .user-info {
@@ -159,6 +187,7 @@
             border-radius: 4px;
             box-shadow: var(--shadow-light);
             text-align: left;
+            display: none;
         }
 
         .logout-btn {
@@ -170,11 +199,11 @@
             background: #c72c3b;
         }
 
-        /* Main Dashboard */
+        /* Main Dashboard - Discord-like */
         #mainApp {
             display: none;
             height: 100vh;
-            display: flex;
+            flex-direction: row;
         }
 
         /* Left Sidebar: Servers */
@@ -261,7 +290,7 @@
             text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
         }
 
-        /* Channel Sidebar - Expanded for Friends and Servers */
+        /* Channel Sidebar */
         .channels-sidebar {
             width: 240px;
             background-color: var(--background-secondary);
@@ -291,33 +320,34 @@
             box-shadow: var(--shadow-light);
         }
 
-        .channel-list, .friends-list, .servers-list {
+        .channel-list, .friends-list {
             list-style: none;
         }
 
-        .channel-item, .friend-item, .server-item {
+        .channel-item, .friend-item {
             padding: 6px 16px;
             cursor: pointer;
             display: flex;
             align-items: center;
+            justify-content: space-between;
             transition: all 0.2s;
             border-radius: 4px;
             margin: 2px 0;
             box-shadow: var(--shadow-light);
         }
 
-        .channel-item:hover, .friend-item:hover, .server-item:hover {
+        .channel-item:hover, .friend-item:hover {
             background-color: var(--background-modifier-hover);
             box-shadow: var(--shadow-medium);
             transform: translateX(2px);
         }
 
-        .channel-item.active, .friend-item.active, .server-item.active {
+        .channel-item.active, .friend-item.active {
             background-color: var(--background-tertiary);
             box-shadow: var(--shadow-heavy);
         }
 
-        .channel-icon, .friend-icon, .server-icon-small {
+        .channel-icon, .friend-icon {
             width: 16px;
             height: 16px;
             margin-right: 12px;
@@ -325,10 +355,26 @@
             text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
         }
 
-        .channel-name, .friend-name, .server-name {
+        .channel-name, .friend-name {
+            flex: 1;
             font-size: 16px;
             color: var(--text-normal);
             text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+        }
+
+        .friend-action {
+            background: var(--interactive-normal);
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            box-shadow: var(--shadow-light);
+        }
+
+        .friend-action:hover {
+            background: var(--interactive-hover);
         }
 
         /* Profile Section */
@@ -461,6 +507,7 @@
             border-top: 1px solid var(--border);
             display: flex;
             align-items: flex-end;
+            position: relative;
             box-shadow: var(--shadow-light);
         }
 
@@ -479,6 +526,21 @@
             box-shadow: var(--shadow-medium);
         }
 
+        #emojiBtn {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            color: var(--text-muted);
+            margin-right: 12px;
+            transition: color 0.2s;
+            box-shadow: var(--shadow-light);
+        }
+
+        #emojiBtn:hover {
+            color: var(--text-normal);
+        }
+
         #emojiPicker {
             position: absolute;
             bottom: 60px;
@@ -493,15 +555,18 @@
             display: none;
             box-shadow: var(--shadow-heavy);
             z-index: 100;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(30px, 1fr));
+            gap: 5px;
         }
 
         .emoji {
             font-size: 20px;
             cursor: pointer;
-            margin: 2px;
             padding: 5px;
             border-radius: 4px;
             transition: background 0.2s;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
         }
 
         .emoji:hover {
@@ -531,7 +596,7 @@
             cursor: not-allowed;
         }
 
-        /* Right Sidebar: Members / Friends / Servers */
+        /* Right Sidebar: Members */
         .members-sidebar {
             width: 240px;
             background-color: var(--background-secondary);
@@ -558,64 +623,4 @@
 
         .member-item {
             padding: 8px 16px;
-            display: flex;
-            align-items: center;
-            cursor: pointer;
-            transition: all 0.2s;
-            box-shadow: var(--shadow-light);
-        }
-
-        .member-item:hover {
-            background-color: var(--background-modifier-hover);
-            box-shadow: var(--shadow-medium);
-        }
-
-        .member-avatar {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            margin-right: 12px;
-            background-color: var(--background-tertiary);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 14px;
-            color: var(--text-muted);
-            box-shadow: var(--shadow-medium);
-        }
-
-        .member-name {
-            font-size: 16px;
-            color: var(--text-normal);
-            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-        }
-
-        /* Modals for Create Account, Friends, Servers, Profile */
-        .modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.8);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-            box-shadow: var(--shadow-heavy);
-        }
-
-        .modal-content {
-            background: var(--background-primary);
-            padding: 30px;
-            border-radius: 8px;
-            max-width: 500px;
-            width: 90%;
-            box-shadow: var(--shadow-heavy);
-        }
-
-        .modal-title {
-            font-size: 20px;
-            margin-bottom: 20px;
-            color: var(--text-normal);
-            text
+           
