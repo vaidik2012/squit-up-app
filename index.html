@@ -554,10 +554,11 @@
             <div class="sidebar">
                 <div class="sidebar-section">
                     <div class="sidebar-title">Direct Messages</div>
-                    <div class="sidebar-item active" onclick="selectChannel('general')">
-                        <span>#</span> general
+                    <div id="dmList">
+                        <div style="text-align: center; color: #8e9297; padding: 20px; font-size: 14px;">
+                            Add friends to start chatting!
+                        </div>
                     </div>
-                    <div id="dmList"></div>
                 </div>
                 
                 <div class="sidebar-section">
@@ -582,7 +583,7 @@
                             <div style="font-size: 14px; font-weight: 600;" id="userName">User</div>
                             <div style="font-size: 12px; color: #b9bbbe;" id="userStatus">Online</div>
                         </div>
-                        <button style="margin-left: auto; background: none; border: none; color: #b9bbbe; cursor: pointer;" onclick="logout()">🚪</button>
+                        <button style="margin-left: auto; background: none; border: none; color: #b9bbbe; cursor: pointer; font-size: 18px; padding: 8px;" onclick="logout()" title="Sign Out">🚪</button>
                     </div>
                 </div>
             </div>
@@ -590,14 +591,14 @@
             <!-- Main Content -->
             <div class="main-content">
                 <div class="chat-header">
-                    <span>#</span>
-                    <span id="currentChannel">general</span>
+                    <span id="currentChannelIcon">#</span>
+                    <span id="currentChannel">Select a friend to start chatting</span>
                 </div>
                 
                 <div class="chat-messages" id="chatMessages">
                     <div style="text-align: center; color: #b9bbbe; padding: 40px;">
-                        Welcome to #general! 🎉<br>
-                        Start a conversation or add friends to begin chatting.
+                        Welcome to SQUIT up! 🎉<br>
+                        Add friends to start chatting with them directly.
                     </div>
                 </div>
                 
@@ -606,8 +607,8 @@
                         <button class="emoji-btn" onclick="showEmojiPicker()">😀</button>
                         <button class="gif-btn" onclick="showGifPicker()">GIF</button>
                         <button class="sticker-btn" onclick="showStickerPicker()">🎭</button>
-                        <input type="text" id="messageInput" placeholder="Message #general" onkeypress="handleMessageInput(event)">
-                        <button class="btn btn-primary" style="width: auto; margin: 0; padding: 8px 16px;" onclick="sendMessage()">Send</button>
+                        <input type="text" id="messageInput" placeholder="Select a friend to chat" onkeypress="handleMessageInput(event)" disabled>
+                        <button class="btn btn-primary" style="width: auto; margin: 0; padding: 8px 16px;" onclick="sendMessage()" disabled>Send</button>
                     </div>
                 </div>
             </div>
@@ -678,6 +679,7 @@
             </div>
             <div class="profile-info">
                 <div class="profile-username" id="profileUsername">Username</div>
+                <div style="color: #8e9297; font-size: 16px; margin-bottom: 10px;" id="profileUserId">@user_id</div>
                 <div class="profile-bio" id="profileBio">Click to add a bio...</div>
                 <div class="profile-status" id="profileStatus">Online</div>
                 <button class="btn btn-primary" style="margin-top: 15px;" onclick="editProfile()">Edit Profile</button>
@@ -691,6 +693,10 @@
             <div class="modal-header">
                 <h3>Edit Profile</h3>
                 <button class="close-btn" onclick="closeModal('editProfileModal')">&times;</button>
+            </div>
+            <div class="form-group">
+                <label for="editUserId">@user_id</label>
+                <input type="text" id="editUserId" placeholder="Enter new @user_id">
             </div>
             <div class="form-group">
                 <label for="editBio">Bio</label>
@@ -1080,10 +1086,102 @@
                 
                 // Load profile modal data
                 document.getElementById('profileUsername').textContent = currentUser.displayName || currentUser.userId;
+                document.getElementById('profileUserId').textContent = currentUser.userId || '@user_id';
                 document.getElementById('profileBio').textContent = currentUser.bio || 'Click to add a bio...';
                 document.getElementById('profileStatus').textContent = currentUser.status || 'Online';
                 document.getElementById('profileAvatarLarge').textContent = (currentUser.displayName || currentUser.userId).charAt(0).toUpperCase();
+                
+                // Load friends
+                loadFriends();
             }
+        }
+
+        async function loadFriends() {
+            const friendsList = document.getElementById('friendsList');
+            const dmList = document.getElementById('dmList');
+            
+            try {
+                // Get friendships for current user
+                const friendshipsQuery = await db.collection('friendships')
+                    .where('users', 'array-contains', currentUser.uid)
+                    .get();
+
+                if (friendshipsQuery.empty) {
+                    friendsList.innerHTML = `
+                        <div style="text-align: center; color: #8e9297; padding: 10px; font-size: 12px;">
+                            No friends yet
+                        </div>
+                    `;
+                    dmList.innerHTML = `
+                        <div style="text-align: center; color: #8e9297; padding: 20px; font-size: 14px;">
+                            Add friends to start chatting!
+                        </div>
+                    `;
+                    return;
+                }
+
+                let friendsHTML = '';
+                let dmHTML = '';
+                
+                friendshipsQuery.forEach(doc => {
+                    const friendship = doc.data();
+                    const friendUid = friendship.users.find(uid => uid !== currentUser.uid);
+                    const friendUserId = friendship.userIds.find(id => id !== currentUser.userId);
+                    
+                    friendsHTML += `
+                        <div class="sidebar-item" onclick="selectFriend('${friendUid}', '${friendUserId}')">
+                            <div class="user-avatar" style="width: 24px; height: 24px; font-size: 12px;">
+                                ${friendUserId.charAt(1).toUpperCase()}
+                            </div>
+                            ${friendUserId}
+                        </div>
+                    `;
+                    
+                    dmHTML += `
+                        <div class="sidebar-item" onclick="selectFriend('${friendUid}', '${friendUserId}')">
+                            <div class="user-avatar" style="width: 24px; height: 24px; font-size: 12px;">
+                                ${friendUserId.charAt(1).toUpperCase()}
+                            </div>
+                            ${friendUserId}
+                        </div>
+                    `;
+                });
+
+                friendsList.innerHTML = friendsHTML;
+                dmList.innerHTML = dmHTML;
+
+            } catch (error) {
+                console.error('Error loading friends:', error);
+                friendsList.innerHTML = `
+                    <div style="text-align: center; color: #ed4245; padding: 10px; font-size: 12px;">
+                        Error loading friends
+                    </div>
+                `;
+            }
+        }
+
+        function selectFriend(friendUid, friendUserId) {
+            currentChannel = friendUserId;
+            document.getElementById('currentChannel').textContent = `Chat with ${friendUserId}`;
+            document.getElementById('currentChannelIcon').textContent = '@';
+            
+            // Enable chat input
+            document.getElementById('messageInput').disabled = false;
+            document.getElementById('messageInput').placeholder = `Message ${friendUserId}`;
+            document.querySelector('.chat-input .btn-primary').disabled = false;
+            
+            // Update active friend
+            document.querySelectorAll('.sidebar-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            // Clear chat messages for now (you can implement message loading later)
+            document.getElementById('chatMessages').innerHTML = `
+                <div style="text-align: center; color: #b9bbbe; padding: 40px;">
+                    Start chatting with ${friendUserId}! 💬
+                </div>
+            `;
         }
 
         function logout() {
@@ -1182,33 +1280,210 @@
             document.getElementById('addFriendModal').style.display = 'block';
         }
 
-        function sendFriendRequest() {
-            const friendUserId = document.getElementById('friendUserId').value.trim();
+        async function sendFriendRequest() {
+            const friendUserIdInput = document.getElementById('friendUserId');
+            let friendUserId = friendUserIdInput.value.trim();
             
             if (!friendUserId) {
                 alert('Please enter a @user_id');
                 return;
             }
 
-            // Simulate sending friend request
-            alert(`Friend request sent to ${friendUserId}!`);
-            closeModal('addFriendModal');
+            // Auto-add @ if user forgot it
+            if (!friendUserId.startsWith('@')) {
+                friendUserId = '@' + friendUserId;
+                friendUserIdInput.value = friendUserId;
+            }
+
+            // Don't allow sending request to yourself
+            if (friendUserId === currentUser.userId) {
+                alert('You cannot send a friend request to yourself!');
+                return;
+            }
+
+            const sendButton = document.querySelector('#addFriendModal .btn-primary');
+            sendButton.disabled = true;
+            sendButton.textContent = 'Searching...';
+
+            try {
+                // Check if the user exists
+                const userQuery = await db.collection('users').where('userId', '==', friendUserId).get();
+                
+                if (userQuery.empty) {
+                    alert(`User ${friendUserId} not found. Please check the @user_id and try again.`);
+                    sendButton.disabled = false;
+                    sendButton.textContent = 'Send Friend Request';
+                    return;
+                }
+
+                const targetUser = userQuery.docs[0];
+                const targetUserData = targetUser.data();
+
+                // Check if already friends
+                const friendshipQuery = await db.collection('friendships')
+                    .where('users', 'array-contains', currentUser.uid)
+                    .get();
+
+                let alreadyFriends = false;
+                friendshipQuery.forEach(doc => {
+                    const friendship = doc.data();
+                    if (friendship.users.includes(targetUser.id)) {
+                        alreadyFriends = true;
+                    }
+                });
+
+                if (alreadyFriends) {
+                    alert(`You are already friends with ${friendUserId}!`);
+                    sendButton.disabled = false;
+                    sendButton.textContent = 'Send Friend Request';
+                    return;
+                }
+
+                // Check if request already sent
+                const existingRequestQuery = await db.collection('friendRequests')
+                    .where('from', '==', currentUser.uid)
+                    .where('to', '==', targetUser.id)
+                    .get();
+
+                if (!existingRequestQuery.empty) {
+                    alert(`Friend request already sent to ${friendUserId}!`);
+                    sendButton.disabled = false;
+                    sendButton.textContent = 'Send Friend Request';
+                    return;
+                }
+
+                sendButton.textContent = 'Sending...';
+
+                // Send friend request
+                await db.collection('friendRequests').add({
+                    from: currentUser.uid,
+                    fromUserId: currentUser.userId,
+                    fromDisplayName: currentUser.displayName,
+                    to: targetUser.id,
+                    toUserId: targetUserData.userId,
+                    toDisplayName: targetUserData.displayName,
+                    status: 'pending',
+                    createdAt: new Date().toISOString()
+                });
+
+                alert(`Friend request sent to ${friendUserId} successfully! 🎉`);
+                closeModal('addFriendModal');
+                friendUserIdInput.value = '';
+
+            } catch (error) {
+                console.error('Error sending friend request:', error);
+                alert('Failed to send friend request. Please try again.');
+            }
+
+            sendButton.disabled = false;
+            sendButton.textContent = 'Send Friend Request';
         }
 
-        function showFriendRequests() {
+        async function showFriendRequests() {
             document.getElementById('friendRequestsModal').style.display = 'block';
+            await loadFriendRequests();
         }
 
-        function acceptFriendRequest(userId) {
-            alert(`Accepted friend request from ${userId}`);
-            // Remove the request from the list
-            event.target.closest('.friend-request').remove();
+        async function loadFriendRequests() {
+            const friendRequestsList = document.getElementById('friendRequestsList');
+            
+            try {
+                // Get pending friend requests for current user
+                const requestsQuery = await db.collection('friendRequests')
+                    .where('to', '==', currentUser.uid)
+                    .where('status', '==', 'pending')
+                    .get();
+
+                if (requestsQuery.empty) {
+                    friendRequestsList.innerHTML = `
+                        <div style="text-align: center; color: #b9bbbe; padding: 20px;">
+                            No friend requests yet. Share your @user_id with friends to get started!
+                        </div>
+                    `;
+                    return;
+                }
+
+                let requestsHTML = '';
+                requestsQuery.forEach(doc => {
+                    const request = doc.data();
+                    requestsHTML += `
+                        <div class="friend-request" data-request-id="${doc.id}">
+                            <div>
+                                <div style="font-weight: 600;">${request.fromUserId}</div>
+                                <div style="font-size: 12px; color: #b9bbbe;">Wants to be your friend</div>
+                            </div>
+                            <div>
+                                <button class="btn-small btn-accept" onclick="acceptFriendRequest('${doc.id}', '${request.from}', '${request.fromUserId}')">Accept</button>
+                                <button class="btn-small btn-decline" onclick="declineFriendRequest('${doc.id}')">Decline</button>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                friendRequestsList.innerHTML = requestsHTML;
+
+            } catch (error) {
+                console.error('Error loading friend requests:', error);
+                friendRequestsList.innerHTML = `
+                    <div style="text-align: center; color: #ed4245; padding: 20px;">
+                        Error loading friend requests. Please try again.
+                    </div>
+                `;
+            }
         }
 
-        function declineFriendRequest(userId) {
-            alert(`Declined friend request from ${userId}`);
-            // Remove the request from the list
-            event.target.closest('.friend-request').remove();
+        async function acceptFriendRequest(requestId, friendUid, friendUserId) {
+            try {
+                // Create friendship
+                await db.collection('friendships').add({
+                    users: [currentUser.uid, friendUid],
+                    userIds: [currentUser.userId, friendUserId],
+                    createdAt: new Date().toISOString()
+                });
+
+                // Update request status
+                await db.collection('friendRequests').doc(requestId).update({
+                    status: 'accepted'
+                });
+
+                alert(`You are now friends with ${friendUserId}! 🎉`);
+                
+                // Remove from UI
+                const requestElement = document.querySelector(`[data-request-id="${requestId}"]`);
+                if (requestElement) {
+                    requestElement.remove();
+                }
+
+                // Reload friend requests to update the list
+                await loadFriendRequests();
+                await loadFriends();
+
+            } catch (error) {
+                console.error('Error accepting friend request:', error);
+                alert('Failed to accept friend request. Please try again.');
+            }
+        }
+
+        async function declineFriendRequest(requestId) {
+            try {
+                // Update request status
+                await db.collection('friendRequests').doc(requestId).update({
+                    status: 'declined'
+                });
+
+                // Remove from UI
+                const requestElement = document.querySelector(`[data-request-id="${requestId}"]`);
+                if (requestElement) {
+                    requestElement.remove();
+                }
+
+                // Reload friend requests to update the list
+                await loadFriendRequests();
+
+            } catch (error) {
+                console.error('Error declining friend request:', error);
+                alert('Failed to decline friend request. Please try again.');
+            }
         }
 
         function showProfileModal() {
@@ -1216,6 +1491,7 @@
         }
 
         function editProfile() {
+            document.getElementById('editUserId').value = currentUser.userId || '';
             document.getElementById('editBio').value = currentUser.bio || '';
             document.getElementById('editStatus').value = currentUser.status || '';
             document.getElementById('editAvatar').value = currentUser.avatar || '';
@@ -1226,10 +1502,27 @@
         }
 
         async function saveProfile() {
+            let newUserId = document.getElementById('editUserId').value.trim();
             const bio = document.getElementById('editBio').value;
             const status = document.getElementById('editStatus').value;
             const avatar = document.getElementById('editAvatar').value;
             const banner = document.getElementById('editBanner').value;
+
+            // Auto-add @ if user forgot it
+            if (newUserId && !newUserId.startsWith('@')) {
+                newUserId = '@' + newUserId;
+                document.getElementById('editUserId').value = newUserId;
+            }
+
+            // Basic validation for user ID format
+            if (newUserId && !/^@[a-zA-Z0-9_]+$/.test(newUserId)) {
+                alert('User ID can only contain letters, numbers, and underscores after the @');
+                return;
+            }
+
+            const saveButton = document.querySelector('#editProfileModal .btn-primary');
+            saveButton.disabled = true;
+            saveButton.textContent = 'Saving...';
 
             try {
                 const updates = {
@@ -1239,8 +1532,27 @@
                     banner: banner
                 };
 
+                // Check if user ID is being changed
+                if (newUserId && newUserId !== currentUser.userId) {
+                    // Check if new user ID is already taken
+                    const userIdQuery = await db.collection('users').where('userId', '==', newUserId).get();
+                    if (!userIdQuery.empty) {
+                        alert(`Sorry! The @user_id "${newUserId}" is already taken by another user.\n\nPlease choose a different @user_id.`);
+                        saveButton.disabled = false;
+                        saveButton.textContent = 'Save Changes';
+                        return;
+                    }
+                    
+                    // Add userId to updates
+                    updates.userId = newUserId;
+                }
+
                 if (currentUser.uid) {
                     await db.collection('users').doc(currentUser.uid).update(updates);
+                    
+                    // Update localStorage
+                    const updatedUser = { ...currentUser, ...updates };
+                    localStorage.setItem('squitup_user_' + currentUser.uid, JSON.stringify(updatedUser));
                 }
 
                 // Update local user data
@@ -1248,11 +1560,20 @@
                 loadUserData();
                 
                 closeModal('editProfileModal');
-                alert('Profile updated successfully!');
+                
+                if (newUserId && newUserId !== currentUser.userId) {
+                    alert(`Profile updated successfully! 🎉\n\nYour @user_id has been changed to ${newUserId}`);
+                } else {
+                    alert('Profile updated successfully! 🎉');
+                }
+                
             } catch (error) {
                 console.error('Error updating profile:', error);
-                alert('Error updating profile');
+                alert('Error updating profile. Please try again.');
             }
+
+            saveButton.disabled = false;
+            saveButton.textContent = 'Save Changes';
         }
 
         function showEmojiPicker() {
@@ -1320,5 +1641,5 @@
         `;
         document.head.appendChild(style);
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'98d4410956e18584',t:'MTc2MDI0NzUzOC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'98d465fbc46233a2',t:'MTc2MDI0OTA1Mi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
