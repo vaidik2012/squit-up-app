@@ -1,3 +1,4 @@
+
 Blackbox IDEToggle Sidebar
 
 New
@@ -35,3 +36,119 @@ New
             box-sizing: border-box;
         }
         body {
+            font-family: 'Whitney', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            background-color: var(--background-primary);
+            color: var(--text-normal);
+
+give me code for same too copy and paste discord html code to for global chatting
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+apiKey: "AIzaSyB1zvVHaBrbzX5iA9fBVNGa_3sY1-WCSpY",
+authDomain: "squit-up-auth.firebaseapp.com",
+projectId: "squit-up-auth",
+storageBucket: "squit-up-auth.firebasestorage.app",
+messagingSenderId: "503910898443",
+appId: "1:503910898443:web:c5a56eb24cd4f183d8600e",
+measurementId: "G-K4LHFHSNJC"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+here is the keys for GOOGLE Oauth
+
+Copy message
+Edit message
+BLACKBOXAI
+
+html
+201 lines
+Copy code
+Download code
+Click to expand
+<!DOCTYPE html>
+<html lang="en">
+...
+How to Use This Code:
+Copy and Paste: Save this as an HTML file (e.g., chat.html) and open it in a browser.
+Firebase Setup:
+This uses your provided Firebase config.
+In your Firebase Console (project: "squit-up-auth"):
+Enable Google Authentication in the Authentication > Sign-in method tab. Add your domain (e.g., localhost for testing) to Authorized domains.
+Enable Firestore Database (create if needed) and set rules to allow read/write for authenticated users (for testing; secure in production):
+
+Run
+Copy code
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /messages/{document} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
+Features:
+Google OAuth: Sign in with Google for authentication.
+Real-time Chat: Messages are stored in Firestore (messages collection) and update live.
+Discord-like UI: Simple dark theme, scrollable messages, input for sending.
+Global: Anyone signed in can chat (same collection for all users).
+Notes:
+For production, add security rules, error handling, and rate limiting.
+No Google OAuth "keys" were provided in your message, but Firebase handles it via the config. If you meant client ID/secret, they're not needed client-side—Firebase manages it.
+Test on localhost or deploy to a host like Vercel/Netlify.
+Analytics is initialized but optional.
+If you need modifications (e.g., Realtime Database instead of Firestore, channels like Discord), let me know!
+
+
+i want same discord like website same to same graphics every pixel every feature
+just the log in feature is can be logged in with real GOOGLE oauth
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+apiKey: "AIzaSyB1zvVHaBrbzX5iA9fBVNGa_3sY1-WCSpY",
+authDomain: "squit-up-auth.firebaseapp.com",
+projectId: "squit-up-auth",
+storageBucket: "squit-up-auth.firebasestorage.app",
+messagingSenderId: "503910898443",
+appId: "1:503910898443:web:c5a56eb24cd4f183d8600e",
+measurementId: "G-K4LHFHSNJC"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+and make me same discord like web for html code
+
+Copy message
+Edit message
+BLACKBOXAI
+
+html
+608 lines
+Copy code
+Download code
+Click to close
+<!DOCTYPE html>
+<html lang="en">
+...
+
+
+Copy message
+Export
+START TRIAL NOW
+Upgrade plan
+
+
