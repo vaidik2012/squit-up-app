@@ -3,88 +3,67 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SQUIT UP!! - Real-Time Chat</title>
+    <title>SQUIT UP!! - Private Chat</title>
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Load Inter Font -->
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
-        body { font-family: 'Inter', sans-serif; }
-        /* Custom scrollbar for message area */
-        #messages-container::-webkit-scrollbar {
-            width: 8px;
-        }
-        #messages-container::-webkit-scrollbar-thumb {
-            background-color: #f59e0b; /* Amber-500 for Squit Up theme */
-            border-radius: 4px;
-        }
-        #messages-container::-webkit-scrollbar-track {
-            background-color: #f3f4f6; /* Gray-100 */
-        }
-        .squit-accent {
-            background-color: #f59e0b; /* Amber-500 */
-        }
-        .squit-accent-hover:hover {
-            background-color: #d97706; /* Amber-600 */
-        }
+        body { font-family: 'Inter', sans-serif; background-color: #2f3136; }
+        .discord-bg { background-color: #36393f; }
+        .sidebar-bg { background-color: #2f3136; }
+        .friends-bg { background-color: #36393f; }
+        .chat-bg { background-color: #36393f; }
+        .squit-blue { background-color: #5865f2; }
+        .squit-blue-hover:hover { background-color: #4752c4; }
+        .text-online { color: #43b581; }
+        
+        /* Custom scrollbar for Discord look */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-thumb { background-color: #202225; border-radius: 4px; }
+        ::-webkit-scrollbar-track { background-color: #2f3136; }
     </style>
 </head>
-<body class="bg-gray-50 min-h-screen flex items-center justify-center p-4">
+<body class="discord-bg min-h-screen flex items-center justify-center p-0 sm:p-4">
 
     <!-- Main Container -->
-    <div id="app-container" class="w-full max-w-4xl bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row h-[90vh] md:h-[800px]">
+    <div id="app-container" class="w-full max-w-[1200px] bg-gray-700 shadow-2xl overflow-hidden flex h-screen sm:h-[90vh] rounded-none sm:rounded-xl">
         
-        <!-- Sidebar (User Info) -->
-        <div id="sidebar" class="w-full md:w-1/4 bg-gray-900 text-white p-6 flex flex-col justify-between transition-all duration-300 shadow-xl">
-            <div class="flex items-center space-x-3 mb-8">
-                <div class="w-3 h-3 bg-green-400 rounded-full animate-ping absolute"></div>
-                <h1 class="text-3xl font-extrabold tracking-wider ml-4">SQUIT UP!!</h1>
+        <!-- Left Sidebar (Friends/Channels) -->
+        <div id="left-sidebar" class="w-1/4 min-w-[200px] sidebar-bg text-gray-300 flex-col hidden sm:flex border-r border-gray-900">
+            <div class="p-4 border-b border-gray-900">
+                <input type="text" id="search-friends" placeholder="Find or start a conversation" 
+                       class="w-full p-2 rounded-lg bg-[#202225] border border-gray-800 focus:outline-none focus:ring-1 focus:ring-squit-blue" />
             </div>
 
-            <div id="user-info" class="flex flex-col items-center space-y-3 text-center transition-opacity duration-500 opacity-0 flex-grow justify-center">
-                <!-- User data will be injected here -->
-            </div>
-            
-            <button id="logout-button" class="mt-6 bg-gray-700 hover:bg-gray-800 text-sm font-semibold py-3 px-4 rounded-xl shadow-md transition duration-300 hidden" onclick="handleLogout()">
-                Logout
-            </button>
-        </div>
-
-        <!-- Chat Area / Login Area -->
-        <div id="main-area" class="w-full md:w-3/4 flex flex-col justify-center items-center p-8">
-            
-            <!-- Login View -->
-            <div id="login-view" class="w-full max-w-sm text-center">
-                <h2 class="text-4xl font-extrabold text-gray-900 mb-4">Welcome to SQUIT UP!!</h2>
-                <p class="text-gray-500 mb-10">Sign in to start chatting in real-time.</p>
-                <button id="google-signin-button" class="w-full flex items-center justify-center bg-amber-500 hover:bg-amber-600 text-gray-900 font-semibold py-4 px-6 rounded-xl shadow-lg transition duration-300 transform hover:scale-[1.02] focus:outline-none focus:ring-4 focus:ring-amber-300">
-                    <svg class="w-5 h-5 mr-3" fill="currentColor" viewBox="0 0 24 24"><path d="M22.5 12.583c0-.794-.067-1.579-.19-2.348H12v4.417h5.943a5.378 5.378 0 01-2.348 3.551v2.85h3.662c2.14-1.976 3.375-4.908 3.375-8.52z" fill="#4285f4"/><path d="M12 23c3.045 0 5.662-1.006 7.55-2.723l-3.662-2.85c-.99.66-2.277 1.056-3.888 1.056-2.997 0-5.54-2.016-6.444-4.717H1.96V15.72c2.188 4.304 6.643 7.28 10.04 7.28z" fill="#34a853"/><path d="M5.556 14.503c-.247-.66-.388-1.353-.388-2.06s.141-1.4.388-2.06V7.477H1.96A11.978 11.978 0 000 12c0 2.083.473 4.04 1.305 5.76L5.556 14.5z" fill="#fbbc05"/><path d="M12 4.195c1.642 0 3.12.56 4.288 1.662L19.12 3.03C17.02 1.14 14.653 0 12 0c-3.4 0-7.855 2.976-10.043 7.28l3.966 3.087C6.46 6.21 9.003 4.195 12 4.195z" fill="#ea4335"/></svg>
-                    Sign In with Google
+            <!-- Navigation Links -->
+            <div class="p-4 space-y-2">
+                <button onclick="renderFriendsView('all')" id="nav-all" class="w-full text-left p-2 rounded-lg hover:bg-[#36393f] flex items-center font-semibold bg-[#36393f]">
+                    <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20"><path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd" fill-rule="evenodd"></path></svg>
+                    Friends
+                </button>
+                <button onclick="renderFriendsView('pending')" id="nav-pending" class="w-full text-left p-2 rounded-lg hover:bg-[#36393f] flex items-center">
+                    <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 15h12a1 1 0 00.707-1.707l-.707-.707V8a6 6 0 00-6-6zM18 16a2 2 0 11-4 0 2 2 0 014 0zm-8 10a2 2 0 11-4 0 2 2 0 014 0z" clip-rule="evenodd" fill-rule="evenodd"></path></svg>
+                    Pending <span id="pending-count" class="ml-auto text-xs font-bold px-2 py-0.5 rounded-full bg-red-600 hidden"></span>
                 </button>
             </div>
-
-            <!-- Chat View (Initially hidden) -->
-            <div id="chat-view" class="hidden w-full h-full flex flex-col">
-                <div class="text-2xl font-semibold text-gray-700 mb-4 border-b pb-2">Public Chat</div>
-                <div id="messages-container" class="flex-grow p-4 overflow-y-auto space-y-4 bg-gray-100 rounded-xl mb-4 shadow-inner">
-                    <!-- Messages will be injected here -->
-                    <div class="text-center text-gray-400 pt-10">Loading messages...</div>
-                </div>
-
-                <!-- Message Input Form -->
-                <form id="message-form" class="flex space-x-2">
-                    <input type="text" id="message-input" placeholder="Squit your message here..."
-                           class="flex-grow p-4 border border-gray-300 rounded-xl focus:ring-amber-500 focus:border-amber-500 transition duration-150 shadow-md" required />
-                    <button type="submit" id="send-button"
-                            class="squit-accent squit-accent-hover text-gray-900 font-bold py-4 px-6 rounded-xl shadow-lg transition duration-300 transform hover:scale-[1.02] active:scale-95 focus:outline-none focus:ring-4 focus:ring-amber-300">
-                        Squit!
-                    </button>
-                </form>
+            
+            <!-- Friend List Placeholder -->
+            <div id="friends-list-container" class="flex-grow overflow-y-auto px-4 py-2 space-y-1">
+                <p class="text-sm text-gray-500 p-2">Select a friend to chat...</p>
             </div>
 
-            <!-- Error/Loading Modal (Customized for Squit Up theme) -->
-            <div id="status-message" class="fixed top-4 right-4 p-3 bg-amber-100 border border-amber-400 text-amber-800 rounded-xl shadow-xl hidden transition-opacity duration-300 opacity-0" role="alert">
-                A status message will appear here.
+            <!-- User Panel -->
+            <div id="user-panel" class="p-3 bg-gray-800 flex items-center justify-between">
+                <!-- User profile details go here -->
+            </div>
+        </div>
+
+        <!-- Main Content Area -->
+        <div id="main-content" class="flex-grow flex flex-col chat-bg text-white">
+
+            <!-- Dynamic Views Container (Login, Register, Dashboard, Chat) -->
+            <div id="dynamic-view-container" class="flex-grow flex flex-col justify-center items-center p-4">
+                <!-- Content injected by JavaScript based on state -->
             </div>
             
         </div>
@@ -94,16 +73,15 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { 
-            getAuth, signInWithCustomToken, onAuthStateChanged, signOut, 
+            getAuth, onAuthStateChanged, signOut, 
             GoogleAuthProvider, signInWithPopup, signInAnonymously 
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
-            getFirestore, collection, query, onSnapshot, 
-            addDoc, serverTimestamp, doc, setDoc, setLogLevel
+            getFirestore, collection, query, where, onSnapshot, 
+            addDoc, serverTimestamp, doc, setDoc, getDoc, updateDoc, arrayUnion, arrayRemove, runTransaction 
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // --- Firebase Configuration (Provided by User) ---
-        // Note: The __app_id and __initial_auth_token are still required for the Canvas environment.
+        // --- Firebase Configuration ---
         const providedConfig = {
             apiKey: "AIzaSyB1zvVHaBrbzX5iA9fBVNGa_3sY1-WCSpY",
             authDomain: "squit-up-auth.firebaseapp.com",
@@ -118,273 +96,576 @@
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const firebaseConfig = typeof __firebase_config !== 'undefined' 
             ? JSON.parse(__firebase_config) 
-            : providedConfig; // Use provided config as fallback
+            : providedConfig;
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         // --- END Configuration ---
 
         // Firebase Service Variables
-        let app;
-        let db;
-        let auth;
-        let currentUser = null;
-        let isAuthReady = false;
-        const MESSAGES_COLLECTION_PATH = `artifacts/${appId}/public/data/messages`;
-        const USER_PROFILES_COLLECTION_PATH = `artifacts/${appId}/public/data/userProfiles`;
+        let app, db, auth;
+        let unsubscribeFriendListener = null;
+        let unsubscribeChatListener = null;
 
-        // UI Elements
-        const loginView = document.getElementById('login-view');
-        const chatView = document.getElementById('chat-view');
-        const userInfoDiv = document.getElementById('user-info');
-        const logoutButton = document.getElementById('logout-button');
-        const googleSigninButton = document.getElementById('google-signin-button'); // New reference for click
-        const messageForm = document.getElementById('message-form');
-        const messageInput = document.getElementById('message-input');
-        const messagesContainer = document.getElementById('messages-container');
-        const statusMessageDiv = document.getElementById('status-message');
+        // Global State (Replaces Vue/React state)
+        const appState = {
+            currentUser: null,
+            profile: null, // User's public profile data (including @user_id)
+            friends: [], // List of friends/pending requests
+            chatMessages: [], // Messages for the currently selected chat
+            currentChatFriend: null, // The friend object for the active chat
+            currentFriendView: 'all', // 'all' or 'pending'
+            isAuthReady: false
+        };
 
-        // State function to show status messages
+        // --- Firestore Path Helpers ---
+        const COLLECTIONS = {
+            PROFILES: `artifacts/${appId}/public/data/userProfiles`,
+            FRIENDS(uid) { return `artifacts/${appId}/users/${uid}/friends`; },
+            CHATS: `artifacts/${appId}/public/data/chats`,
+        };
+
+        function getChatDocRef(user1Uid, user2Uid) {
+            // Create a consistent chat ID by sorting UIDs
+            const chatID = [user1Uid, user2Uid].sort().join('_');
+            return doc(db, COLLECTIONS.CHATS, chatID);
+        }
+
+        // --- UI Element References ---
+        const dynamicViewContainer = document.getElementById('dynamic-view-container');
+        const leftSidebar = document.getElementById('left-sidebar');
+        const userPanel = document.getElementById('user-panel');
+        const friendsListContainer = document.getElementById('friends-list-container');
+        const pendingCountSpan = document.getElementById('pending-count');
+
+        // --- Utility Functions ---
         function showStatus(message, isError = false) {
-            statusMessageDiv.textContent = message;
-            statusMessageDiv.classList.remove('hidden', 'bg-red-100', 'border-red-400', 'text-red-800', 'bg-amber-100', 'border-amber-400', 'text-amber-800');
-            statusMessageDiv.classList.add(isError ? 'bg-red-100' : 'bg-amber-100', isError ? 'border-red-400' : 'border-amber-400', isError ? 'text-red-800' : 'text-amber-800', 'opacity-100');
+            const statusDiv = document.getElementById('status-message');
+            if (!statusDiv) return;
+
+            statusDiv.textContent = message;
+            statusDiv.classList.remove('hidden', 'bg-red-500', 'bg-green-500', 'bg-yellow-500', 'opacity-0');
+            statusDiv.classList.add('opacity-100', 'fixed', 'top-4', 'right-4', 'p-3', 'rounded-lg', 'shadow-xl', 'text-white', 
+                isError ? 'bg-red-500' : 'bg-green-500');
             
             setTimeout(() => {
-                statusMessageDiv.classList.remove('opacity-100');
-                statusMessageDiv.classList.add('opacity-0');
-                setTimeout(() => statusMessageDiv.classList.add('hidden'), 300);
+                statusDiv.classList.add('opacity-0');
+                setTimeout(() => statusDiv.classList.add('hidden'), 300);
             }, 5000);
         }
 
-        // 1. Core Firebase Setup
+        function toggleViews(showSidebar = true) {
+            if (showSidebar) {
+                leftSidebar.classList.remove('hidden');
+            } else {
+                leftSidebar.classList.add('hidden');
+            }
+        }
+
+        // --- 1. Core Firebase Setup ---
         async function initializeAppAndAuth() {
             try {
                 if (Object.keys(firebaseConfig).length > 0) {
                     app = initializeApp(firebaseConfig);
                     db = getFirestore(app);
                     auth = getAuth(app);
-                    // setLogLevel('Debug'); // Enable for debugging Firestore
+                    // setLogLevel('Debug'); // Enable for deep debugging
 
-                    // Attempt sign-in using custom token or anonymously
-                    if (initialAuthToken) {
-                        await signInWithCustomToken(auth, initialAuthToken).catch(e => {
-                            console.error("Custom token sign-in failed:", e);
-                            signInAnonymously(auth); // Fallback to anonymous sign-in
-                        });
-                    } else {
-                        await signInAnonymously(auth); // Sign in anonymously if no token
-                    }
+                    // Use platform token or sign in anonymously (required for Firestore rules)
+                    const signInPromise = initialAuthToken 
+                        ? signInWithCustomToken(auth, initialAuthToken)
+                        : signInAnonymously(auth);
                     
-                    // Auth state listener for persistence and UI changes
-                    onAuthStateChanged(auth, (user) => {
-                        currentUser = user;
-                        isAuthReady = true;
+                    await signInPromise.catch(e => console.error("Initial sign-in failed:", e));
 
+                    onAuthStateChanged(auth, async (user) => {
+                        appState.currentUser = user;
+                        appState.isAuthReady = true;
+                        
                         if (user) {
-                            handleUserSignedIn(user);
+                            await checkUserProfile(user.uid);
                         } else {
                             handleUserSignedOut();
                         }
                     });
                 } else {
-                    showStatus("Firebase configuration missing. Chat disabled.", true);
+                    renderLoginView();
+                    showStatus("Firebase config missing.", true);
                 }
             } catch (error) {
                 console.error("Initialization Error:", error);
+                renderLoginView();
                 showStatus("Failed to initialize app.", true);
             }
         }
 
-        // 2. Authentication Functions
-        async function signInWithGoogle() {
+        async function checkUserProfile(uid) {
+            const profileRef = doc(db, COLLECTIONS.PROFILES, uid);
+            const profileSnap = await getDoc(profileRef);
+
+            if (profileSnap.exists() && profileSnap.data().userId) {
+                appState.profile = { uid, ...profileSnap.data() };
+                handleUserSignedIn();
+            } else {
+                appState.profile = null;
+                renderRegistrationView();
+            }
+        }
+
+        // --- 2. Auth Functions ---
+        window.signInWithGoogle = async function() {
             const provider = new GoogleAuthProvider();
             try {
-                // Ensure auth is initialized before popup
-                if (!auth) {
-                    showStatus("Authentication services not ready.", true);
-                    return;
-                }
-                showStatus("Signing in...");
                 const result = await signInWithPopup(auth, provider);
-                const user = result.user;
-                
-                // Store/update user profile in Firestore
-                await setDoc(doc(db, USER_PROFILES_COLLECTION_PATH, user.uid), {
-                    uid: user.uid,
-                    displayName: user.displayName || 'Squit User',
-                    photoURL: user.photoURL || '',
-                    lastSeen: serverTimestamp()
-                }, { merge: true });
-                showStatus("SQUIT UP!! Successful!");
+                // checkUserProfile will be called by onAuthStateChanged
             } catch (error) {
                 console.error("Google Sign-In Error:", error);
-                // Handle pop-up closed errors gracefully
                 if (error.code !== 'auth/popup-closed-by-user') {
                      showStatus(`Sign-in failed: ${error.message}`, true);
-                } else {
-                    showStatus("Sign-in cancelled.", false);
                 }
             }
         }
 
         window.handleLogout = async function() {
             try {
+                if (unsubscribeFriendListener) unsubscribeFriendListener();
+                if (unsubscribeChatListener) unsubscribeChatListener();
                 await signOut(auth);
-                showStatus("Logged out. See you soon!");
+                showStatus("Logged out.");
             } catch (error) {
                 console.error("Logout Error:", error);
-                showStatus("Logout failed.", true);
             }
         }
 
-        // 3. UI State Handlers
-        function handleUserSignedIn(user) {
-            // Check if user is an Anonymous user (if Google sign-in hasn't happened yet)
-            if (user.isAnonymous) {
-                // Keep login view visible if user is anonymous, but show that they are logged in
-                loginView.querySelector('h2').textContent = "You're viewing anonymously.";
-                loginView.querySelector('p').textContent = "Sign in with Google to post messages.";
-                googleSigninButton.textContent = "Sign In with Google";
-            } else {
-                loginView.classList.add('hidden');
-                chatView.classList.remove('hidden');
-                // Set user info in sidebar
-                userInfoDiv.innerHTML = `
-                    <img src="${user.photoURL || 'https://placehold.co/100x100/f59e0b/000000?text=S'}" 
-                         class="w-24 h-24 rounded-full border-4 border-amber-500 shadow-xl mb-3" 
-                         onerror="this.onerror=null;this.src='https://placehold.co/100x100/f59e0b/000000?text=S';">
-                    <p class="text-xl font-bold">${user.displayName || 'Squit User'}</p>
-                    <p class="text-sm text-gray-400 break-all">${user.email || 'Anonymous Session'}</p>
-                    <p class="text-xs text-gray-500 mt-2">User ID: ${user.uid}</p>
-                `;
-                userInfoDiv.classList.remove('opacity-0');
-                userInfoDiv.classList.add('opacity-100');
-                logoutButton.classList.remove('hidden');
-
-                // Start loading messages only after auth is ready
-                if (isAuthReady) loadMessages();
-            }
-        }
-
-        function handleUserSignedOut() {
-            loginView.classList.remove('hidden');
-            chatView.classList.add('hidden');
+        // --- 3. Registration Logic ---
+        window.registerUserId = async function() {
+            const userIdInput = document.getElementById('user-id-input');
+            const newUserId = userIdInput.value.trim().toLowerCase();
+            const uid = appState.currentUser.uid;
             
-            userInfoDiv.classList.add('opacity-0');
-            userInfoDiv.classList.remove('opacity-100');
-            userInfoDiv.innerHTML = '';
-            logoutButton.classList.add('hidden');
-
-            messagesContainer.innerHTML = '<div class="text-center text-gray-400 pt-10">Start chatting now!</div>';
-        }
-
-        // 4. Message Display and Sending
-        function createMessageElement(msg) {
-            const isMine = currentUser && currentUser.uid === msg.uid;
-            
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `flex ${isMine ? 'justify-end' : 'justify-start'}`;
-
-            // Format timestamp
-            const date = msg.timestamp ? new Date(msg.timestamp.seconds * 1000) : new Date();
-            const timeString = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-            messageDiv.innerHTML = `
-                <div class="flex items-start max-w-xs sm:max-w-md ${isMine ? 'flex-row-reverse' : 'flex-row'} space-x-3 ${isMine ? 'sm:space-x-reverse' : ''}">
-                    <img src="${msg.photoURL || 'https://placehold.co/32x32/ccc/333?text=?'}" 
-                         class="w-8 h-8 rounded-full shadow-md object-cover"
-                         onerror="this.onerror=null;this.src='https://placehold.co/32x32/ccc/333?text=?';">
-                    
-                    <div class="p-3 rounded-2xl shadow-lg ${isMine ? 'bg-amber-500 text-gray-900 rounded-tr-sm' : 'bg-white text-gray-800 border border-gray-200 rounded-tl-sm'}">
-                        <p class="text-xs font-bold mb-1 ${isMine ? 'text-gray-700' : 'text-amber-600'}">${msg.displayName}</p>
-                        <p class="text-sm break-words">${msg.text}</p>
-                        <span class="text-[10px] block mt-1 ${isMine ? 'text-gray-700' : 'text-gray-500'} text-right">${timeString}</span>
-                    </div>
-                </div>
-            `;
-            return messageDiv;
-        }
-
-        function loadMessages() {
-            // Real-time listener: uses client-side sorting to avoid index errors in Canvas
-            const messagesQuery = query(collection(db, MESSAGES_COLLECTION_PATH));
-            
-            onSnapshot(messagesQuery, (snapshot) => {
-                const messages = [];
-                snapshot.forEach((doc) => {
-                    messages.push({ id: doc.id, ...doc.data() });
-                });
-
-                // Sort messages manually by timestamp (client-side)
-                messages.sort((a, b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
-
-                messagesContainer.innerHTML = ''; // Clear existing
-                if (messages.length === 0) {
-                     messagesContainer.innerHTML = '<div class="text-center text-gray-400 pt-10">Start chatting now!</div>';
-                }
-
-                const fragment = document.createDocumentFragment();
-                messages.forEach(msg => {
-                    fragment.appendChild(createMessageElement(msg));
-                });
-                messagesContainer.appendChild(fragment);
-
-                // Scroll to the bottom if near the bottom
-                const isScrolledToBottom = messagesContainer.scrollHeight - messagesContainer.clientHeight <= messagesContainer.scrollTop + 1;
-                if (isScrolledToBottom) {
-                    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-                }
-
-            }, (error) => {
-                console.error("Error fetching messages:", error);
-                showStatus("Failed to load messages in real-time.", true);
-            });
-        }
-
-        async function sendMessage(event) {
-            event.preventDefault();
-            
-            if (!currentUser || currentUser.isAnonymous) {
-                showStatus("Please sign in with Google to SQUIT messages.", true);
+            if (!newUserId || newUserId.length < 3 || newUserId.includes(' ')) {
+                showStatus("Invalid ID. Must be 3+ chars and contain no spaces.", true);
                 return;
             }
 
-            const text = messageInput.value.trim();
-            if (text === "") return;
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const profileRef = doc(db, COLLECTIONS.PROFILES, uid);
+                    const userQuery = query(collection(db, COLLECTIONS.PROFILES), where('userId', '==', newUserId));
+                    
+                    // Check if ID is already taken
+                    const existingProfile = await getDoc(profileRef);
+                    if (existingProfile.exists() && existingProfile.data().userId) {
+                        throw "Profile already registered. Login failed."; // Should be caught by checkUserProfile
+                    }
+                    
+                    const querySnapshot = await transaction.get(userQuery);
+                    if (!querySnapshot.empty) {
+                        throw "That @user_id is already taken.";
+                    }
 
-            // Simple input locking during send
-            messageInput.disabled = true;
-            document.getElementById('send-button').disabled = true;
+                    // Register the new profile
+                    transaction.set(profileRef, {
+                        uid: uid,
+                        userId: newUserId,
+                        displayName: appState.currentUser.displayName || newUserId,
+                        email: appState.currentUser.email || 'N/A',
+                        photoURL: appState.currentUser.photoURL || '',
+                        registrationTime: serverTimestamp()
+                    });
+                });
+
+                // Update local state and proceed
+                appState.profile = {
+                    uid: uid,
+                    userId: newUserId,
+                    displayName: appState.currentUser.displayName || newUserId,
+                    photoURL: appState.currentUser.photoURL || ''
+                };
+                showStatus(`Welcome, @${newUserId}!`);
+                handleUserSignedIn();
+
+            } catch (e) {
+                console.error("Registration failed:", e);
+                showStatus(`Registration failed: ${e.message || e}`, true);
+            }
+        }
+
+
+        // --- 4. Friend Management ---
+        function setupFriendListener() {
+            if (unsubscribeFriendListener) unsubscribeFriendListener();
+            if (!appState.profile) return;
+
+            const friendCollectionRef = collection(db, COLLECTIONS.FRIENDS(appState.profile.uid));
+            const friendsQuery = query(friendCollectionRef);
+
+            unsubscribeFriendListener = onSnapshot(friendsQuery, (snapshot) => {
+                appState.friends = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderFriendsList();
+                renderUserPanel();
+                if (appState.currentChatFriend) {
+                    renderChatView(appState.currentChatFriend.friendUid); // Re-render chat if friend status changed
+                }
+            }, error => console.error("Error setting up friend listener:", error));
+        }
+
+        window.sendFriendRequest = async function() {
+            const recipientIdInput = document.getElementById('add-friend-input');
+            const recipientUserId = recipientIdInput.value.trim().toLowerCase().replace('@', '');
+            const senderProfile = appState.profile;
+
+            if (recipientUserId === senderProfile.userId) {
+                showStatus("You cannot add yourself.", true);
+                return;
+            }
 
             try {
-                await addDoc(collection(db, MESSAGES_COLLECTION_PATH), {
-                    uid: currentUser.uid,
-                    displayName: currentUser.displayName || 'Squit User',
-                    photoURL: currentUser.photoURL || '',
+                // 1. Find the recipient's UID using their @user_id
+                const recipientQuery = query(collection(db, COLLECTIONS.PROFILES), where('userId', '==', recipientUserId));
+                const recipientSnap = await getDoc(recipientQuery.docs[0].ref);
+                if (!recipientSnap.exists()) {
+                    showStatus(`User @${recipientUserId} not found.`, true);
+                    return;
+                }
+                const recipient = { uid: recipientSnap.id, ...recipientSnap.data() };
+
+                // 2. Sender: Set the request status to 'pending_sent'
+                const senderDocRef = doc(db, COLLECTIONS.FRIENDS(senderProfile.uid), recipient.uid);
+                await setDoc(senderDocRef, {
+                    friendUid: recipient.uid,
+                    userId: recipient.userId,
+                    displayName: recipient.displayName,
+                    status: 'pending_sent',
+                    timestamp: serverTimestamp()
+                }, { merge: true });
+
+                // 3. Recipient: Set the request status to 'pending_received'
+                const recipientDocRef = doc(db, COLLECTIONS.FRIENDS(recipient.uid), senderProfile.uid);
+                await setDoc(recipientDocRef, {
+                    friendUid: senderProfile.uid,
+                    userId: senderProfile.userId,
+                    displayName: senderProfile.displayName,
+                    status: 'pending_received',
+                    timestamp: serverTimestamp()
+                }, { merge: true });
+
+                recipientIdInput.value = '';
+                showStatus(`Friend request sent to @${recipientUserId}!`);
+            } catch (e) {
+                console.error("Error sending request:", e);
+                showStatus("Failed to send request. Check console.", true);
+            }
+        }
+
+        window.handleFriendAction = async function(friendUid, action) {
+            const userRef = doc(db, COLLECTIONS.FRIENDS(appState.profile.uid), friendUid);
+            const friendRef = doc(db, COLLECTIONS.FRIENDS(friendUid), appState.profile.uid);
+
+            try {
+                if (action === 'accept') {
+                    // Update both sides to 'friend'
+                    await updateDoc(userRef, { status: 'friend', acceptedAt: serverTimestamp() });
+                    await updateDoc(friendRef, { status: 'friend', acceptedAt: serverTimestamp() });
+                    showStatus("Friend request accepted!");
+                } else if (action === 'reject' || action === 'remove') {
+                    // Delete the friendship from both sides
+                    await updateDoc(userRef, { status: 'removed', removedAt: serverTimestamp() });
+                    await updateDoc(friendRef, { status: 'removed', removedAt: serverTimestamp() });
+                    showStatus(`Friendship ${action}d.`, true);
+
+                    // Clear chat view if we removed the active friend
+                    if (appState.currentChatFriend && appState.currentChatFriend.friendUid === friendUid) {
+                        appState.currentChatFriend = null;
+                        appState.chatMessages = [];
+                        renderFriendsView(appState.currentFriendView);
+                    }
+                }
+            } catch (e) {
+                console.error("Error handling friend action:", e);
+                showStatus("Failed to perform action.", true);
+            }
+        }
+
+        // --- 5. Chat Logic ---
+        window.startChat = function(friendUid) {
+            if (unsubscribeChatListener) unsubscribeChatListener();
+
+            const friend = appState.friends.find(f => f.friendUid === friendUid);
+            if (!friend || friend.status !== 'friend') {
+                showStatus("Cannot start chat with non-friends.", true);
+                return;
+            }
+
+            appState.currentChatFriend = friend;
+            renderChatView(friendUid);
+            setupChatListener(friendUid);
+        }
+
+        function setupChatListener(friendUid) {
+            if (unsubscribeChatListener) unsubscribeChatListener();
+            
+            const chatRef = getChatDocRef(appState.profile.uid, friendUid);
+            const messagesQuery = collection(chatRef, 'messages');
+            
+            // Listen to messages collection, ordered by timestamp
+            unsubscribeChatListener = onSnapshot(query(messagesQuery), (snapshot) => {
+                const messages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                // Client-side sort is mandatory to avoid index issues on Canvas
+                messages.sort((a, b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
+                
+                appState.chatMessages = messages;
+                renderChatMessages();
+            }, error => console.error("Error fetching chat messages:", error));
+        }
+
+        window.sendMessage = async function(event) {
+            event.preventDefault();
+            
+            const input = document.getElementById('message-input-field');
+            const text = input.value.trim();
+            const friend = appState.currentChatFriend;
+
+            if (!text || !friend) return;
+
+            try {
+                const chatRef = getChatDocRef(appState.profile.uid, friend.friendUid);
+                const messagesCollectionRef = collection(chatRef, 'messages');
+                
+                // Ensure chat document exists on first message
+                await setDoc(chatRef, { 
+                    lastMessage: text,
+                    updatedAt: serverTimestamp(),
+                    users: [appState.profile.uid, friend.friendUid]
+                }, { merge: true });
+
+                // Add the new message
+                await addDoc(messagesCollectionRef, {
+                    senderId: appState.profile.uid,
+                    senderName: appState.profile.displayName,
                     text: text,
                     timestamp: serverTimestamp()
                 });
 
-                messageInput.value = ''; // Clear input on success
-            } catch (error) {
-                console.error("Error sending message:", error);
-                showStatus("Failed to send SQUIT.", true);
-            } finally {
-                messageInput.disabled = false;
-                document.getElementById('send-button').disabled = false;
-                messageInput.focus();
+                input.value = '';
+                input.focus();
+            } catch (e) {
+                console.error("Error sending message:", e);
+                showStatus("Failed to send message.", true);
             }
         }
 
-        // --- Event Listeners and Initial Load ---
+        // --- 6. Rendering Functions ---
+
+        // Renders the initial login screen
+        function renderLoginView() {
+            toggleViews(false);
+            dynamicViewContainer.innerHTML = `
+                <div class="w-full max-w-md p-10 bg-gray-800 rounded-xl text-center shadow-2xl">
+                    <h2 class="text-3xl font-extrabold text-white mb-2">Welcome to SQUIT UP!!</h2>
+                    <p class="text-gray-400 mb-8">Sign in with Google to continue.</p>
+                    <button id="google-signin-button-render" onclick="signInWithGoogle()" 
+                            class="w-full flex items-center justify-center squit-blue squit-blue-hover text-white font-semibold py-3 px-6 rounded-lg shadow-lg transition duration-300">
+                        <svg class="w-5 h-5 mr-3" fill="currentColor" viewBox="0 0 24 24"><path d="M22.5 12.583c0-.794-.067-1.579-.19-2.348H12v4.417h5.943a5.378 5.378 0 01-2.348 3.551v2.85h3.662c2.14-1.976 3.375-4.908 3.375-8.52z" fill="#fff"/><path d="M12 23c3.045 0 5.662-1.006 7.55-2.723l-3.662-2.85c-.99.66-2.277 1.056-3.888 1.056-2.997 0-5.54-2.016-6.444-4.717H1.96V15.72c2.188 4.304 6.643 7.28 10.04 7.28z" fill="#fff"/><path d="M5.556 14.503c-.247-.66-.388-1.353-.388-2.06s.141-1.4.388-2.06V7.477H1.96A11.978 11.978 0 000 12c0 2.083.473 4.04 1.305 5.76L5.556 14.5z" fill="#fff"/><path d="M12 4.195c1.642 0 3.12.56 4.288 1.662L19.12 3.03C17.02 1.14 14.653 0 12 0c-3.4 0-7.855 2.976-10.043 7.28l3.966 3.087C6.46 6.21 9.003 4.195 12 4.195z" fill="#fff"/></svg>
+                        Sign In with Google
+                    </button>
+                </div>
+            `;
+        }
+
+        // Renders the @user_id registration screen
+        function renderRegistrationView() {
+            toggleViews(false);
+            dynamicViewContainer.innerHTML = `
+                <div class="w-full max-w-md p-8 bg-gray-800 rounded-xl text-center shadow-2xl">
+                    <h2 class="text-2xl font-bold text-white mb-2">One More Step!</h2>
+                    <p class="text-gray-400 mb-6">Create your unique @user_id for friends to find you.</p>
+                    <div class="flex flex-col space-y-4">
+                        <input type="text" id="user-id-input" placeholder="@your_squit_id (3+ chars, no spaces)"
+                               class="w-full p-3 rounded-lg bg-[#202225] text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-squit-blue" maxlength="15" />
+                        <button onclick="registerUserId()" 
+                                class="w-full squit-blue squit-blue-hover text-white font-semibold py-3 rounded-lg transition duration-300">
+                            Register My @ID
+                        </button>
+                        <button onclick="handleLogout()" class="text-sm text-gray-500 hover:text-red-400 mt-4">Logout</button>
+                    </div>
+                </div>
+            `;
+        }
         
-        // ** FIX: Attach click handler directly to the button for reliability **
-        googleSigninButton.addEventListener('click', signInWithGoogle); 
+        // Renders the main friends dashboard
+        window.renderFriendsView = function(view = 'all') {
+            if (!appState.profile) return;
+            appState.currentFriendView = view;
+            appState.currentChatFriend = null;
+            if (unsubscribeChatListener) unsubscribeChatListener();
 
-        messageForm.addEventListener('submit', sendMessage);
+            // Highlight active view in sidebar
+            document.querySelectorAll('#left-sidebar button').forEach(btn => btn.classList.remove('bg-[#36393f]'));
+            document.getElementById(`nav-${view}`).classList.add('bg-[#36393f]');
 
-        // Start the application setup when the window loads
-        window.onload = initializeAppAndAuth;
+            const pending = appState.friends.filter(f => f.status === 'pending_received');
+            pendingCountSpan.textContent = pending.length;
+            pendingCountSpan.classList.toggle('hidden', pending.length === 0);
+
+            toggleViews(true);
+            
+            const friends = appState.friends.filter(f => {
+                if (view === 'all') return f.status === 'friend';
+                if (view === 'pending') return f.status === 'pending_received';
+                return false;
+            });
+
+            // Update friends list in left sidebar
+            friendsListContainer.innerHTML = friends.map(friend => `
+                <button onclick="startChat('${friend.friendUid}')" class="w-full text-left p-2 rounded-lg hover:bg-gray-700 flex items-center transition duration-150">
+                    <div class="w-2 h-2 rounded-full mr-2 ${friend.status === 'friend' ? 'bg-green-500' : 'bg-yellow-500'}"></div>
+                    <span>@${friend.userId}</span>
+                    <span class="ml-auto text-xs text-gray-400">${friend.status === 'friend' ? 'Online' : '(New Request)'}</span>
+                </button>
+            `).join('');
+
+            // Render main dashboard view
+            dynamicViewContainer.innerHTML = `
+                <div class="w-full h-full p-6 flex flex-col items-center">
+                    <div class="w-full max-w-2xl">
+                        <h1 class="text-3xl font-bold mb-6">${view === 'all' ? 'Direct Messages' : 'Pending Requests'}</h1>
+                        
+                        ${view === 'all' ? `
+                        <!-- Friend Adder -->
+                        <div class="bg-gray-800 p-4 rounded-xl shadow-lg mb-8">
+                            <h3 class="text-xl font-semibold mb-3">Add Friend</h3>
+                            <div class="flex space-x-2">
+                                <input type="text" id="add-friend-input" placeholder="Enter friend's @user_id" 
+                                       class="flex-grow p-3 rounded-lg bg-[#202225] text-white border border-gray-700 focus:outline-none focus:ring-1 focus:ring-squit-blue" />
+                                <button onclick="sendFriendRequest()" 
+                                        class="squit-blue squit-blue-hover text-white font-semibold py-3 px-6 rounded-lg transition duration-300">
+                                    Send Request
+                                </button>
+                            </div>
+                        </div>` : ''}
+
+                        <!-- Friend List Display -->
+                        <div id="friend-view-list" class="space-y-3">
+                            ${friends.length === 0 ? `<p class="text-gray-500">${view === 'all' ? 'You have no friends yet. Add some!' : 'No pending requests.'}</p>` : 
+                                friends.map(friend => `
+                                    <div class="flex items-center p-3 bg-gray-700 rounded-lg shadow-md border-l-4 border-squit-blue">
+                                        <div class="flex-grow">
+                                            <p class="font-bold text-lg">@${friend.userId}</p>
+                                            <p class="text-sm text-gray-400">${friend.displayName}</p>
+                                        </div>
+                                        ${friend.status === 'pending_received' ? `
+                                            <button onclick="handleFriendAction('${friend.friendUid}', 'accept')" class="bg-green-500 hover:bg-green-600 text-white text-sm font-semibold py-1 px-3 rounded-lg mr-2">Accept</button>
+                                            <button onclick="handleFriendAction('${friend.friendUid}', 'reject')" class="bg-red-500 hover:bg-red-600 text-white text-sm font-semibold py-1 px-3 rounded-lg">Reject</button>
+                                        ` : `
+                                            <button onclick="handleFriendAction('${friend.friendUid}', 'remove')" class="bg-red-500 hover:bg-red-600 text-white text-sm font-semibold py-1 px-3 rounded-lg">Remove</button>
+                                        `}
+                                    </div>
+                                `).join('')
+                            }
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Renders the active chat view
+        function renderChatView(friendUid) {
+            const friend = appState.friends.find(f => f.friendUid === friendUid);
+            if (!friend) return renderFriendsView('all');
+
+            dynamicViewContainer.innerHTML = `
+                <div class="w-full border-b border-gray-800 p-4">
+                    <h2 class="text-xl font-bold text-white">@${friend.userId}</h2>
+                </div>
+                <div id="chat-messages" class="flex-grow w-full overflow-y-auto p-4 space-y-4">
+                    <!-- Messages rendered here by renderChatMessages() -->
+                </div>
+                <div class="w-full p-4">
+                    <form onsubmit="sendMessage(event)" class="flex space-x-3">
+                        <input type="text" id="message-input-field" placeholder="Message @${friend.userId}"
+                               class="flex-grow p-3 rounded-lg bg-gray-700 text-white border border-gray-800 focus:outline-none focus:ring-2 focus:ring-squit-blue" required />
+                        <button type="submit" class="squit-blue squit-blue-hover text-white font-bold py-3 px-6 rounded-lg transition duration-300">
+                            Send
+                        </button>
+                    </form>
+                </div>
+            `;
+            renderChatMessages(); // Initial message render
+        }
+
+        // Updates only the messages section of the chat
+        function renderChatMessages() {
+            const container = document.getElementById('chat-messages');
+            if (!container) return; // Ensure the chat view is active
+
+            container.innerHTML = appState.chatMessages.map(msg => {
+                const isMine = msg.senderId === appState.profile.uid;
+                const time = msg.timestamp ? new Date(msg.timestamp.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Now';
+
+                return `
+                    <div class="flex items-start ${isMine ? 'justify-end' : 'justify-start'}">
+                        <div class="max-w-xs sm:max-w-md p-3 rounded-lg shadow-md ${isMine ? 'squit-blue text-white rounded-br-sm' : 'bg-gray-700 text-gray-100 rounded-bl-sm'}">
+                            <p class="text-xs font-bold ${isMine ? 'text-gray-100' : 'text-squit-blue'}">${msg.senderName}</p>
+                            <p class="text-base break-words">${msg.text}</p>
+                            <span class="text-[10px] block mt-1 ${isMine ? 'text-gray-300' : 'text-gray-400'} text-right">${time}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            container.scrollTop = container.scrollHeight; // Scroll to bottom
+        }
+
+        // Renders the user's profile and logout button in the bottom panel
+        function renderUserPanel() {
+            if (!appState.profile) return;
+            userPanel.innerHTML = `
+                <div class="flex items-center space-x-2">
+                    <img src="${appState.profile.photoURL || 'https://placehold.co/32x32/5865f2/ffffff?text=S'}" 
+                         class="w-8 h-8 rounded-full object-cover border-2 border-green-500" 
+                         onerror="this.onerror=null;this.src='https://placehold.co/32x32/5865f2/ffffff?text=S';">
+                    <div>
+                        <p class="text-sm font-semibold text-white">${appState.profile.displayName}</p>
+                        <p class="text-xs text-gray-400 text-online">@${appState.profile.userId}</p>
+                    </div>
+                </div>
+                <button onclick="handleLogout()" title="Logout" class="text-gray-400 hover:text-red-500 p-1 rounded-full transition duration-150">
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                </button>
+            `;
+        }
+
+        // Handles successful sign in (after profile check)
+        function handleUserSignedIn() {
+            toggleViews(true);
+            renderUserPanel();
+            setupFriendListener();
+            renderFriendsView('all'); // Go to friends list view
+        }
+
+        // Handles user signed out
+        function handleUserSignedOut() {
+            appState.profile = null;
+            appState.friends = [];
+            appState.chatMessages = [];
+            appState.currentChatFriend = null;
+            userPanel.innerHTML = '';
+            friendsListContainer.innerHTML = '';
+            renderLoginView();
+        }
+
+        // --- Initial Load ---
+        window.onload = () => {
+             // Append the status message element to the body if it doesn't exist
+            if (!document.getElementById('status-message')) {
+                const statusDiv = document.createElement('div');
+                statusDiv.id = 'status-message';
+                statusDiv.className = 'hidden';
+                document.body.appendChild(statusDiv);
+            }
+            initializeAppAndAuth();
+        };
 
     </script>
+    <div id="status-message" class="hidden"></div>
 </body>
 </html>
