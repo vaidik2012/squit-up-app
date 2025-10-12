@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SQUIT UP! - Chatting and Chilling Lounge Friends</title>
+    <!-- We will use your detailed custom CSS instead of Tailwind CDN -->
     <style>
         /* Discord-like Color Scheme with Shadows for Realism */
         :root {
@@ -14,7 +15,7 @@
             --channeltextarea-background: #40444b;
             --text-normal: #dcddde;
             --text-muted: #72767d;
-            --interactive-normal: #4f46e5;
+            --interactive-normal: #4f46e5; /* Adjusted to a deep purple/indigo for SQUIT up */
             --interactive-hover: #3730a3;
             --border: #202225;
             --elevation: rgba(0, 0, 0, 0.2);
@@ -27,18 +28,20 @@
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+            font-family: 'Inter', 'Whitney', 'Helvetica Neue', Helvetica, Arial, sans-serif;
         }
 
         body {
-            font-family: 'Whitney', 'Helvetica Neue', Helvetica, Arial, sans-serif;
             background-color: var(--background-primary);
             color: var(--text-normal);
             height: 100vh;
             overflow: hidden;
+            display: flex;
+            flex-direction: column;
         }
 
         /* Auth Screen - First Appearance: Login or Create Account */
-        #authScreen {
+        #authScreen, #useridScreen {
             display: flex;
             align-items: center;
             justify-content: center;
@@ -178,6 +181,10 @@
         .google-btn {
             background: #4285f4 !important;
             margin-top: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
         }
 
         .google-btn:hover {
@@ -199,49 +206,29 @@
             right: 0;
             height: 1px;
             background: var(--border);
+            z-index: 0;
         }
 
         .divider span {
             background: var(--background-secondary);
             padding: 0 10px;
+            position: relative;
+            z-index: 1;
         }
 
         .error-msg {
             color: #ed4245;
             font-size: 14px;
             margin-top: 10px;
-            display: none;
             text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+            text-align: left;
         }
-
+        
         .success-msg {
             color: #57f287;
             font-size: 14px;
             margin-top: 10px;
-            display: none;
-        }
-
-        .user-info {
-            margin-top: 20px;
-            padding: 15px;
-            background: var(--background-tertiary);
-            border-radius: 6px;
-            box-shadow: var(--shadow-light);
             text-align: left;
-            display: none;
-        }
-
-        .user-info strong {
-            color: var(--text-normal);
-        }
-
-        .logout-btn {
-            background: #ed4245;
-            margin-top: 10px;
-        }
-
-        .logout-btn:hover {
-            background: #c72c3b;
         }
 
         /* Main Dashboard - Hidden Initially */
@@ -254,7 +241,7 @@
         /* Left Sidebar: Servers */
         .sidebar {
             width: 72px;
-            background-color: var(--background-secondary);
+            background-color: var(--background-tertiary); /* Darker than channels */
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -267,7 +254,7 @@
         .server-icon {
             width: 48px;
             height: 48px;
-            background-color: var(--background-tertiary);
+            background-color: var(--background-secondary);
             border-radius: 50%;
             display: flex;
             align-items: center;
@@ -278,64 +265,24 @@
             position: relative;
             box-shadow: var(--shadow-light);
             font-size: 24px;
+            color: var(--text-muted);
         }
 
         .server-icon:hover {
-            background-color: var(--background-modifier-hover);
+            border-radius: 16px;
+            background-color: var(--interactive-normal);
+            color: white;
             box-shadow: var(--shadow-medium);
             transform: scale(1.05);
         }
 
         .server-icon.active {
             border-radius: 16px;
+            background-color: var(--interactive-normal);
+            color: white;
             box-shadow: var(--shadow-heavy);
         }
-
-        .server-icon::after {
-            content: '';
-            position: absolute;
-            bottom: -4px;
-            right: -4px;
-            width: 20px;
-            height: 20px;
-            background: var(--interactive-normal);
-            border-radius: 50%;
-            opacity: 0;
-            transition: opacity 0.2s;
-        }
-
-        .server-icon.active::after {
-            opacity: 1;
-        }
-
-        .add-server {
-            width: 48px;
-            height: 48px;
-            background-color: var(--background-tertiary);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            margin-top: auto;
-            margin-bottom: 12px;
-            transition: all 0.2s;
-            box-shadow: var(--shadow-light);
-        }
-
-        .add-server:hover {
-            background-color: var(--background-modifier-hover);
-            box-shadow: var(--shadow-medium);
-            transform: scale(1.05);
-        }
-
-        .add-server::before {
-            content: '+';
-            font-size: 24px;
-            color: var(--text-muted);
-            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-        }
-
+        
         /* Channel Sidebar */
         .channels-sidebar {
             width: 240px;
@@ -355,21 +302,7 @@
             border-bottom: 1px solid var(--border);
             text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
         }
-
-        .channel-category {
-            padding: 8px 16px;
-            font-size: 12px;
-            font-weight: 600;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            box-shadow: var(--shadow-light);
-        }
-
-        .channel-list, .friends-list {
-            list-style: none;
-        }
-
+        
         .channel-item, .friend-item {
             padding: 6px 16px;
             cursor: pointer;
@@ -378,96 +311,92 @@
             justify-content: space-between;
             transition: all 0.2s;
             border-radius: 4px;
-            margin: 2px 0;
+            margin: 2px 8px;
             box-shadow: var(--shadow-light);
         }
 
         .channel-item:hover, .friend-item:hover {
             background-color: var(--background-modifier-hover);
             box-shadow: var(--shadow-medium);
-            transform: translateX(2px);
         }
 
         .channel-item.active, .friend-item.active {
             background-color: var(--background-tertiary);
             box-shadow: var(--shadow-heavy);
         }
-
-        .channel-icon, .friend-icon {
-            width: 16px;
-            height: 16px;
-            margin-right: 12px;
-            color: var(--text-muted);
-            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-        }
-
-        .channel-name, .friend-name {
-            flex: 1;
-            font-size: 16px;
-            color: var(--text-normal);
-            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-        }
-
-        .friend-action {
-            background: var(--interactive-normal);
-            color: white;
-            border: none;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            cursor: pointer;
-            box-shadow: var(--shadow-light);
-            transition: all 0.2s;
-        }
-
-        .friend-action:hover {
-            background: var(--interactive-hover);
-            box-shadow: var(--shadow-medium);
-        }
-
-        /* Profile Section */
+        
+        /* Profile Section at bottom of Channel Sidebar */
         .profile-section {
-            padding: 12px 16px;
-            border-bottom: 1px solid var(--border);
+            margin-top: auto;
+            padding: 10px 16px;
+            background-color: var(--background-tertiary);
+            border-top: 1px solid var(--border);
             display: flex;
             align-items: center;
-            cursor: pointer;
-            transition: all 0.2s;
+            justify-content: space-between;
             box-shadow: var(--shadow-light);
+            cursor: pointer;
         }
 
-        .profile-section:hover {
-            background-color: var(--background-modifier-hover);
+        .profile-info {
+            display: flex;
+            align-items: center;
         }
 
         .profile-avatar {
             width: 32px;
             height: 32px;
             border-radius: 50%;
-            margin-right: 12px;
-            background: var(--background-tertiary);
+            margin-right: 10px;
+            background: var(--interactive-normal);
             display: flex;
             align-items: center;
             justify-content: center;
             box-shadow: var(--shadow-medium);
-            color: var(--text-normal);
+            color: white;
             font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        .profile-name-id {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
         }
 
         .profile-name {
-            font-size: 16px;
+            font-size: 14px;
+            font-weight: bold;
             color: var(--text-normal);
-            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
         }
 
+        .profile-id {
+            font-size: 12px;
+            color: #b9bbbe; /* Lighter muted text */
+        }
+        
+        .settings-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 20px;
+            transition: color 0.2s;
+        }
+        
+        .settings-btn:hover {
+            color: var(--text-normal);
+        }
+        
         /* Main Chat Area */
         .main-chat {
             flex: 1;
             display: flex;
             flex-direction: column;
             min-width: 0;
+            background-color: var(--background-primary);
         }
-
+        
         .chat-header {
             padding: 12px 16px;
             background-color: var(--background-secondary);
@@ -491,18 +420,18 @@
             padding: 16px;
             background-color: var(--background-primary);
             display: flex;
-            flex-direction: column;
+            flex-direction: column-reverse; /* For bottom-up scrolling */
         }
 
         .message {
             display: flex;
             padding: 8px 0;
-            border-bottom: 1px solid var(--border);
-            box-shadow: var(--shadow-light);
             margin: 4px 0;
-            border-radius: 4px;
-            background: var(--background-tertiary);
-            max-width: 80%;
+            transition: background-color 0.1s;
+        }
+        
+        .message:hover {
+            background-color: rgba(0, 0, 0, 0.05);
         }
 
         .message-avatar {
@@ -520,46 +449,12 @@
             box-shadow: var(--shadow-medium);
         }
 
-        .message-content {
-            flex: 1;
-            min-width: 0;
-        }
-
-        .message-header {
-            display: flex;
-            align-items: baseline;
-            margin-bottom: 2px;
-        }
-
-        .message-author {
-            font-weight: 500;
-            color: var(--text-normal);
-            margin-right: 8px;
-            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-        }
-
-        .message-time {
-            font-size: 12px;
-            color: var(--text-muted);
-        }
-
-        .message-text {
-            font-size: 16px;
-            line-height: 1.4;
-            color: var(--text-normal);
-            word-wrap: break-word;
-            text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
-        }
-
-        /* Input Area with Emoji Picker */
         .message-input-area {
             padding: 12px 16px;
-            background-color: var(--background-secondary);
-            border-top: 1px solid var(--border);
+            background-color: var(--background-primary);
             display: flex;
             align-items: flex-end;
             position: relative;
-            box-shadow: var(--shadow-light);
         }
 
         #messageInput {
@@ -569,55 +464,644 @@
             color: var(--text-normal);
             border: none;
             border-radius: 8px;
-            font-size: 14px;
+            font-size: 16px;
             resize: none;
             max-height: 80px;
             outline: none;
             margin-right: 12px;
-            box-shadow: var(--shadow-medium);
+            box-shadow: var(--shadow-medium) inset;
         }
 
-        #emojiBtn {
-            background: none;
-            border: none;
-            font-size: 20px;
-            cursor: pointer;
-            color: var(--text-muted);
-            margin-right: 12px;
-            transition: color 0.2s;
-            box-shadow: var(--shadow-light);
-            padding: 5px;
-            border-radius: 4px;
+        /* Generic Modal Styling */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
         }
 
-        #emojiBtn:hover {
-            color: var(--text-normal);
-            background: var(--background-modifier-hover);
-        }
-
-        #emojiPicker {
-            position: absolute;
-            bottom: 70px;
-            right: 20px;
+        .modal-content {
             background: var(--background-secondary);
-            border: 1px solid var(--border);
+            padding: 25px;
             border-radius: 8px;
-            padding: 10px;
-            max-width: 300px;
-            max-height: 200px;
-            overflow-y: auto;
-            display: none;
+            width: 90%;
+            max-width: 400px;
             box-shadow: var(--shadow-heavy);
-            z-index: 100;
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(30px, 1fr));
-            gap: 5px;
+        }
+        
+        .modal-close {
+            float: right;
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--text-muted);
+            cursor: pointer;
+            line-height: 1;
+        }
+        
+        .modal-close:hover {
+            color: var(--text-normal);
         }
 
-        .emoji {
-            font-size: 20px;
-            cursor: pointer;
-            padding: 5px;
-            border-radius: 4px;
-            transition: background 0.2s;
-            text-shadow: 0 1px 2px rgba(0
+    </style>
+</head>
+<body>
+    <!-- Auth Screen -->
+    <div id="authScreen" style="display: flex;">
+        <div class="auth-container">
+            <div class="auth-title">Welcome Back!</div>
+            <div class="auth-tabs">
+                <button class="auth-tab active" id="loginTabBtn" onclick="showAuthForm('login')">Login</button>
+                <button class="auth-tab" id="registerTabBtn" onclick="showAuthForm('register')">Register</button>
+            </div>
+
+            <!-- Login Form (Email/Password) -->
+            <div class="auth-form active" id="loginForm">
+                <input type="email" id="loginEmail" class="auth-input" placeholder="Email" required>
+                <input type="password" id="loginPassword" class="auth-input" placeholder="Password" required>
+                <button class="auth-button" onclick="signInWithEmailPassword()">Log In</button>
+                <div id="loginError" class="error-msg"></div>
+            </div>
+
+            <!-- Register Form (Email/Password) -->
+            <div class="auth-form" id="registerForm">
+                <input type="email" id="registerEmail" class="auth-input" placeholder="Email" required>
+                <input type="password" id="registerPassword" class="auth-input" placeholder="Password (Min 6 characters)" required>
+                <button class="auth-button" onclick="registerWithEmailPassword()">Register</button>
+                <div id="registerError" class="error-msg"></div>
+            </div>
+
+            <div class="divider"><span>OR</span></div>
+            
+            <button class="auth-button google-btn" onclick="signInWithGoogle()">
+                <!-- Google SVG Icon -->
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#fff"/>
+                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#fff"/>
+                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#fff"/>
+                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 15.02 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#fff"/>
+                </svg>
+                Sign in with Google
+            </button>
+            <div id="authLoading" style="display:none; color:white; margin-top:15px; background:var(--interactive-normal); padding: 8px; border-radius: 6px;">
+                Connecting...
+            </div>
+            
+            <p class="auth-subtitle" style="margin-top: 20px;">
+                Temporary ID (if anonymous): <span id="currentTempId" style="color:var(--interactive-normal); font-weight:bold;">Loading...</span>
+            </p>
+        </div>
+    </div>
+
+    <!-- Profile Setup Screen (Unique @user_id & Password Finalization) -->
+    <div id="useridScreen" style="display: none;">
+        <div class="auth-container">
+            <div class="auth-title">Finalize Your Profile</div>
+            <div class="auth-subtitle" style="text-align: left;">
+                Set your **permanent @user_id** to send and receive friend requests. You can also set/update your password here.
+            </div>
+            
+            <!-- Email Field (Dynamic visibility) -->
+            <div class="form-group" id="emailGroup" style="text-align: left;">
+                <label for="setupEmailInput" style="color:var(--text-muted); font-size:12px; font-weight:bold; margin-bottom:5px; display:block;">Email</label>
+                <input type="email" id="setupEmailInput" class="auth-input" placeholder="Your Email Address" required style="margin-bottom: 5px;">
+            </div>
+            
+            <!-- Password Field -->
+            <div class="form-group" style="text-align: left;">
+                <label for="setupPasswordInput" style="color:var(--text-muted); font-size:12px; font-weight:bold; margin-bottom:5px; display:block;">Password</label>
+                <input type="password" id="setupPasswordInput" class="auth-input" placeholder="Min 6 characters (Required)" minlength="6" required style="margin-bottom: 5px;">
+            </div>
+
+            <!-- Username Field -->
+            <div class="form-group" style="text-align: left;">
+                <label for="setupUsernameInput" style="color:var(--text-muted); font-size:12px; font-weight:bold; margin-bottom:5px; display:block;">@user_id (e.g., cooluser123)</label>
+                <input type="text" id="setupUsernameInput" class="auth-input" placeholder="Enter a unique ID (3-16 chars, no spaces)" maxlength="16" required style="margin-bottom: 5px;">
+                <div id="usernameError" class="error-msg" style="display: block;"></div>
+                <div id="usernameSuccess" class="success-msg" style="display: block;"></div>
+            </div>
+            
+            <div id="usernameLoading" style="display:none; color:white; margin-top:15px; background:#f5a623; padding: 8px; border-radius: 6px;">
+                Checking ID and securing account...
+            </div>
+            
+            <button class="auth-button" onclick="saveUsername()" id="saveUsernameBtn">
+                Save Profile & Enter SQUIT up
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Dashboard UI -->
+    <div id="mainApp">
+        <!-- Sidebar (Servers) -->
+        <div class="sidebar">
+            <div class="server-icon active" title="Direct Messages">DMs</div>
+            <div class="divider" style="margin: 8px 0; width: 60%; border-color: var(--border);"></div>
+            <div class="server-icon" style="background-color: #f04747;" title="My Server">S1</div>
+            <div class="server-icon" style="background-color: #57f287;" title="Community Server">C2</div>
+            <div class="add-server" title="Add a Server"></div>
+        </div>
+
+        <!-- Channel Sidebar (Friends/DMs/Channels) -->
+        <div class="channels-sidebar">
+            <div class="friends-header">Direct Messages</div>
+            <div style="padding: 0 8px;">
+                <!-- Find Friends Section -->
+                <div class="friend-item active" id="friendsHome" style="margin-top: 10px;">
+                    <span class="friend-icon">👥</span>
+                    <span class="friend-name">Friends (Requests)</span>
+                </div>
+            </div>
+
+            <!-- User DMs/Online Friends List -->
+            <div class="channel-category" style="margin-top: 15px;">Online Friends (0)</div>
+            <ul class="friends-list" id="onlineFriendsList">
+                <!-- Friends will be dynamically added here -->
+            </ul>
+            
+            <!-- Global User Profile Section -->
+            <div class="profile-section">
+                <div class="profile-info">
+                    <div class="profile-avatar" id="sidebarAvatar">?</div>
+                    <div class="profile-name-id">
+                        <span class="profile-name" id="sidebarDisplayName">Loading...</span>
+                        <span class="profile-id" id="sidebarUserId">@temp-id</span>
+                    </div>
+                </div>
+                <button class="settings-btn" onclick="signOutUser()" title="Sign Out">
+                    <!-- Example Sign Out Icon (Logout) -->
+                    &#xe163; 
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Chat Area -->
+        <div class="main-chat">
+            <div class="chat-header">
+                <span class="channel-title"># Friends (Requests)</span>
+            </div>
+
+            <div class="chat-messages" id="chatMessages">
+                <!-- Chat messages or friend request UI will go here -->
+                <div class="message">
+                    <div class="message-avatar" style="background:var(--interactive-normal);">S</div>
+                    <div class="message-content">
+                        <div class="message-header">
+                            <span class="message-author" style="color: #57f287;">System</span>
+                            <span class="message-time">Just now</span>
+                        </div>
+                        <div class="message-text">Welcome to SQUIT up! Use the Friends (Requests) tab to manage incoming and outgoing friend requests. Your permanent ID is crucial for this.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="message-input-area">
+                <input type="text" id="messageInput" placeholder="Send a message (Future Feature)" disabled>
+                <button id="emojiBtn" title="Emoji (Future)">😄</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase Scripts -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { 
+            getAuth, 
+            signInWithCustomToken, 
+            signInAnonymously, 
+            onAuthStateChanged, 
+            GoogleAuthProvider, 
+            signInWithPopup, 
+            signOut, 
+            linkWithEmailAndPassword, 
+            createUserWithEmailAndPassword,
+            signInWithEmailAndPassword,
+            updatePassword, 
+            updateEmail 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            doc, 
+            getDoc, 
+            setDoc,
+            collection,
+            query,
+            where,
+            getDocs,
+            onSnapshot,
+            setLogLevel 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Enable debug logging for Firestore
+        setLogLevel('debug');
+
+        // --- 1. Firebase Environment Setup (MANDATORY) ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'squit-up-auth';
+        const firebaseConfig = typeof __firebase_config !== 'undefined'
+            ? JSON.parse(__firebase_config)
+            : {}; // Fallback empty config, will assume Canvas handles injection
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let auth, db;
+        let currentUserData = null; // Stores { uid, username, email, ... }
+
+        // Firestore Paths (MANDATORY STRUCTURE)
+        const userProfilePath = (uid) => doc(db, `/artifacts/${appId}/users/${uid}/profile/metadata`);
+        const usernameUniquenessCollection = collection(db, `/artifacts/${appId}/public/data/usernames`);
+        const usernameUniquenessPath = (username) => doc(usernameUniquenessCollection, username.toLowerCase());
+
+
+        // --- 2. Utility Functions ---
+
+        /**
+         * Switches the visible application screen.
+         */
+        function showScreen(screenId) {
+            document.getElementById('authScreen').style.display = 'none';
+            document.getElementById('useridScreen').style.display = 'none';
+            document.getElementById('mainApp').style.display = 'none';
+            
+            const screen = document.getElementById(screenId);
+            if (screen) {
+                // Use flex for containers that need centering/layout
+                if (screenId === 'mainApp' || screenId === 'authScreen' || screenId === 'useridScreen') {
+                    screen.style.display = 'flex';
+                } else {
+                    screen.style.display = 'flex';
+                }
+            }
+        }
+        
+        /**
+         * Toggles the loading state for a screen.
+         */
+        function toggleLoading(loadingId, show, message = 'Connecting...') {
+            const loadingElement = document.getElementById(loadingId);
+            if (loadingElement) {
+                loadingElement.textContent = message;
+                loadingElement.style.display = show ? 'block' : 'none';
+            }
+        }
+
+        /**
+         * Switches between Login and Register forms on the auth screen.
+         */
+        window.showAuthForm = (formName) => {
+            document.getElementById('loginForm').classList.remove('active');
+            document.getElementById('registerForm').classList.remove('active');
+            document.getElementById('loginTabBtn').classList.remove('active');
+            document.getElementById('registerTabBtn').classList.remove('active');
+
+            if (formName === 'login') {
+                document.getElementById('loginForm').classList.add('active');
+                document.getElementById('loginTabBtn').classList.add('active');
+            } else if (formName === 'register') {
+                document.getElementById('registerForm').classList.add('active');
+                document.getElementById('registerTabBtn').classList.add('active');
+            }
+        }
+
+        /**
+         * Updates all UI elements with the current user's profile status.
+         */
+        function updateUI(user) {
+            const uid = user.uid;
+            let displayName, avatarChar, userIdDisplay;
+            
+            if (currentUserData && currentUserData.username) {
+                userIdDisplay = `@${currentUserData.username}`;
+                displayName = user.displayName || currentUserData.username;
+                avatarChar = currentUserData.username[0].toUpperCase();
+            } else {
+                userIdDisplay = `@temp-${uid.substring(0, 4)}`;
+                displayName = `User_${uid.substring(0, 4)}`;
+                avatarChar = uid[0].toUpperCase();
+            }
+
+            // Auth Screen for Temporary ID display
+            document.getElementById('currentTempId').textContent = `${uid.substring(0, 8)}`;
+
+            // Main App UI (Sidebar Profile)
+            document.getElementById('sidebarDisplayName').textContent = displayName;
+            document.getElementById('sidebarUserId').textContent = userIdDisplay;
+            document.getElementById('sidebarAvatar').textContent = avatarChar;
+
+            // Determine which screen to show
+            if (currentUserData && currentUserData.username) {
+                // User is authenticated AND has a unique ID
+                showScreen('mainApp');
+            } else {
+                // User is authenticated but needs to set a unique ID
+                showScreen('authScreen');
+            }
+        }
+
+        /**
+         * Prepares and shows the profile setup screen.
+         */
+        function showProfileSetupScreen(initialEmail = '', initialPassword = '') {
+            const user = auth.currentUser;
+            if (!user) return;
+
+            const emailGroup = document.getElementById('emailGroup');
+            const emailInput = document.getElementById('setupEmailInput');
+            const passwordInput = document.getElementById('setupPasswordInput');
+            const usernameInput = document.getElementById('setupUsernameInput');
+
+            document.getElementById('usernameError').textContent = '';
+            document.getElementById('usernameSuccess').textContent = '';
+            
+            passwordInput.value = initialPassword; 
+            usernameInput.value = '';
+            
+            // Logic: If the user has a linked email/password already (or Google), we hide the email field.
+            const needsEmailForUpgrade = user.isAnonymous || !user.email;
+            
+            if (needsEmailForUpgrade) {
+                emailGroup.style.display = 'block';
+                emailInput.value = initialEmail;
+            } else {
+                // User is signed in with non-anonymous credentials (Google or Email/Pass)
+                emailGroup.style.display = 'none';
+                emailInput.value = user.email || initialEmail; 
+            }
+
+            showScreen('useridScreen');
+        }
+
+
+        // --- 3. Authentication Handlers ---
+
+        window.signInWithEmailPassword = async () => {
+            const email = document.getElementById('loginEmail').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            const errorElement = document.getElementById('loginError');
+            errorElement.textContent = '';
+
+            if (!email || !password) {
+                errorElement.textContent = 'Please enter both email and password.';
+                return;
+            }
+            
+            toggleLoading('authLoading', true, 'Signing in...');
+
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+                // onAuthStateChanged will handle navigation
+            } catch (error) {
+                toggleLoading('authLoading', false);
+                console.error("Login Error:", error);
+                errorElement.textContent = `Login failed: ${error.message.replace('Firebase: ', '').replace(/\(.*\)/, '')}`;
+            }
+        }
+
+        window.registerWithEmailPassword = async () => {
+            const email = document.getElementById('registerEmail').value.trim();
+            const password = document.getElementById('registerPassword').value;
+            const errorElement = document.getElementById('registerError');
+            errorElement.textContent = '';
+
+            if (password.length < 6) {
+                errorElement.textContent = 'Password must be at least 6 characters.';
+                return;
+            }
+            
+            toggleLoading('authLoading', true, 'Creating account...');
+
+            try {
+                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                // After successful creation, the user is signed in. 
+                // onAuthStateChanged will detect this and move to profile setup.
+            } catch (error) {
+                toggleLoading('authLoading', false);
+                console.error("Registration Error:", error);
+                errorElement.textContent = `Registration failed: ${error.message.replace('Firebase: ', '').replace(/\(.*\)/, '')}`;
+            }
+        }
+
+
+        window.signInWithGoogle = async () => {
+            if (!auth) return console.error("Firebase Auth not initialized.");
+            toggleLoading('authLoading', true, 'Connecting with Google...');
+            
+            const provider = new GoogleAuthProvider();
+            
+            try {
+                if (auth.currentUser && auth.currentUser.isAnonymous) {
+                    // Link if currently anonymous
+                    await auth.currentUser.linkWithPopup(provider);
+                } else {
+                    // Sign in if not anonymous
+                    await signInWithPopup(auth, provider);
+                }
+                // onAuthStateChanged will handle navigation
+            } catch (error) {
+                toggleLoading('authLoading', false);
+                console.error("Google Sign-In Error:", error.code, error.message);
+                const errorMessage = `Google Sign In Failed: ${error.code.replace('auth/', '').replace(/-/g, ' ')}`;
+                document.getElementById('authLoading').textContent = errorMessage;
+                setTimeout(() => toggleLoading('authLoading', false), 3000);
+            }
+        };
+
+        /**
+         * Signs the user out.
+         */
+        window.signOutUser = async () => {
+             if (!auth) return;
+             try {
+                await signOut(auth);
+                // After signing out, sign in anonymously again to allow temporary use.
+                await signInAnonymously(auth);
+                currentUserData = null;
+             } catch (error) {
+                console.error("Sign out error:", error);
+             }
+        }
+
+        // --- 4. Profile Management & Firestore ---
+
+        /**
+         * Checks if the user has a permanent username saved in Firestore.
+         */
+        async function checkUserProfile(user) {
+            if (!db || !user) return;
+            
+            const profileRef = userProfilePath(user.uid);
+            toggleLoading('authLoading', true, 'Checking profile...');
+
+            try {
+                const profileSnap = await getDoc(profileRef);
+                
+                if (profileSnap.exists() && profileSnap.data().username) {
+                    currentUserData = profileSnap.data();
+                    console.log("Profile exists. Proceeding to app.");
+                    updateUI(user);
+                } else {
+                    currentUserData = null;
+                    console.log("Profile does not exist. Redirecting to setup.");
+                    showProfileSetupScreen(user.email || '');
+                }
+            } catch (error) {
+                console.error("Error fetching user profile:", error);
+                updateUI(user);
+            } finally {
+                toggleLoading('authLoading', false);
+            }
+        }
+
+        /**
+         * Checks if the chosen username is available globally.
+         * @returns {boolean} True if available, false otherwise.
+         */
+        async function checkUsernameAvailability(username) {
+            if (!db) return false;
+            try {
+                const docRef = usernameUniquenessPath(username);
+                const docSnap = await getDoc(docRef);
+                return !docSnap.exists();
+            } catch (error) {
+                console.error("Error checking username availability:", error);
+                return false; // Assume unavailable on error
+            }
+        }
+
+        /**
+         * Saves the chosen unique username, handles password/email setup, and updates the public uniqueness list.
+         */
+        window.saveUsername = async () => {
+            if (!auth.currentUser) return;
+
+            const usernameInput = document.getElementById('setupUsernameInput');
+            const passwordInput = document.getElementById('setupPasswordInput');
+            const emailInput = document.getElementById('setupEmailInput');
+
+            const rawUsername = usernameInput.value.trim();
+            const password = passwordInput.value;
+            const email = emailInput.value.trim();
+            
+            const errorElement = document.getElementById('usernameError');
+            errorElement.textContent = '';
+            document.getElementById('usernameSuccess').textContent = '';
+            
+            // Validation
+            const username = rawUsername.toLowerCase().replace(/\s/g, ''); 
+            
+            if (username.length < 3 || username.length > 16 || !/^[a-z0-9]+$/.test(username)) {
+                errorElement.textContent = '@user_id must be 3-16 characters long and contain only letters and numbers.';
+                return;
+            }
+            if (password.length < 6) {
+                errorElement.textContent = 'Password must be at least 6 characters long.';
+                return;
+            }
+            if ((auth.currentUser.isAnonymous || !auth.currentUser.email) && !email) {
+                errorElement.textContent = 'Email is required for permanent account registration.';
+                return;
+            }
+
+            toggleLoading('usernameLoading', true, 'Checking ID and securing account...');
+            const uid = auth.currentUser.uid;
+            
+            try {
+                // 1. Check for uniqueness
+                const isAvailable = await checkUsernameAvailability(username);
+                if (!isAvailable) {
+                    errorElement.textContent = `The @${username} already exists. Please use any other ID.`;
+                    toggleLoading('usernameLoading', false);
+                    return;
+                }
+
+                // 2. Handle Credential Upgrade/Setup
+                if (auth.currentUser.isAnonymous) {
+                    // Anonymous -> Permanent Email/Password account
+                    await linkWithEmailAndPassword(auth.currentUser, email, password);
+                } else if (!auth.currentUser.email && email) {
+                    // Link email if signed in via Google without email set or similar cases
+                    await updateEmail(auth.currentUser, email);
+                    await updatePassword(auth.currentUser, password);
+                } else if (password) {
+                     // Existing Email/Password or Google user can update password
+                    await updatePassword(auth.currentUser, password);
+                }
+
+                // 3. Save to Private Profile (User Data)
+                const newProfileData = {
+                    username: username,
+                    uid: uid,
+                    isAnonymous: false, 
+                    email: auth.currentUser.email || email,
+                    avatarUrl: auth.currentUser.photoURL || null,
+                    createdAt: new Date().toISOString()
+                };
+
+                await setDoc(userProfilePath(uid), newProfileData, { merge: true });
+
+                // 4. Save to Public Uniqueness List (Global Check)
+                await setDoc(usernameUniquenessPath(username), { uid: uid });
+
+                currentUserData = newProfileData;
+                document.getElementById('usernameSuccess').textContent = 'Profile saved successfully! Redirecting to dashboard...';
+                
+                setTimeout(() => {
+                    toggleLoading('usernameLoading', false);
+                    updateUI(auth.currentUser); 
+                }, 1000);
+                
+            } catch (error) {
+                toggleLoading('usernameLoading', false);
+                console.error("Error during profile setup:", error);
+                let displayError = error.message;
+                if (error.code === 'auth/email-already-in-use') {
+                    displayError = 'The provided email is already registered. Please sign in or use a different email.';
+                } else if (error.code === 'auth/requires-recent-login') {
+                    displayError = 'Security Check: Please sign out and sign back in to update your email or password.';
+                }
+                errorElement.textContent = `Error: ${displayError}`;
+            }
+        };
+
+        // --- 5. Initialization ---
+
+        window.onload = async () => {
+            try {
+                // Initialize Firebase App and Services
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                
+                // 1. Initial Authentication
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                
+                // Set default auth form view
+                showAuthForm('login');
+
+                // 2. Set up Auth State Listener
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        checkUserProfile(user);
+                    } else {
+                        currentUserData = null;
+                        showScreen('authScreen');
+                    }
+                });
+
+            } catch (error) {
+                console.error("Firebase initialization failed:", error);
+                showScreen('authScreen');
+                toggleLoading('authLoading', true, 'Initialization Failed. Check console.');
+            }
+        };
+
+    </script>
+</body>
+</html>
