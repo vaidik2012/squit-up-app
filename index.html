@@ -1,1840 +1,803 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SQUIT up - Chat Platform</title>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-analytics-compat.js"></script>
-    <style>
-        body {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            height: 100%;
-            overflow-x: hidden;
-        }
-        
-        html, body {
-            height: 100%;
-        }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SQUIT up - Chat Platform</title>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-analytics-compat.js"></script>
+    <style>
+        body {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100%;
+            overflow-x: hidden;
+        }
+        
+        html, body {
+            height: 100%;
+        }
 
-        .container {
-            min-height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-        }
+        .container {
+            min-height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
 
-        .auth-card {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border-radius: 20px;
-            padding: 40px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-            width: 100%;
-            max-width: 400px;
-            text-align: center;
-        }
+        .auth-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
 
-        .logo {
-            font-size: 2.5rem;
-            font-weight: bold;
-            color: #667eea;
-            margin-bottom: 10px;
-        }
+        .logo {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
 
-        .subtitle {
-            color: #666;
-            margin-bottom: 30px;
-            font-size: 1.1rem;
-        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1rem;
+        }
 
-        .form-group {
-            margin-bottom: 20px;
-            text-align: left;
-        }
+        .form-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
 
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            color: #333;
-            font-weight: 500;
-        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #333;
+            font-weight: 500;
+        }
 
-        .form-group input {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #e1e5e9;
-            border-radius: 10px;
-            font-size: 16px;
-            transition: border-color 0.3s;
-            box-sizing: border-box;
-        }
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e1e5e9;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+            box-sizing: border-box;
+        }
 
-        .form-group input:focus {
-            outline: none;
-            border-color: #667eea;
-        }
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
 
-        .btn {
-            width: 100%;
-            padding: 12px;
-            border: none;
-            border-radius: 10px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-            margin-bottom: 15px;
-        }
+        .btn {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 15px;
+        }
 
-        .btn-google {
-            background: #fff;
-            color: #333;
-            border: 2px solid #e1e5e9;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-        }
+        .btn-google {
+            background: #fff;
+            color: #333;
+            border: 2px solid #e1e5e9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
 
-        .btn-google:hover {
-            background: #f8f9fa;
-            transform: translateY(-2px);
-        }
+        .btn-google:hover {
+            background: #f8f9fa;
+            transform: translateY(-2px);
+        }
 
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
 
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
-        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
 
-        .toggle-link {
-            color: #667eea;
-            cursor: pointer;
-            text-decoration: underline;
-            margin-top: 15px;
-            display: inline-block;
-        }
+        .toggle-link {
+            color: #667eea;
+            cursor: pointer;
+            text-decoration: underline;
+            margin-top: 15px;
+            display: inline-block;
+        }
 
-        .dashboard {
-            display: none;
-            height: 100%;
-            background: #36393f;
-            color: white;
-        }
+        .dashboard {
+            display: none;
+            height: 100%;
+            background: #36393f;
+            color: white;
+        }
 
-        .dashboard-header {
-            background: #2f3136;
-            padding: 15px 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid #202225;
-        }
+        .dashboard-header {
+            background: #2f3136;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #202225;
+        }
 
-        .dashboard-content {
-            display: flex;
-            height: calc(100% - 70px);
-        }
+        .dashboard-content {
+            display: flex;
+            height: calc(100% - 70px);
+        }
 
-        .sidebar {
-            width: 240px;
-            background: #2f3136;
-            border-right: 1px solid #202225;
-            display: flex;
-            flex-direction: column;
-        }
+        .server-list {
+            width: 72px;
+            background: #202225;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 12px 0;
+            gap: 8px;
+        }
 
-        .sidebar-section {
-            padding: 15px;
-            border-bottom: 1px solid #202225;
-        }
+        .server-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: #5865f2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: border-radius 0.2s;
+            font-weight: bold;
+            color: white;
+        }
 
-        .sidebar-title {
-            font-size: 12px;
-            font-weight: 600;
-            color: #8e9297;
-            text-transform: uppercase;
-            margin-bottom: 10px;
-        }
+        .server-icon:hover {
+            border-radius: 16px;
+        }
 
-        .sidebar-item {
-            padding: 8px 12px;
-            border-radius: 4px;
-            cursor: pointer;
-            margin-bottom: 2px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
+        .server-icon.active {
+            border-radius: 16px;
+            background: #5865f2;
+        }
 
-        .sidebar-item:hover {
-            background: #393c43;
-        }
+        .add-server {
+            background: #36393f;
+            color: #3ba55c;
+            font-size: 24px;
+        }
 
-        .sidebar-item.active {
-            background: #5865f2;
-        }
+        .add-server:hover {
+            background: #3ba55c;
+            color: white;
+        }
+        
+        .sidebar {
+            width: 240px;
+            background: #2f3136;
+            border-right: 1px solid #202225;
+            display: flex;
+            flex-direction: column;
+        }
 
-        .main-content {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-        }
+        .sidebar-section {
+            padding: 15px;
+            border-bottom: 1px solid #202225;
+        }
 
-        .chat-header {
-            background: #36393f;
-            padding: 15px 20px;
-            border-bottom: 1px solid #202225;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
+        .sidebar-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: #8e9297;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
 
-        .chat-messages {
-            flex: 1;
-            padding: 20px;
-            overflow-y: auto;
-            background: #36393f;
-        }
+        .sidebar-item {
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-bottom: 2px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
 
-        .message {
-            margin-bottom: 15px;
-            display: flex;
-            gap: 15px;
-        }
+        .sidebar-item:hover {
+            background: #393c43;
+        }
 
-        .message-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: #5865f2;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-        }
+        .sidebar-item.active {
+            background: #5865f2;
+        }
 
-        .message-content {
-            flex: 1;
-        }
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
 
-        .message-author {
-            font-weight: 600;
-            margin-bottom: 5px;
-        }
+        .chat-header {
+            background: #36393f;
+            padding: 15px 20px;
+            border-bottom: 1px solid #202225;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
 
-        .message-text {
-            color: #dcddde;
-        }
+        .chat-messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: #36393f;
+        }
 
-        .chat-input {
-            padding: 20px;
-            background: #40444b;
-            border-top: 1px solid #202225;
-        }
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+            gap: 15px;
+        }
 
-        .input-container {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
+        .message-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #5865f2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
 
-        .chat-input input {
-            flex: 1;
-            padding: 12px 15px;
-            border: none;
-            border-radius: 25px;
-            background: #36393f;
-            color: white;
-            font-size: 14px;
-        }
+        .message-content {
+            flex: 1;
+        }
 
-        .chat-input input:focus {
-            outline: none;
-            background: #2f3136;
-        }
+        .message-author {
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
 
-        .emoji-btn, .gif-btn, .sticker-btn {
-            background: none;
-            border: none;
-            color: #b9bbbe;
-            font-size: 20px;
-            cursor: pointer;
-            padding: 8px;
-            border-radius: 4px;
-        }
+        .message-text {
+            color: #dcddde;
+        }
 
-        .emoji-btn:hover, .gif-btn:hover, .sticker-btn:hover {
-            background: #36393f;
-        }
+        .chat-input {
+            padding: 20px;
+            background: #40444b;
+            border-top: 1px solid #202225;
+        }
 
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.8);
-            z-index: 1000;
-        }
+        .input-container {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
 
-        .modal-content {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: #36393f;
-            border-radius: 10px;
-            padding: 30px;
-            width: 90%;
-            max-width: 500px;
-            color: white;
-        }
+        .chat-input input {
+            flex: 1;
+            padding: 12px 15px;
+            border: none;
+            border-radius: 25px;
+            background: #36393f;
+            color: white;
+            font-size: 14px;
+        }
 
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
+        .chat-input input:focus {
+            outline: none;
+            background: #2f3136;
+        }
 
-        .close-btn {
-            background: none;
-            border: none;
-            color: #b9bbbe;
-            font-size: 24px;
-            cursor: pointer;
-        }
+        .emoji-btn, .gif-btn, .sticker-btn {
+            background: none;
+            border: none;
+            color: #b9bbbe;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 4px;
+        }
 
-        .user-profile {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            cursor: pointer;
-            padding: 8px;
-            border-radius: 4px;
-        }
+        .emoji-btn:hover, .gif-btn:hover, .sticker-btn:hover {
+            background: #36393f;
+        }
 
-        .user-profile:hover {
-            background: #393c43;
-        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+        }
 
-        .user-avatar {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            background: #5865f2;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            font-size: 14px;
-        }
+        .modal-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #36393f;
+            border-radius: 10px;
+            padding: 30px;
+            width: 90%;
+            max-width: 500px;
+            color: white;
+        }
 
-        .status-indicator {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: #3ba55c;
-            position: absolute;
-            bottom: 0;
-            right: 0;
-            border: 2px solid #2f3136;
-        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
 
-        .friend-request {
-            background: #2f3136;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 10px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
+        .close-btn {
+            background: none;
+            border: none;
+            color: #b9bbbe;
+            font-size: 24px;
+            cursor: pointer;
+        }
 
-        .btn-small {
-            padding: 6px 12px;
-            font-size: 12px;
-            border-radius: 4px;
-            border: none;
-            cursor: pointer;
-            margin-left: 5px;
-        }
+        .user-profile {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 4px;
+        }
 
-        .btn-accept {
-            background: #3ba55c;
-            color: white;
-        }
+        .user-profile:hover {
+            background: #393c43;
+        }
 
-        .btn-decline {
-            background: #ed4245;
-            color: white;
-        }
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #5865f2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
+        }
 
-        .server-list {
-            width: 72px;
-            background: #202225;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 12px 0;
-            gap: 8px;
-        }
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #3ba55c;
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            border: 2px solid #2f3136;
+        }
 
-        .server-icon {
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            background: #5865f2;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: border-radius 0.2s;
-            font-weight: bold;
-            color: white;
-        }
+        .friend-request {
+            background: #2f3136;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
 
-        .server-icon:hover {
-            border-radius: 16px;
-        }
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 12px;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            margin-left: 5px;
+        }
 
-        .server-icon.active {
-            border-radius: 16px;
-            background: #5865f2;
-        }
+        .btn-accept {
+            background: #3ba55c;
+            color: white;
+        }
 
-        .add-server {
-            background: #36393f;
-            color: #3ba55c;
-            font-size: 24px;
-        }
+        .btn-decline {
+            background: #ed4245;
+            color: white;
+        }
 
-        .add-server:hover {
-            background: #3ba55c;
-            color: white;
-        }
+        @media (max-width: 768px) {
+            .dashboard-content {
+                flex-direction: column;
+            }
+            
+            .sidebar {
+                width: 100%;
+                height: auto;
+                order: 2;
+            }
+            
+            .server-list {
+                width: 100%;
+                flex-direction: row;
+                height: auto;
+                padding: 8px;
+                overflow-x: auto;
+            }
+        }
 
-        @media (max-width: 768px) {
-            .dashboard-content {
-                flex-direction: column;
-            }
-            
-            .sidebar {
-                width: 100%;
-                height: auto;
-                order: 2;
-            }
-            
-            .server-list {
-                width: 100%;
-                flex-direction: row;
-                height: auto;
-                padding: 8px;
-                overflow-x: auto;
-            }
-        }
+        .hidden {
+            display: none !important;
+        }
 
-        .hidden {
-            display: none !important;
-        }
+        .profile-banner {
+            height: 120px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px 10px 0 0;
+            position: relative;
+            cursor: pointer;
+        }
 
-        .profile-banner {
-            height: 120px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 10px 10px 0 0;
-            position: relative;
-            cursor: pointer;
-        }
+        .profile-avatar-large {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: #5865f2;
+            position: absolute;
+            bottom: -40px;
+            left: 20px;
+            border: 6px solid #36393f;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 24px;
+            cursor: pointer;
+        }
 
-        .profile-avatar-large {
-            width: 80px;
-            height: 80px;
-            border-radius: 50%;
-            background: #5865f2;
-            position: absolute;
-            bottom: -40px;
-            left: 20px;
-            border: 6px solid #36393f;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            font-size: 24px;
-            cursor: pointer;
-        }
+        .profile-info {
+            padding: 50px 20px 20px;
+        }
 
-        .profile-info {
-            padding: 50px 20px 20px;
-        }
+        .profile-username {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
 
-        .profile-username {
-            font-size: 20px;
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
+        .profile-bio {
+            color: #b9bbbe;
+            margin-bottom: 15px;
+        }
 
-        .profile-bio {
-            color: #b9bbbe;
-            margin-bottom: 15px;
-        }
+        .profile-status {
+            background: #2f3136;
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 14px;
+        }
 
-        .profile-status {
-            background: #2f3136;
-            padding: 10px;
-            border-radius: 6px;
-            font-size: 14px;
-        }
-    </style>
+        /* New CSS for @user_id input overlay */
+        .user-id-input-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        .user-id-input-container::before {
+            content: '@';
+            position: absolute;
+            left: 12px;
+            font-size: 16px;
+            color: #8e9297;
+            pointer-events: none;
+        }
+        .user-id-input-container input {
+            padding-left: 25px !important; /* Make space for the @ symbol */
+        }
+
+    </style>
 </head>
 <body>
-    <!-- Authentication Page -->
-    <div id="authPage" class="container">
-        <div class="auth-card">
-            <div class="logo">SQUIT up</div>
-            <div class="subtitle">Connect with friends and communities</div>
-            
-            <!-- Login Form -->
-            <div id="loginForm">
-                <button class="btn btn-google" onclick="signInWithGoogle()">
-                    <span>🔍</span> Continue with Google
-                </button>
-                <div style="margin-top: 20px; padding: 15px; background: rgba(102, 126, 234, 0.1); border-radius: 10px; font-size: 14px; color: #333;">
-                    <strong>How it works:</strong><br>
-                    • Sign in with your Google account<br>
-                    • If you're new, choose your unique @user_id<br>
-                    • If you have an account, you'll go straight to chat!
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Setup User ID Modal -->
-    <div id="setupModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Welcome to SQUIT up! 🎉</h3>
-            </div>
-            <div style="margin-bottom: 20px; color: #b9bbbe; text-align: center;">
-                Choose your unique @user_id so friends can find and add you!
-            </div>
-            <div class="form-group">
-                <label for="newUserId">Choose your @user_id</label>
-                <input type="text" id="newUserId" placeholder="Enter unique @user_id (e.g., @john_doe)">
-            </div>
-            <button class="btn btn-primary" onclick="completeSetup()">Join SQUIT up</button>
-        </div>
-    </div>
-
-    <!-- Dashboard -->
-    <div id="dashboard" class="dashboard">
-        <!-- Server List -->
-        <div class="server-list">
-            <div class="server-icon active" onclick="selectServer('home')">H</div>
-            <div class="server-icon add-server" onclick="showCreateServerModal()">+</div>
-            <div id="serverList"></div>
-        </div>
-
-        <!-- Main Dashboard Content -->
-        <div class="dashboard-content">
-            <!-- Sidebar -->
-            <div class="sidebar">
-                <div class="sidebar-section">
-                    <div class="sidebar-title">Direct Messages</div>
-                    <div id="dmList">
-                        <div style="text-align: center; color: #8e9297; padding: 20px; font-size: 14px;">
-                            Add friends to start chatting!
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="sidebar-section">
-                    <div class="sidebar-title">Friends</div>
-                    <div class="sidebar-item" onclick="showAddFriendModal()">
-                        <span>+</span> Add Friend
-                    </div>
-                    <div class="sidebar-item" onclick="showFriendRequests()">
-                        <span>📬</span> Friend Requests
-                    </div>
-                    <div id="friendsList"></div>
-                </div>
-
-                <!-- User Profile Section -->
-                <div style="margin-top: auto; padding: 15px; border-top: 1px solid #202225;">
-                    <div class="user-profile" onclick="showProfileModal()">
-                        <div style="position: relative;">
-                            <div class="user-avatar" id="userAvatar">U</div>
-                            <div class="status-indicator"></div>
-                        </div>
-                        <div>
-                            <div style="font-size: 14px; font-weight: 600;" id="userName">User</div>
-                            <div style="font-size: 12px; color: #b9bbbe;" id="userStatus">Online</div>
-                        </div>
-                        <button style="margin-left: auto; background: none; border: none; color: #b9bbbe; cursor: pointer; font-size: 18px; padding: 8px;" onclick="logout()" title="Sign Out">🚪</button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Main Content -->
-            <div class="main-content">
-                <div class="chat-header">
-                    <span id="currentChannelIcon">#</span>
-                    <span id="currentChannel">Select a friend to start chatting</span>
-                </div>
-                
-                <div class="chat-messages" id="chatMessages">
-                    <div style="text-align: center; color: #b9bbbe; padding: 40px;">
-                        Welcome to SQUIT up! 🎉<br>
-                        Add friends to start chatting with them directly.
-                    </div>
-                </div>
-                
-                <div class="chat-input">
-                    <div class="input-container">
-                        <button class="emoji-btn" onclick="showEmojiPicker()">😀</button>
-                        <button class="gif-btn" onclick="showGifPicker()">GIF</button>
-                        <button class="sticker-btn" onclick="showStickerPicker()">🎭</button>
-                        <input type="text" id="messageInput" placeholder="Select a friend to chat" onkeypress="handleMessageInput(event)" disabled>
-                        <button class="btn btn-primary" style="width: auto; margin: 0; padding: 8px 16px;" onclick="sendMessage()" disabled>Send</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Create Server Modal -->
-    <div id="createServerModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Create Your Server</h3>
-                <button class="close-btn" onclick="closeModal('createServerModal')">&times;</button>
-            </div>
-            <div class="form-group">
-                <label for="serverName">Server Name</label>
-                <input type="text" id="serverName" placeholder="Enter server name">
-            </div>
-            <div class="form-group">
-                <label>Server Type</label>
-                <select id="serverType" style="width: 100%; padding: 12px; border: 2px solid #e1e5e9; border-radius: 10px; background: white;">
-                    <option value="text">Text Channels Only</option>
-                    <option value="voice">Text + Voice Channels</option>
-                </select>
-            </div>
-            <button class="btn btn-primary" onclick="createServer()">Create Server</button>
-        </div>
-    </div>
-
-    <!-- Add Friend Modal -->
-    <div id="addFriendModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Add Friend</h3>
-                <button class="close-btn" onclick="closeModal('addFriendModal')">&times;</button>
-            </div>
-            <div class="form-group">
-                <label for="friendUserId">Friend's @user_id</label>
-                <input type="text" id="friendUserId" placeholder="Enter @user_id">
-            </div>
-            <button class="btn btn-primary" onclick="sendFriendRequest()">Send Friend Request</button>
-        </div>
-    </div>
-
-    <!-- Friend Requests Modal -->
-    <div id="friendRequestsModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Friend Requests</h3>
-                <button class="close-btn" onclick="closeModal('friendRequestsModal')">&times;</button>
-            </div>
-            <div id="friendRequestsList">
-                <div style="text-align: center; color: #b9bbbe; padding: 20px;">
-                    No friend requests yet. Share your @user_id with friends to get started!
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Profile Modal -->
-    <div id="profileModal" class="modal">
-        <div class="modal-content" style="max-width: 600px;">
-            <div class="modal-header">
-                <h3>User Profile</h3>
-                <button class="close-btn" onclick="closeModal('profileModal')">&times;</button>
-            </div>
-            <div class="profile-banner" onclick="changeBanner()">
-                <div class="profile-avatar-large" id="profileAvatarLarge" onclick="changeAvatar(event)">U</div>
-            </div>
-            <div class="profile-info">
-                <div class="profile-username" id="profileUsername">Username</div>
-                <div style="color: #8e9297; font-size: 16px; margin-bottom: 10px;" id="profileUserId">@user_id</div>
-                <div class="profile-bio" id="profileBio">Click to add a bio...</div>
-                <div class="profile-status" id="profileStatus">Online</div>
-                <button class="btn btn-primary" style="margin-top: 15px;" onclick="editProfile()">Edit Profile</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Edit Profile Modal -->
-    <div id="editProfileModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Edit Profile</h3>
-                <button class="close-btn" onclick="closeModal('editProfileModal')">&times;</button>
-            </div>
-            <div class="form-group">
-                <label for="editUserId">@user_id</label>
-                <input type="text" id="editUserId" placeholder="Enter new @user_id">
-            </div>
-            <div class="form-group">
-                <label for="editBio">Bio</label>
-                <textarea id="editBio" style="width: 100%; padding: 12px; border: 2px solid #e1e5e9; border-radius: 10px; min-height: 80px; resize: vertical; box-sizing: border-box;" placeholder="Tell us about yourself..."></textarea>
-            </div>
-            <div class="form-group">
-                <label for="editStatus">Status</label>
-                <input type="text" id="editStatus" placeholder="What's your status?">
-            </div>
-            <div class="form-group">
-                <label>Profile Picture (URL or GIF)</label>
-                <input type="url" id="editAvatar" placeholder="Enter image/GIF URL">
-            </div>
-            <div class="form-group">
-                <label>Banner (URL or GIF)</label>
-                <input type="url" id="editBanner" placeholder="Enter banner image/GIF URL">
-            </div>
-            <button class="btn btn-primary" onclick="saveProfile()">Save Changes</button>
-        </div>
-    </div>
-
-    <!-- Emoji Picker Modal -->
-    <div id="emojiModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Choose Emoji</h3>
-                <button class="close-btn" onclick="closeModal('emojiModal')">&times;</button>
-            </div>
-            <div style="display: grid; grid-template-columns: repeat(8, 1fr); gap: 10px; max-height: 300px; overflow-y: auto;">
-                <span class="emoji-option" onclick="insertEmoji('😀')">😀</span>
-                <span class="emoji-option" onclick="insertEmoji('😂')">😂</span>
-                <span class="emoji-option" onclick="insertEmoji('😍')">😍</span>
-                <span class="emoji-option" onclick="insertEmoji('🤔')">🤔</span>
-                <span class="emoji-option" onclick="insertEmoji('😎')">😎</span>
-                <span class="emoji-option" onclick="insertEmoji('😭')">😭</span>
-                <span class="emoji-option" onclick="insertEmoji('😱')">😱</span>
-                <span class="emoji-option" onclick="insertEmoji('🔥')">🔥</span>
-                <span class="emoji-option" onclick="insertEmoji('💯')">💯</span>
-                <span class="emoji-option" onclick="insertEmoji('❤️')">❤️</span>
-                <span class="emoji-option" onclick="insertEmoji('👍')">👍</span>
-                <span class="emoji-option" onclick="insertEmoji('👎')">👎</span>
-                <span class="emoji-option" onclick="insertEmoji('🎉')">🎉</span>
-                <span class="emoji-option" onclick="insertEmoji('🚀')">🚀</span>
-                <span class="emoji-option" onclick="insertEmoji('⭐')">⭐</span>
-                <span class="emoji-option" onclick="insertEmoji('🌟')">🌟</span>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        // Firebase Configuration
-        const firebaseConfig = {
-            apiKey: "AIzaSyB1zvVHaBrbzX5iA9fBVNGa_3sY1-WCSpY",
-            authDomain: "squit-up-auth.firebaseapp.com",
-            projectId: "squit-up-auth",
-            storageBucket: "squit-up-auth.firebasestorage.app",
-            messagingSenderId: "503910898443",
-            appId: "1:503910898443:web:c5a56eb24cd4f183d8600e",
-            measurementId: "G-K4LHFHSNJC"
-        };
-
-        // Initialize Firebase
-        firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
-        const db = firebase.firestore();
-
-        // Global variables
-        let currentUser = null;
-        let currentChannel = 'general';
-        let messages = [];
-        let friends = [];
-        let servers = [];
-
-        // Check if user is already logged in
-        auth.onAuthStateChanged((user) => {
-            if (user) {
-                checkUserProfile(user);
-            } else {
-                showAuthPage();
-            }
-        });
-
-        function showAuthPage() {
-            document.getElementById('authPage').style.display = 'flex';
-            document.getElementById('dashboard').style.display = 'none';
-        }
-
-        function showDashboard() {
-            document.getElementById('authPage').style.display = 'none';
-            document.getElementById('dashboard').style.display = 'block';
-            loadUserData();
-        }
-
-        async function signInWithGoogle() {
-            const provider = new firebase.auth.GoogleAuthProvider();
-            try {
-                console.log('Starting Google sign in...');
-                const result = await auth.signInWithPopup(provider);
-                const user = result.user;
-                console.log('Google sign in successful:', user.email);
-                await checkUserProfile(user);
-            } catch (error) {
-                console.error('Google sign in error:', error);
-                
-                // Show user-friendly error message
-                let errorMessage = 'Unable to sign in with Google. ';
-                if (error.code === 'auth/popup-blocked') {
-                    errorMessage += 'Please allow popups for this site and try again.';
-                } else if (error.code === 'auth/popup-closed-by-user') {
-                    errorMessage += 'Sign-in was cancelled. Please try again.';
-                } else {
-                    errorMessage += 'Please check your internet connection and try again.';
-                }
-                
-                alert(errorMessage);
-            }
-        }
-
-        async function checkUserProfile(user) {
-            // Only proceed if user is properly authenticated with Google
-            if (!user || !user.email || !user.uid) {
-                console.error('Invalid user object, redirecting to auth');
-                showAuthPage();
-                return;
-            }
-
-            try {
-                console.log('Checking user profile for authenticated user:', user.uid, user.email);
-                
-                // First, try to find user by Firebase UID (most reliable)
-                const userDoc = await db.collection('users').doc(user.uid).get();
-                if (userDoc.exists) {
-                    currentUser = { ...userDoc.data(), uid: user.uid };
-                    console.log('Existing user found by UID, logging in:', currentUser);
-                    showDashboard();
-                    return;
-                }
-                
-                // Critical: Check if ANY account exists with this email (prevent duplicates)
-                const emailQuery = await db.collection('users').where('email', '==', user.email).get();
-                if (!emailQuery.empty) {
-                    // User exists with this email - log them into their existing account
-                    const userDoc = emailQuery.docs[0];
-                    const userData = userDoc.data();
-                    
-                    // Update the document with the correct UID if needed
-                    await db.collection('users').doc(user.uid).set(userData);
-                    // Delete the old document if it has a different ID
-                    if (userDoc.id !== user.uid) {
-                        await userDoc.ref.delete();
-                    }
-                    
-                    currentUser = { ...userData, uid: user.uid };
-                    console.log('Existing account found with this Gmail, logging in:', currentUser);
-                    showDashboard();
-                    
-                    // Show message about existing account
-                    setTimeout(() => {
-                        alert(`Welcome back! 🎉\n\nI found your existing account "${userData.userId}" linked to ${user.email}.\n\nYou've been logged into your previous account automatically!`);
-                    }, 500);
-                    return;
-                }
-                
-                // Check localStorage for previously created account (prevents re-creation after refresh)
-                const savedUserData = localStorage.getItem('squitup_user_' + user.uid);
-                if (savedUserData) {
-                    try {
-                        const userData = JSON.parse(savedUserData);
-                        currentUser = { ...userData, uid: user.uid };
-                        console.log('Found saved user data in localStorage, logging in:', currentUser);
-                        showDashboard();
-                        
-                        // Try to sync with database in background
-                        db.collection('users').doc(user.uid).set(userData).catch(error => {
-                            console.warn('Background sync failed:', error);
-                        });
-                        
-                        setTimeout(() => {
-                            alert(`Welcome back, ${userData.userId}! 🎉\n\nYou've been automatically logged into your account.`);
-                        }, 500);
-                        return;
-                    } catch (e) {
-                        console.warn('Invalid saved user data, proceeding with new setup');
-                        localStorage.removeItem('squitup_user_' + user.uid);
-                    }
-                }
-                
-                // New user - show setup modal (only after successful Google auth)
-                console.log('New authenticated user detected, showing setup modal');
-                currentUser = { 
-                    uid: user.uid, 
-                    email: user.email, 
-                    displayName: user.displayName,
-                    photoURL: user.photoURL
-                };
-                document.getElementById('authPage').style.display = 'none';
-                document.getElementById('setupModal').style.display = 'block';
-                
-            } catch (error) {
-                console.error('Error checking user profile:', error);
-                
-                // Check localStorage as fallback even if database fails
-                const savedUserData = localStorage.getItem('squitup_user_' + user.uid);
-                if (savedUserData && user.email && user.uid) {
-                    try {
-                        const userData = JSON.parse(savedUserData);
-                        currentUser = { ...userData, uid: user.uid };
-                        console.log('Database error, but found localStorage data, logging in:', currentUser);
-                        showDashboard();
-                        
-                        setTimeout(() => {
-                            alert(`Welcome back, ${userData.userId}! 🎉\n\nYou've been automatically logged into your account.`);
-                        }, 500);
-                        return;
-                    } catch (e) {
-                        console.warn('Invalid saved user data');
-                        localStorage.removeItem('squitup_user_' + user.uid);
-                    }
-                }
-                
-                // Only proceed with setup if user is properly authenticated
-                if (user.email && user.uid) {
-                    console.log('Database error, but user is authenticated, proceeding with new user setup');
-                    currentUser = { 
-                        uid: user.uid, 
-                        email: user.email, 
-                        displayName: user.displayName,
-                        photoURL: user.photoURL
-                    };
-                    document.getElementById('authPage').style.display = 'none';
-                    document.getElementById('setupModal').style.display = 'block';
-                } else {
-                    console.error('User not properly authenticated, staying on auth page');
-                    showAuthPage();
-                }
-            }
-        }
-
-        async function completeSetup() {
-            const userIdInput = document.getElementById('newUserId');
-            let userId = userIdInput.value.trim();
-
-            if (!userId) {
-                alert('Please enter your @user_id');
-                return;
-            }
-
-            // Auto-add @ if user forgot it
-            if (!userId.startsWith('@')) {
-                userId = '@' + userId;
-                userIdInput.value = userId; // Update the input field
-            }
-
-            // Basic validation for user ID format
-            if (!/^@[a-zA-Z0-9_]+$/.test(userId)) {
-                alert('User ID can only contain letters, numbers, and underscores after the @');
-                return;
-            }
-
-            // Get button reference properly
-            const joinButton = document.querySelector('#setupModal .btn-primary');
-            joinButton.disabled = true;
-            joinButton.textContent = 'Checking availability...';
-            joinButton.style.opacity = '0.7';
-
-            try {
-                console.log('Checking if userId is available:', userId);
-                
-                // Check if this @user_id is already taken by ANY user
-                const userIdQuery = await db.collection('users').where('userId', '==', userId).get();
-                if (!userIdQuery.empty) {
-                    // This @user_id is already taken
-                    joinButton.disabled = false;
-                    joinButton.textContent = 'Join SQUIT up';
-                    joinButton.style.opacity = '1';
-                    alert(`Sorry! The @user_id "${userId}" is already taken by another user.\n\nPlease choose a different @user_id and try again.`);
-                    return;
-                }
-                
-                joinButton.textContent = 'Creating Account...';
-                
-                // Force immediate processing without delays
-                setTimeout(async () => {
-                    try {
-                        console.log('Completing setup for user:', currentUser.uid, 'with userId:', userId);
-                        
-                        // Create user profile immediately
-                        const userProfile = {
-                            userId: userId,
-                            email: currentUser.email,
-                            displayName: currentUser.displayName || userId.substring(1), // Remove @ for display name
-                            bio: '',
-                            status: 'Online',
-                            avatar: currentUser.photoURL || '',
-                            banner: '',
-                            createdAt: new Date().toISOString()
-                        };
-
-                        // Update current user and proceed immediately
-                        currentUser = { ...userProfile, uid: currentUser.uid };
-                        
-                        // Save to localStorage immediately for persistence
-                        localStorage.setItem('squitup_user_' + currentUser.uid, JSON.stringify(userProfile));
-                        
-                        // Hide modal and show dashboard immediately
-                        document.getElementById('setupModal').style.display = 'none';
-                        showDashboard();
-                        console.log('Setup completed successfully for:', userId);
-                        
-                        // Try to save to Firestore in background (don't wait for it)
-                        db.collection('users').doc(currentUser.uid).set(userProfile).catch(error => {
-                            console.warn('Background save failed, but user is already logged in:', error);
-                        });
-                        
-                        // Show success message after dashboard loads
-                        setTimeout(() => {
-                            alert(`Welcome to SQUIT up, ${userId}! 🎉\n\nYour account has been created successfully. You can now start chatting and adding friends!`);
-                        }, 100);
-                        
-                    } catch (error) {
-                        console.error('Error completing setup:', error);
-                        
-                        // Always proceed to dashboard even if there's an error
-                        const userProfile = {
-                            userId: userId,
-                            email: currentUser.email,
-                            displayName: currentUser.displayName || userId.substring(1),
-                            bio: '',
-                            status: 'Online',
-                            avatar: currentUser.photoURL || '',
-                            banner: ''
-                        };
-                        
-                        currentUser = { ...userProfile, uid: currentUser.uid };
-                        
-                        // Save to localStorage for persistence
-                        localStorage.setItem('squitup_user_' + currentUser.uid, JSON.stringify(userProfile));
-                        
-                        document.getElementById('setupModal').style.display = 'none';
-                        showDashboard();
-                        
-                        console.log('Setup completed with fallback for:', userId);
-                        
-                        setTimeout(() => {
-                            alert(`Welcome to SQUIT up, ${userId}! 🎉\n\nYour account has been created successfully. You can now start chatting and adding friends!`);
-                        }, 100);
-                    }
-                }, 100); // Very short delay just to show the "Creating Account..." text briefly
-                
-            } catch (error) {
-                console.error('Error checking userId availability:', error);
-                
-                // If database check fails, proceed anyway but warn user
-                joinButton.textContent = 'Creating Account...';
-                
-                setTimeout(async () => {
-                    const userProfile = {
-                        userId: userId,
-                        email: currentUser.email,
-                        displayName: currentUser.displayName || userId.substring(1),
-                        bio: '',
-                        status: 'Online',
-                        avatar: currentUser.photoURL || '',
-                        banner: ''
-                    };
-                    
-                    currentUser = { ...userProfile, uid: currentUser.uid };
-                    localStorage.setItem('squitup_user_' + currentUser.uid, JSON.stringify(userProfile));
-                    
-                    document.getElementById('setupModal').style.display = 'none';
-                    showDashboard();
-                    
-                    setTimeout(() => {
-                        alert(`Welcome to SQUIT up, ${userId}! 🎉\n\nYour account has been created successfully. You can now start chatting and adding friends!`);
-                    }, 100);
-                }, 100);
-            }
-        }
-
-
-
-        function loadUserData() {
-            if (currentUser) {
-                document.getElementById('userName').textContent = currentUser.displayName || currentUser.userId;
-                document.getElementById('userStatus').textContent = currentUser.status || 'Online';
-                document.getElementById('userAvatar').textContent = (currentUser.displayName || currentUser.userId).charAt(0).toUpperCase();
-                
-                // Load profile modal data
-                document.getElementById('profileUsername').textContent = currentUser.displayName || currentUser.userId;
-                document.getElementById('profileUserId').textContent = currentUser.userId || '@user_id';
-                document.getElementById('profileBio').textContent = currentUser.bio || 'Click to add a bio...';
-                document.getElementById('profileStatus').textContent = currentUser.status || 'Online';
-                document.getElementById('profileAvatarLarge').textContent = (currentUser.displayName || currentUser.userId).charAt(0).toUpperCase();
-                
-                // Load friends
-                loadFriends();
-            }
-        }
-
-        async function loadFriends() {
-            const friendsList = document.getElementById('friendsList');
-            const dmList = document.getElementById('dmList');
-            
-            try {
-                // Get friendships for current user
-                const friendshipsQuery = await db.collection('friendships')
-                    .where('users', 'array-contains', currentUser.uid)
-                    .get();
-
-                if (friendshipsQuery.empty) {
-                    friendsList.innerHTML = `
-                        <div style="text-align: center; color: #8e9297; padding: 10px; font-size: 12px;">
-                            No friends yet
-                        </div>
-                    `;
-                    dmList.innerHTML = `
-                        <div style="text-align: center; color: #8e9297; padding: 20px; font-size: 14px;">
-                            Add friends to start chatting!
-                        </div>
-                    `;
-                    return;
-                }
-
-                let friendsHTML = '';
-                let dmHTML = '';
-                
-                friendshipsQuery.forEach(doc => {
-                    const friendship = doc.data();
-                    const friendUid = friendship.users.find(uid => uid !== currentUser.uid);
-                    const friendUserId = friendship.userIds.find(id => id !== currentUser.userId);
-                    
-                    friendsHTML += `
-                        <div class="sidebar-item" onclick="selectFriend('${friendUid}', '${friendUserId}')">
-                            <div class="user-avatar" style="width: 24px; height: 24px; font-size: 12px;">
-                                ${friendUserId.charAt(1).toUpperCase()}
-                            </div>
-                            ${friendUserId}
-                        </div>
-                    `;
-                    
-                    dmHTML += `
-                        <div class="sidebar-item" onclick="selectFriend('${friendUid}', '${friendUserId}')">
-                            <div class="user-avatar" style="width: 24px; height: 24px; font-size: 12px;">
-                                ${friendUserId.charAt(1).toUpperCase()}
-                            </div>
-                            ${friendUserId}
-                        </div>
-                    `;
-                });
-
-                friendsList.innerHTML = friendsHTML;
-                dmList.innerHTML = dmHTML;
-
-            } catch (error) {
-                console.error('Error loading friends:', error);
-                friendsList.innerHTML = `
-                    <div style="text-align: center; color: #ed4245; padding: 10px; font-size: 12px;">
-                        Error loading friends
-                    </div>
-                `;
-            }
-        }
-
-        function selectFriend(friendUid, friendUserId) {
-            currentChannel = friendUserId;
-            document.getElementById('currentChannel').textContent = `Chat with ${friendUserId}`;
-            document.getElementById('currentChannelIcon').textContent = '@';
-            
-            // Enable chat input
-            document.getElementById('messageInput').disabled = false;
-            document.getElementById('messageInput').placeholder = `Message ${friendUserId}`;
-            document.querySelector('.chat-input .btn-primary').disabled = false;
-            
-            // Update active friend
-            document.querySelectorAll('.sidebar-item').forEach(item => {
-                item.classList.remove('active');
-            });
-            event.target.classList.add('active');
-            
-            // Clear chat messages for now (you can implement message loading later)
-            document.getElementById('chatMessages').innerHTML = `
-                <div style="text-align: center; color: #b9bbbe; padding: 40px;">
-                    Start chatting with ${friendUserId}! 💬
-                </div>
-            `;
-        }
-
-        function logout() {
-            auth.signOut().then(() => {
-                // Clear localStorage when user logs out
-                if (currentUser && currentUser.uid) {
-                    localStorage.removeItem('squitup_user_' + currentUser.uid);
-                }
-                currentUser = null;
-                showAuthPage();
-            });
-        }
-
-
-
-        function selectChannel(channel) {
-            currentChannel = channel;
-            document.getElementById('currentChannel').textContent = channel;
-            
-            // Update active channel
-            document.querySelectorAll('.sidebar-item').forEach(item => {
-                item.classList.remove('active');
-            });
-            event.target.classList.add('active');
-            
-            loadMessages();
-        }
-
-        function loadMessages() {
-            // Simulate loading messages for the channel
-            const chatMessages = document.getElementById('chatMessages');
-            // Keep existing messages and add channel-specific ones
-        }
-
-        function handleMessageInput(event) {
-            if (event.key === 'Enter') {
-                sendMessage();
-            }
-        }
-
-        function sendMessage() {
-            const messageInput = document.getElementById('messageInput');
-            const message = messageInput.value.trim();
-            
-            if (!message) return;
-
-            const chatMessages = document.getElementById('chatMessages');
-            const messageDiv = document.createElement('div');
-            messageDiv.className = 'message';
-            messageDiv.innerHTML = `
-                <div class="message-avatar">${(currentUser.displayName || currentUser.userId).charAt(0).toUpperCase()}</div>
-                <div class="message-content">
-                    <div class="message-author">${currentUser.displayName || currentUser.userId}</div>
-                    <div class="message-text">${message}</div>
-                </div>
-            `;
-            
-            chatMessages.appendChild(messageDiv);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-            messageInput.value = '';
-        }
-
-        function showCreateServerModal() {
-            document.getElementById('createServerModal').style.display = 'block';
-        }
-
-        function createServer() {
-            const serverName = document.getElementById('serverName').value.trim();
-            const serverType = document.getElementById('serverType').value;
-            
-            if (!serverName) {
-                alert('Please enter a server name');
-                return;
-            }
-
-            const serverList = document.getElementById('serverList');
-            const serverIcon = document.createElement('div');
-            serverIcon.className = 'server-icon';
-            serverIcon.textContent = serverName.charAt(0).toUpperCase();
-            serverIcon.onclick = () => selectServer(serverName);
-            
-            serverList.appendChild(serverIcon);
-            
-            closeModal('createServerModal');
-            alert(`Server "${serverName}" created successfully!`);
-        }
-
-        function selectServer(serverName) {
-            document.querySelectorAll('.server-icon').forEach(icon => {
-                icon.classList.remove('active');
-            });
-            event.target.classList.add('active');
-        }
-
-        function showAddFriendModal() {
-            document.getElementById('addFriendModal').style.display = 'block';
-        }
-
-        async function sendFriendRequest() {
-            const friendUserIdInput = document.getElementById('friendUserId');
-            let friendUserId = friendUserIdInput.value.trim();
-            
-            if (!friendUserId) {
-                alert('Please enter a @user_id');
-                return;
-            }
-
-            // Auto-add @ if user forgot it
-            if (!friendUserId.startsWith('@')) {
-                friendUserId = '@' + friendUserId;
-                friendUserIdInput.value = friendUserId;
-            }
-
-            // Don't allow sending request to yourself
-            if (friendUserId === currentUser.userId) {
-                alert('You cannot send a friend request to yourself!');
-                return;
-            }
-
-            const sendButton = document.querySelector('#addFriendModal .btn-primary');
-            sendButton.disabled = true;
-            sendButton.textContent = 'Searching...';
-
-            try {
-                console.log('Searching for user:', friendUserId);
-                console.log('Current user:', currentUser.userId);
-                
-                // COMPREHENSIVE USER SEARCH - Check EVERYWHERE
-                let targetUser = null;
-                let targetUserData = null;
-                
-                // Method 1: Search Firestore database
-                try {
-                    console.log('Searching Firestore database...');
-                    const userQuery = await db.collection('users').where('userId', '==', friendUserId).get();
-                    
-                    if (!userQuery.empty) {
-                        targetUser = userQuery.docs[0];
-                        targetUserData = targetUser.data();
-                        console.log('✅ Found user in Firestore database:', targetUserData);
-                    } else {
-                        console.log('❌ User not found in Firestore database');
-                    }
-                } catch (dbError) {
-                    console.warn('⚠️ Firestore search failed:', dbError);
-                }
-                
-                // Method 2: Search ALL localStorage entries (including other browser sessions)
-                if (!targetUser) {
-                    console.log('Searching ALL localStorage entries...');
-                    
-                    // Get all localStorage keys
-                    const allKeys = [];
-                    for (let i = 0; i < localStorage.length; i++) {
-                        allKeys.push(localStorage.key(i));
-                    }
-                    
-                    console.log('Found localStorage keys:', allKeys);
-                    
-                    for (const key of allKeys) {
-                        if (key && key.startsWith('squitup_user_')) {
-                            try {
-                                const userData = JSON.parse(localStorage.getItem(key));
-                                console.log(`Checking localStorage entry ${key}:`, userData);
-                                
-                                if (userData && userData.userId === friendUserId) {
-                                    // Found the user in localStorage!
-                                    const uid = key.replace('squitup_user_', '');
-                                    targetUserData = userData;
-                                    targetUser = { id: uid };
-                                    console.log('✅ Found user in localStorage:', userData);
-                                    break;
-                                }
-                            } catch (e) {
-                                console.warn(`Invalid localStorage entry ${key}:`, e);
-                            }
-                        }
-                    }
-                    
-                    if (!targetUser) {
-                        console.log('❌ User not found in localStorage either');
-                    }
-                }
-                
-                // Method 3: Try to find user by searching all possible storage locations
-                if (!targetUser) {
-                    console.log('Trying alternative search methods...');
-                    
-                    // Check if user might exist but with different casing
-                    const lowerFriendId = friendUserId.toLowerCase();
-                    
-                    try {
-                        const allUsersQuery = await db.collection('users').get();
-                        allUsersQuery.forEach(doc => {
-                            const userData = doc.data();
-                            if (userData.userId && userData.userId.toLowerCase() === lowerFriendId) {
-                                targetUser = doc;
-                                targetUserData = userData;
-                                console.log('✅ Found user with case-insensitive search:', userData);
-                            }
-                        });
-                    } catch (e) {
-                        console.warn('Case-insensitive search failed:', e);
-                    }
-                }
-                
-                // If STILL not found, show detailed error
-                if (!targetUser) {
-                    console.log('🔍 DETAILED SEARCH RESULTS:');
-                    console.log('- Searched Firestore database: ❌');
-                    console.log('- Searched localStorage: ❌');
-                    console.log('- Searched case-insensitive: ❌');
-                    console.log('- Target @user_id:', friendUserId);
-                    
-                    // Show helpful error message
-                    alert(`❌ User ${friendUserId} not found!\n\n🔍 Make sure:\n• The @user_id is spelled correctly\n• The user has created their account\n• They're using the exact same @user_id\n\n💡 Ask them to check their profile to confirm their @user_id!`);
-                    sendButton.disabled = false;
-                    sendButton.textContent = 'Send Friend Request';
-                    return;
-                }
-                
-                console.log('✅ USER FOUND! Proceeding with friend request...');
-
-                // Check if already friends
-                const friendshipQuery = await db.collection('friendships')
-                    .where('users', 'array-contains', currentUser.uid)
-                    .get();
-
-                let alreadyFriends = false;
-                friendshipQuery.forEach(doc => {
-                    const friendship = doc.data();
-                    if (friendship.users.includes(targetUser.id)) {
-                        alreadyFriends = true;
-                    }
-                });
-
-                if (alreadyFriends) {
-                    alert(`You are already friends with ${friendUserId}!`);
-                    sendButton.disabled = false;
-                    sendButton.textContent = 'Send Friend Request';
-                    return;
-                }
-
-                // Check if request already sent
-                const existingRequestQuery = await db.collection('friendRequests')
-                    .where('from', '==', currentUser.uid)
-                    .where('to', '==', targetUser.id)
-                    .get();
-
-                if (!existingRequestQuery.empty) {
-                    alert(`Friend request already sent to ${friendUserId}!`);
-                    sendButton.disabled = false;
-                    sendButton.textContent = 'Send Friend Request';
-                    return;
-                }
-
-                sendButton.textContent = 'Sending...';
-
-                // Send friend request
-                const requestData = {
-                    from: currentUser.uid,
-                    fromUserId: currentUser.userId,
-                    fromDisplayName: currentUser.displayName || currentUser.userId,
-                    to: targetUser.id,
-                    toUserId: targetUserData.userId,
-                    toDisplayName: targetUserData.displayName || targetUserData.userId,
-                    status: 'pending',
-                    createdAt: new Date().toISOString()
-                };
-
-                try {
-                    await db.collection('friendRequests').add(requestData);
-                    console.log('Friend request saved to database');
-                } catch (dbError) {
-                    console.warn('Failed to save to database, saving to localStorage:', dbError);
-                    // Save to localStorage as backup
-                    const requestId = 'req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-                    localStorage.setItem('friendRequest_' + requestId, JSON.stringify(requestData));
-                }
-
-                alert(`Friend request sent to ${friendUserId} successfully! 🎉`);
-                closeModal('addFriendModal');
-                friendUserIdInput.value = '';
-
-            } catch (error) {
-                console.error('Error sending friend request:', error);
-                alert('Failed to send friend request. Please try again.');
-            }
-
-            sendButton.disabled = false;
-            sendButton.textContent = 'Send Friend Request';
-        }
-
-        async function showFriendRequests() {
-            document.getElementById('friendRequestsModal').style.display = 'block';
-            await loadFriendRequests();
-        }
-
-        async function loadFriendRequests() {
-            const friendRequestsList = document.getElementById('friendRequestsList');
-            
-            try {
-                let requestsHTML = '';
-                let foundRequests = false;
-                
-                // First try to load from database
-                try {
-                    const requestsQuery = await db.collection('friendRequests')
-                        .where('to', '==', currentUser.uid)
-                        .where('status', '==', 'pending')
-                        .get();
-
-                    requestsQuery.forEach(doc => {
-                        const request = doc.data();
-                        requestsHTML += `
-                            <div class="friend-request" data-request-id="${doc.id}">
-                                <div>
-                                    <div style="font-weight: 600;">${request.fromUserId}</div>
-                                    <div style="font-size: 12px; color: #b9bbbe;">Wants to be your friend</div>
-                                </div>
-                                <div>
-                                    <button class="btn-small btn-accept" onclick="acceptFriendRequest('${doc.id}', '${request.from}', '${request.fromUserId}')">Accept</button>
-                                    <button class="btn-small btn-decline" onclick="declineFriendRequest('${doc.id}')">Decline</button>
-                                </div>
-                            </div>
-                        `;
-                        foundRequests = true;
-                    });
-                } catch (dbError) {
-                    console.warn('Database query failed, checking localStorage:', dbError);
-                }
-                
-                // Also check localStorage for friend requests
-                for (let i = 0; i < localStorage.length; i++) {
-                    const key = localStorage.key(i);
-                    if (key && key.startsWith('friendRequest_')) {
-                        try {
-                            const request = JSON.parse(localStorage.getItem(key));
-                            if (request && request.to === currentUser.uid && request.status === 'pending') {
-                                const requestId = key.replace('friendRequest_', '');
-                                requestsHTML += `
-                                    <div class="friend-request" data-request-id="${requestId}">
-                                        <div>
-                                            <div style="font-weight: 600;">${request.fromUserId}</div>
-                                            <div style="font-size: 12px; color: #b9bbbe;">Wants to be your friend</div>
-                                        </div>
-                                        <div>
-                                            <button class="btn-small btn-accept" onclick="acceptFriendRequest('${requestId}', '${request.from}', '${request.fromUserId}')">Accept</button>
-                                            <button class="btn-small btn-decline" onclick="declineFriendRequest('${requestId}')">Decline</button>
-                                        </div>
-                                    </div>
-                                `;
-                                foundRequests = true;
-                            }
-                        } catch (e) {
-                            // Skip invalid localStorage entries
-                        }
-                    }
-                }
-
-                if (!foundRequests) {
-                    friendRequestsList.innerHTML = `
-                        <div style="text-align: center; color: #b9bbbe; padding: 20px;">
-                            No friend requests yet. Share your @user_id with friends to get started!
-                        </div>
-                    `;
-                } else {
-                    friendRequestsList.innerHTML = requestsHTML;
-                }
-
-            } catch (error) {
-                console.error('Error loading friend requests:', error);
-                friendRequestsList.innerHTML = `
-                    <div style="text-align: center; color: #ed4245; padding: 20px;">
-                        Error loading friend requests. Please try again.
-                    </div>
-                `;
-            }
-        }
-
-        async function acceptFriendRequest(requestId, friendUid, friendUserId) {
-            try {
-                // Create friendship
-                await db.collection('friendships').add({
-                    users: [currentUser.uid, friendUid],
-                    userIds: [currentUser.userId, friendUserId],
-                    createdAt: new Date().toISOString()
-                });
-
-                // Update request status
-                await db.collection('friendRequests').doc(requestId).update({
-                    status: 'accepted'
-                });
-
-                alert(`You are now friends with ${friendUserId}! 🎉`);
-                
-                // Remove from UI
-                const requestElement = document.querySelector(`[data-request-id="${requestId}"]`);
-                if (requestElement) {
-                    requestElement.remove();
-                }
-
-                // Reload friend requests to update the list
-                await loadFriendRequests();
-                await loadFriends();
-
-            } catch (error) {
-                console.error('Error accepting friend request:', error);
-                alert('Failed to accept friend request. Please try again.');
-            }
-        }
-
-        async function declineFriendRequest(requestId) {
-            try {
-                // Update request status
-                await db.collection('friendRequests').doc(requestId).update({
-                    status: 'declined'
-                });
-
-                // Remove from UI
-                const requestElement = document.querySelector(`[data-request-id="${requestId}"]`);
-                if (requestElement) {
-                    requestElement.remove();
-                }
-
-                // Reload friend requests to update the list
-                await loadFriendRequests();
-
-            } catch (error) {
-                console.error('Error declining friend request:', error);
-                alert('Failed to decline friend request. Please try again.');
-            }
-        }
-
-        function showProfileModal() {
-            document.getElementById('profileModal').style.display = 'block';
-        }
-
-        function editProfile() {
-            document.getElementById('editUserId').value = currentUser.userId || '';
-            document.getElementById('editBio').value = currentUser.bio || '';
-            document.getElementById('editStatus').value = currentUser.status || '';
-            document.getElementById('editAvatar').value = currentUser.avatar || '';
-            document.getElementById('editBanner').value = currentUser.banner || '';
-            
-            closeModal('profileModal');
-            document.getElementById('editProfileModal').style.display = 'block';
-        }
-
-        async function saveProfile() {
-            let newUserId = document.getElementById('editUserId').value.trim();
-            const bio = document.getElementById('editBio').value;
-            const status = document.getElementById('editStatus').value;
-            const avatar = document.getElementById('editAvatar').value;
-            const banner = document.getElementById('editBanner').value;
-
-            // Auto-add @ if user forgot it
-            if (newUserId && !newUserId.startsWith('@')) {
-                newUserId = '@' + newUserId;
-                document.getElementById('editUserId').value = newUserId;
-            }
-
-            // Basic validation for user ID format
-            if (newUserId && !/^@[a-zA-Z0-9_]+$/.test(newUserId)) {
-                alert('User ID can only contain letters, numbers, and underscores after the @');
-                return;
-            }
-
-            const saveButton = document.querySelector('#editProfileModal .btn-primary');
-            saveButton.disabled = true;
-            saveButton.textContent = 'Saving...';
-
-            try {
-                const updates = {
-                    bio: bio,
-                    status: status,
-                    avatar: avatar,
-                    banner: banner
-                };
-
-                // Check if user ID is being changed
-                if (newUserId && newUserId !== currentUser.userId) {
-                    console.log('Checking if new userId is available:', newUserId);
-                    console.log('Current userId:', currentUser.userId);
-                    
-                    // Check if new user ID is already taken
-                    let userIdTaken = false;
-                    
-                    // First check database
-                    try {
-                        const userIdQuery = await db.collection('users').where('userId', '==', newUserId).get();
-                        if (!userIdQuery.empty) {
-                            userIdTaken = true;
-                            console.log('UserId found in database - already taken');
-                        }
-                    } catch (dbError) {
-                        console.warn('Database check failed, checking localStorage:', dbError);
-                    }
-                    
-                    // If not found in database, check localStorage
-                    if (!userIdTaken) {
-                        for (let i = 0; i < localStorage.length; i++) {
-                            const key = localStorage.key(i);
-                            if (key && key.startsWith('squitup_user_') && key !== 'squitup_user_' + currentUser.uid) {
-                                try {
-                                    const userData = JSON.parse(localStorage.getItem(key));
-                                    if (userData && userData.userId === newUserId) {
-                                        userIdTaken = true;
-                                        console.log('UserId found in localStorage - already taken');
-                                        break;
-                                    }
-                                } catch (e) {
-                                    // Skip invalid localStorage entries
-                                }
-                            }
-                        }
-                    }
-                    
-                    if (userIdTaken) {
-                        alert(`Sorry! The @user_id "${newUserId}" is already taken by another user.\n\nPlease choose a different @user_id.`);
-                        saveButton.disabled = false;
-                        saveButton.textContent = 'Save Changes';
-                        return;
-                    }
-                    
-                    // Add userId to updates
-                    updates.userId = newUserId;
-                    console.log('UserId is available, proceeding with update');
-                }
-
-                // Always update localStorage first (immediate)
-                const updatedUser = { ...currentUser, ...updates };
-                localStorage.setItem('squitup_user_' + currentUser.uid, JSON.stringify(updatedUser));
-                console.log('Updated localStorage with new data:', updatedUser);
-
-                // Try to update database (background)
-                if (currentUser.uid) {
-                    try {
-                        await db.collection('users').doc(currentUser.uid).update(updates);
-                        console.log('Successfully updated database');
-                    } catch (dbError) {
-                        console.warn('Database update failed, but localStorage is updated:', dbError);
-                    }
-                }
-
-                // Update local user data immediately
-                currentUser = updatedUser;
-                loadUserData();
-                
-                closeModal('editProfileModal');
-                
-                if (newUserId && newUserId !== (currentUser.userId || '')) {
-                    alert(`Profile updated successfully! 🎉\n\nYour @user_id has been changed to ${newUserId}`);
-                } else {
-                    alert('Profile updated successfully! 🎉');
-                }
-                
-            } catch (error) {
-                console.error('Error updating profile:', error);
-                
-                // Even if there's an error, try to update localStorage
-                try {
-                    const updates = {
-                        bio: bio,
-                        status: status,
-                        avatar: avatar,
-                        banner: banner
-                    };
-                    
-                    if (newUserId && newUserId !== currentUser.userId) {
-                        updates.userId = newUserId;
-                    }
-                    
-                    const updatedUser = { ...currentUser, ...updates };
-                    localStorage.setItem('squitup_user_' + currentUser.uid, JSON.stringify(updatedUser));
-                    currentUser = updatedUser;
-                    loadUserData();
-                    
-                    closeModal('editProfileModal');
-                    alert('Profile updated successfully! 🎉');
-                } catch (fallbackError) {
-                    alert('Error updating profile. Please try again.');
-                }
-            }
-
-            saveButton.disabled = false;
-            saveButton.textContent = 'Save Changes';
-        }
-
-        function showEmojiPicker() {
-            document.getElementById('emojiModal').style.display = 'block';
-        }
-
-        function insertEmoji(emoji) {
-            const messageInput = document.getElementById('messageInput');
-            messageInput.value += emoji;
-            messageInput.focus();
-            closeModal('emojiModal');
-        }
-
-        function showGifPicker() {
-            alert('GIF picker coming soon! 🎬');
-        }
-
-        function showStickerPicker() {
-            alert('Sticker picker coming soon! 🎭');
-        }
-
-        function changeAvatar(event) {
-            event.stopPropagation();
-            const url = prompt('Enter avatar URL (image or GIF):');
-            if (url) {
-                document.getElementById('profileAvatarLarge').style.backgroundImage = `url(${url})`;
-                document.getElementById('profileAvatarLarge').style.backgroundSize = 'cover';
-                document.getElementById('profileAvatarLarge').textContent = '';
-            }
-        }
-
-        function changeBanner() {
-            const url = prompt('Enter banner URL (image or GIF):');
-            if (url) {
-                document.querySelector('.profile-banner').style.backgroundImage = `url(${url})`;
-                document.querySelector('.profile-banner').style.backgroundSize = 'cover';
-            }
-        }
-
-        function closeModal(modalId) {
-            document.getElementById(modalId).style.display = 'none';
-        }
-
-        // Close modals when clicking outside
-        window.onclick = function(event) {
-            if (event.target.classList.contains('modal')) {
-                event.target.style.display = 'none';
-            }
-        }
-
-        // Add emoji option styling
-        const style = document.createElement('style');
-        style.textContent = `
-            .emoji-option {
-                font-size: 24px;
-                cursor: pointer;
-                padding: 8px;
-                border-radius: 4px;
-                text-align: center;
-                transition: background-color 0.2s;
-            }
-            .emoji-option:hover {
-                background-color: #393c43;
-            }
-        `;
-        document.head.appendChild(style);
-    </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'98d473f515948584',t:'MTc2MDI0OTYyNC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
-</html>
+        <div id="authPage" class="container">
+        <div class="auth-card">
+            <div class="logo">SQUIT up</div>
+            <div class="subtitle">Connect with friends and communities</div>
+            
+                        <div id="loginForm">
+                <button class="btn btn-google" onclick="signInWithGoogle()">
+                    <span>🔍</span> Continue with Google
+                </button>
+                <div style="margin-top: 20px; padding: 15px; background: rgba(102, 126, 234, 0.1); border-radius: 10px; font-size: 14px; color: #333;">
+                    <strong>How it works:</strong><br>
+                    • Sign in with your Google account<br>
+                    • If you're new, choose your unique @user_id<br>
+                    • If you have an account, you'll go straight to chat!
+                </div>
+            </div>
+        </div>
+    </div>
+
+        <div id="setupModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Welcome to SQUIT up! 🎉</h3>
+            </div>
+            <div style="margin-bottom: 20px; color: #b9bbbe; text-align: center;">
+                Choose your unique @user_id so friends can find and add you!
+            </div>
+            <div class="form-group">
+                <label for="newUserId">Choose your @user_id</label>
+                <div class="user-id-input-container">
+                    <input type="text" id="newUserId" placeholder="e.g., john_doe123">
+                </div>
+            </div>
+            <button class="btn btn-primary" onclick="completeSetup()">Join SQUIT up</button>
+        </div>
+    </div>
+
+        <div id="dashboard" class="dashboard">
+                <div class="server-list">
+            <div class="server-icon active" onclick="selectServer('home')">H</div>
+            <div class="server-icon add-server" onclick="showCreateServerModal()">+</div>
+            <div id="serverList"></div>
+        </div>
+
+                <div class="dashboard-content">
+                        <div class="sidebar">
+                <div class="sidebar-section">
+                    <div class="sidebar-title">Direct Messages</div>
+                    <div id="dmList">
+                        <div style="text-align: center; color: #8e9297; padding: 20px; font-size: 14px;">
+                            Add friends to start chatting!
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="sidebar-section">
+                    <div class="sidebar-title">Friends</div>
+                    <div class="sidebar-item" onclick="showAddFriendModal()">
+                        <span>+</span> Add Friend
+                    </div>
+                    <div class="sidebar-item" onclick="showFriendRequests()">
+                        <span>📬</span> Friend Requests
+                    </div>
+                    <div id="friendsList"></div>
+                </div>
+
+                                <div style="margin-top: auto; padding: 15px; border-top: 1px solid #202225;">
+                    <div class="user-profile" onclick="showProfileModal()">
+                        <div style="position: relative;">
+                            <div class="user-avatar" id="userAvatar">U</div>
+                            <div class="status-indicator"></div>
+                        </div>
+                        <div>
+                            <div style="font-size: 14px; font-weight: 600;" id="userName">User</div>
+                            <div style="font-size: 12px; color: #b9bbbe;" id="userStatus">Online</div>
+                        </div>
+                        <button style="margin-left: auto; background: none; border: none; color: #b9bbbe; cursor: pointer; font-size: 18px; padding: 8px;" onclick="logout()" title="Sign Out">🚪</button>
+                    </div>
+                </div>
+            </div>
+
+                        <div class="main-content">
+                <div class="chat-header">
+                    <span id="currentChannelIcon">#</span>
+                    <span id="currentChannel">Select a friend to start chatting</span>
+                </div>
+                
+                <div class="chat-messages" id="chatMessages">
+                    <div style="text-align: center; color: #b9bbbe; padding: 40px;">
+                        Welcome to SQUIT up! 🎉<br>
+                        Add friends to start chatting with them directly.
+                    </div>
+                </div>
+                
+                <div class="chat-input">
+                    <div class="input-container">
+                        <button class="emoji-btn" onclick="showEmojiPicker()">😀</button>
+                        <button class="gif-btn" onclick="showGifPicker()">GIF</button>
+                        <button class="sticker-btn" onclick="showStickerPicker()">🎭</button>
+                        <input type="text" id="messageInput" placeholder="Select a friend to chat" onkeypress="handleMessageInput(event)" disabled>
+                        <button class="btn btn-primary" style="width: auto; margin: 0; padding: 8px 16px;" onclick="sendMessage()" disabled>Send</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+        <div id="createServerModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Create Your Server</h3>
+                <button class="close-btn" onclick="closeModal('createServerModal')">&times;</button>
+            </div>
+            <div class="form-group">
+                <label for="serverName">Server Name</label>
+                <input type="text" id="serverName" placeholder="Enter server name">
+            </div>
+            <div class="form-group">
+                <label>Server Type</label>
+                <select id="serverType" style="width: 100%; padding: 12px; border: 2px solid #e1e5e9; border-radius: 10px; background: white;">
+                    <option value="text">Text Channels Only</option>
+                    <option value="voice">Text + Voice Channels</option>
+                </select>
+            </div>
+            <button class="btn btn-primary" onclick="createServer()">Create Server</button>
+        </div>
+    </div>
+
+        <div id="addFriendModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Add Friend</h3>
+                <button class="close-btn" onclick="closeModal('addFriendModal')">&times;</button>
+            </div>
+            <div class="form-group">
+                <label for="friendUserId">Friend's @user_id</label>
+                <div class="user-id-input-container">
+                    <input type="text" id="friendUserId" placeholder="Enter user_id (e.g., gulla)">
+                </div>
+            </div>
+            <button class="btn btn-primary" onclick="sendFriendRequest()">Send Friend Request</button>
+        </div>
+    </div>
+
+        <div id="friendRequestsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Friend Requests</h3>
+                <button class="close-btn" onclick="closeModal('friendRequestsModal')">&times;</button>
+            </div>
+            <div id="friendRequestsList">
+                <div style="text-align: center; color: #b9bbbe; padding: 20px;">
+                    No friend requests yet. Share your @user_id with friends to get started!
+                </div>
+            </div>
+        </div>
+    </div>
+
+        <div id="profileModal" class="modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3>User Profile</h3>
+                <button class="close-btn" onclick="closeModal('profileModal')">&times;</button>
+            </div>
+            <div class="profile-banner" onclick="changeBanner()">
+                <div class="profile-avatar-large" id="profileAvatarLarge" onclick="changeAvatar(event)">U</div>
+            </div>
+            <div class="profile-info">
+                <div class="profile-username" id="profileUsername">Username</div>
+                <div style="color: #8e9297; font-size: 16px; margin-bottom: 10px;" id="profileUserId">@user_id</div>
+                <div class="profile-bio" id="profileBio">Click to add a bio...</div>
+                <div class="profile-status" id="profileStatus">Online</div>
+                <button class="btn btn-primary" style="margin-top: 15px;" onclick="editProfile()">Edit Profile</button>
+            </div>
+        </div>
+    </div>
+
+        <div id="editProfileModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Edit Profile</h3>
+                <button class="close-btn" onclick="closeModal('editProfileModal')">&times;</button>
+            </div>
+            <div class="form-group">
+                <label for="editUserId">@user_id</label>
+                <div class="user-id-input-container">
+                    <input type="text" id="editUserId" placeholder="Enter new user_id (e.g., new_john_doe)">
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="editBio">Bio</label>
+                <textarea id="editBio" style="width: 100%; padding: 12px; border: 2px solid #e1e5e9; border-radius: 10px; min-height: 80px; resize: vertical; box-sizing: border-box;" placeholder="Tell us about yourself..."></textarea>
+            </div>
+            <div class="form-group">
+                <label for="editStatus">Status</label>
+                <input type="text" id="editStatus" placeholder="What's your status?">
+            </div>
+            <div class="form-group">
+                <label>Profile Picture (URL or GIF)</label>
+                <input type="url" id="editAvatar" placeholder="Enter image/GIF URL">
+            </div>
+            <div class="form-group">
+                <label>Banner (URL or GIF)</label>
+                <input type="url" id="editBanner" placeholder="Enter banner image/GIF URL">
+            </div>
+            <button class="btn btn-primary" onclick="saveProfile()">Save Changes</button>
+        </div>
+    </div>
+
+        <div id="emojiModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Choose Emoji</h3>
+                <button class="close-btn" onclick="closeModal('emojiModal')">&times;</button>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(8, 1fr); gap: 10px; max-height: 300px; overflow-y: auto;">
+                <span class="emoji-option" onclick="insertEmoji('😀')">😀</span>
+                <span class="emoji-option" onclick="insertEmoji('😂')">😂</span>
+                <span class="emoji-option" onclick="insertEmoji('😍')">😍</span>
+                <span class="emoji-option" onclick="insertEmoji('🤔')">🤔</span>
+                <span class="emoji-option" onclick="insertEmoji('😎')">😎</span>
+                <span class="emoji-option" onclick="insertEmoji('😭')">😭</span>
+                <span class="emoji-option" onclick="insertEmoji('😱')">😱</span>
+                <span class="emoji-option" onclick="insertEmoji('🔥')">🔥</span>
+                <span class="emoji-option" onclick="insertEmoji('💯')">💯</span>
+                <span class="emoji-option" onclick="insertEmoji('❤️')">❤️</span>
+                <span class="emoji-option" onclick="insertEmoji('👍')">👍</span>
+                <span class="emoji-option" onclick="insertEmoji('👎')">👎</span>
+                <span class="emoji-option" onclick="insertEmoji('🎉')">🎉</span>
+                <span class="emoji-option" onclick="insertEmoji('🚀')">🚀</span>
+                <span class="emoji-option" onclick="insertEmoji('⭐')">⭐</span>
+                <span class="emoji-option" onclick="insertEmoji('🌟')">🌟</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Firebase Configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyB1zvVHaBrbzX5iA9fBVNGa_3sY1-WCSpY",
+            authDomain: "squit-up-auth.firebaseapp.com",
+            projectId: "squit-up-auth",
+            storageBucket: "squit-up-auth.firebasestorage.app",
+            messagingSenderId: "503910898443",
+            appId: "1:503910898443:web:c5a56eb24cd4f183d8600e",
+            measurementId: "G-K4LHFHSNJC"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        // Global variables
+        let currentUser = null;
+        let currentChannel = 'general';
+        let messages = [];
+        let friends = [];
+        let servers = [];
+
+        // --- CORE AUTHENTICATION FUNCTIONS (UNCHANGED AS REQUESTED) ---
+        auth.onAuthStateChanged((user) => {
+            if (user) {
+                checkUserProfile(user);
+            } else {
+                showAuthPage();
+            }
+        });
+
+        function showAuthPage() {
+            document.getElementById('authPage').style.display = 'flex';
+            document.getElementById('dashboard').style.display = 'none';
+        }
+
+        function showDashboard() {
+            document.getElementById('authPage').style.display = 'none';
+            document.getElementById('dashboard').style.display = 'block';
+            loadUserData();
+        }
+
+        async function signInWith
