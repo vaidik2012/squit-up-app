@@ -62,6 +62,14 @@
             @apply opacity-90;
         }
 
+        .form-group {
+            @apply mb-4 text-left;
+        }
+
+        .form-group label {
+            @apply block mb-1 text-gray-700 font-medium text-sm;
+        }
+
         .form-group input {
             @apply w-full p-3 border-2 border-gray-300 rounded-lg text-base transition-colors duration-300 box-border text-gray-800;
         }
@@ -95,13 +103,13 @@
     <div id="authScreen" class="auth-container">
         <div class="auth-card">
             <div class="logo">SQUIT up</div>
-            <div class="subtitle">Your ID: <span id="currentTempId">...</span></div>
+            <div class="subtitle">Your Temporary ID: <span id="currentTempId" class="font-mono font-bold text-[#5865f2]">...</span></div>
             <div class="loading-overlay" id="authLoading" style="display: none;">
                 Connecting...
             </div>
             
-            <button class="btn btn-primary" onclick="showScreen('useridScreen')">
-                Set Permanent @user_id
+            <button class="btn btn-primary" onclick="showProfileSetup()">
+                Set Permanent @user_id & Password
             </button>
 
             <div class="my-4 text-gray-500 font-semibold">-- OR --</div>
@@ -117,30 +125,47 @@
                 Sign in/Register with Google
             </button>
             <p class="text-gray-500 text-sm mt-5">
-                Google sign-in links your account permanently. Anonymous users can chat until they set a permanent ID.
+                Anonymous users can chat but cannot send/receive requests. Set an ID to unlock features.
             </p>
         </div>
     </div>
 
-    <!-- Username Creation Screen -->
+    <!-- Profile Setup Screen (Email, Password, Username) -->
     <div id="useridScreen" class="userid-container" style="display: none;">
         <div class="auth-card">
-            <div class="logo">One Last Step</div>
-            <div class="subtitle">Choose your Permanent @user_id</div>
+            <div class="logo">Secure Your Profile</div>
+            <div class="subtitle text-left text-sm">
+                This step creates your permanent identity. You must set a unique <span class="font-bold text-[#5865f2]">@user_id</span> and a password.
+            </div>
             <div class="loading-overlay" id="usernameLoading" style="display: none;">
                 Checking ID...
             </div>
+            
+            <!-- Email Field (Dynamic visibility) -->
+            <div class="form-group" id="emailGroup">
+                <label for="emailInput">Email</label>
+                <input type="email" id="emailInput" placeholder="Your Email Address" required>
+            </div>
+            
+            <!-- Password Field -->
             <div class="form-group">
-                <label for="usernameInput" class="text-gray-700 font-medium">@user_id (e.g., cooluser123)</label>
-                <input type="text" id="usernameInput" placeholder="Enter a unique ID (3-16 characters, no spaces)" maxlength="16">
+                <label for="passwordInput">Password</label>
+                <input type="password" id="passwordInput" placeholder="Min 6 characters" minlength="6" required>
+            </div>
+
+            <!-- Username Field -->
+            <div class="form-group">
+                <label for="usernameInput">@user_id (e.g., cooluser123)</label>
+                <input type="text" id="usernameInput" placeholder="Enter a unique ID (3-16 chars, no spaces)" maxlength="16" required>
                 <div id="usernameError" class="error-message"></div>
                 <div id="usernameSuccess" class="success-message"></div>
             </div>
+            
             <button class="btn btn-primary" onclick="saveUsername()" id="saveUsernameBtn">
-                Continue to SQUIT up
+                Save & Continue to SQUIT up
             </button>
             <button class="btn bg-gray-300 text-gray-800" onclick="showScreen(auth.currentUser.isAnonymous ? 'authScreen' : 'appScreen')" id="cancelUsernameBtn">
-                Cancel
+                Cancel / Back
             </button>
         </div>
     </div>
@@ -181,7 +206,7 @@
                                 <span class="font-semibold text-white">System Bot</span>
                                 <span class="text-xs text-gray-400">Now</span>
                             </div>
-                            <div class="text-white text-base leading-relaxed">Welcome to SQUIT up! Your temporary ID is active for anonymous use. Set a permanent @user_id to secure your profile and start chatting.</div>
+                            <div class="text-white text-base leading-relaxed">Welcome! To enable friend requests and permanent chat identity, please set your @user_id and password.</div>
                         </div>
                     </div>
                 </div>
@@ -197,8 +222,8 @@
     <!-- Firebase Scripts -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, linkWithEmailAndPassword, updatePassword, updateEmail } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- 1. Firebase Environment Setup (MANDATORY) ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'squit-up-auth';
@@ -255,7 +280,6 @@
 
         /**
          * Updates UI elements with the current user's status.
-         * @param {object} user - Firebase User object.
          */
         function updateUI(user) {
             const uid = user.uid;
@@ -263,21 +287,56 @@
             let avatarChar = currentUserData?.username ? currentUserData.username[0].toUpperCase() : uid[0].toUpperCase();
 
             // Auth Screen for Temporary ID display
-            document.getElementById('currentTempId').textContent = `TempID: ${uid.substring(0, 8)}`;
+            document.getElementById('currentTempId').textContent = `${uid.substring(0, 8)}`;
 
             // Main App UI
             document.getElementById('currentUsernameDisplay').textContent = displayName;
             document.getElementById('currentUserAvatar').textContent = avatarChar;
             document.getElementById('sidebarUserId').textContent = displayName; // Use unique ID for sidebar
 
-            // If it's an anonymous user who hasn't set a username yet, show auth screen
-            if (user.isAnonymous && !currentUserData?.username) {
-                showScreen('authScreen');
-            } else {
-                // Otherwise, go to the main app
+            // If the user has a permanent username, take them to the app. Otherwise, show auth/setup.
+            if (currentUserData?.username) {
                 showScreen('appScreen');
+            } else {
+                showScreen('authScreen');
             }
         }
+
+        /**
+         * Prepares and shows the profile setup screen.
+         */
+        window.showProfileSetup = () => {
+            const user = auth.currentUser;
+            if (!user) return;
+
+            const emailGroup = document.getElementById('emailGroup');
+            const emailInput = document.getElementById('emailInput');
+            const usernameInput = document.getElementById('usernameInput');
+
+            document.getElementById('usernameError').textContent = '';
+            document.getElementById('usernameSuccess').textContent = '';
+            document.getElementById('passwordInput').value = '';
+            
+            // Check if the user is anonymous and needs to set an email/password credential
+            if (user.isAnonymous || !user.email) {
+                emailGroup.style.display = 'block';
+                emailInput.value = '';
+            } else {
+                // User has an email (e.g., Google sign-in). Hide email field.
+                emailGroup.style.display = 'none';
+                emailInput.value = user.email; // Pre-fill existing email
+            }
+
+            // Pre-fill username if Google user has a display name
+            if (user.displayName) {
+                usernameInput.value = user.displayName.toLowerCase().replace(/[^a-z0-9]/g, '');
+            } else {
+                usernameInput.value = '';
+            }
+            
+            showScreen('useridScreen');
+        }
+
 
         // --- 3. Authentication & Profile Management ---
 
@@ -320,6 +379,7 @@
                 await signOut(auth);
                 // After signing out, sign in anonymously again to allow temporary use.
                 await signInAnonymously(auth);
+                currentUserData = null;
              } catch (error) {
                 console.error("Sign out error:", error);
              }
@@ -344,22 +404,17 @@
                 } else {
                     currentUserData = null;
                     console.log("Profile does not exist. Showing username setup.");
-                    
-                    // Pre-fill input if Google user has an existing display name
-                    const usernameInput = document.getElementById('usernameInput');
-                    if (user.displayName && user.isAnonymous === false) {
-                        // Sanitize display name for username format (e.g., "John Doe" -> "johndoe")
-                        usernameInput.value = user.displayName.toLowerCase().replace(/[^a-z0-9]/g, '');
+                    // If user just signed in with Google, go directly to setup page
+                    if (!user.isAnonymous) {
+                         showProfileSetup();
                     } else {
-                        usernameInput.value = '';
+                        // Anonymous user without profile goes to main auth screen
+                        updateUI(user);
                     }
-
-                    showScreen('useridScreen');
                 }
             } catch (error) {
                 console.error("Error fetching user profile:", error);
-                // If fetching fails, let user try to set username
-                showScreen('useridScreen');
+                updateUI(user);
             } finally {
                 toggleLoading('authLoading', false);
             }
@@ -367,7 +422,6 @@
 
         /**
          * Checks if the chosen username is available globally.
-         * @param {string} username - The desired username.
          * @returns {boolean} True if available, false otherwise.
          */
         async function checkUsernameAvailability(username) {
@@ -383,24 +437,34 @@
         }
 
         /**
-         * Saves the chosen unique username and updates both the private profile and the public uniqueness list.
+         * Saves the chosen unique username, handles password/email setup, and updates the public uniqueness list.
          */
         window.saveUsername = async () => {
             if (!auth.currentUser) return;
 
             const usernameInput = document.getElementById('usernameInput');
+            const passwordInput = document.getElementById('passwordInput');
+            const emailInput = document.getElementById('emailInput');
+
             const rawUsername = usernameInput.value.trim();
-            const username = rawUsername.toLowerCase().replace(/\s/g, ''); // Remove spaces and convert to lowercase
+            const password = passwordInput.value;
+            const email = emailInput.value.trim();
             
+            // Validation
+            const username = rawUsername.toLowerCase().replace(/\s/g, ''); 
             const errorElement = document.getElementById('usernameError');
-            const successElement = document.getElementById('usernameSuccess');
-
             errorElement.textContent = '';
-            successElement.textContent = '';
-
-            // Simple validation
+            
             if (username.length < 3 || username.length > 16 || !/^[a-z0-9]+$/.test(username)) {
                 errorElement.textContent = '@user_id must be 3-16 characters long and contain only letters and numbers.';
+                return;
+            }
+            if (password.length < 6) {
+                errorElement.textContent = 'Password must be at least 6 characters long.';
+                return;
+            }
+            if ((auth.currentUser.isAnonymous || !auth.currentUser.email) && !email) {
+                errorElement.textContent = 'Email is required for permanent account registration.';
                 return;
             }
 
@@ -410,29 +474,50 @@
             try {
                 // 1. Check for uniqueness
                 const isAvailable = await checkUsernameAvailability(username);
-
                 if (!isAvailable) {
                     errorElement.textContent = `@${username} already exists. Please try a different ID.`;
+                    toggleLoading('usernameLoading', false);
                     return;
                 }
 
-                // 2. Prepare Data
+                // 2. Handle Credential Upgrade/Setup
+                if (auth.currentUser.isAnonymous) {
+                    // Anonymous -> Permanent Email/Password account
+                    await linkWithEmailAndPassword(auth.currentUser, email, password);
+                    console.log("Anonymous account upgraded to Email/Password.");
+                } else if (auth.currentUser.providerData.some(p => p.providerId === 'google.com')) {
+                    // Google User: Ensure email is linked and password is set if not already
+                    if (!auth.currentUser.email && email) {
+                        await updateEmail(auth.currentUser, email);
+                    }
+                    // Password can be set/updated if needed (requires recent sign-in, handled by pop-up)
+                    if (password) {
+                         // Note: updatePassword often requires re-authentication, which we assume is fresh from Google pop-up.
+                        await updatePassword(auth.currentUser, password);
+                    }
+                } else if (auth.currentUser.email) {
+                    // Existing Email/Password user, just update password if changed
+                     if (password) {
+                        await updatePassword(auth.currentUser, password);
+                    }
+                }
+
+                // 3. Save to Private Profile (User Data)
                 const newProfileData = {
                     username: username,
-                    isAnonymous: auth.currentUser.isAnonymous,
-                    email: auth.currentUser.email || null,
+                    isAnonymous: false, // Account is now permanent
+                    email: auth.currentUser.email || email,
                     avatarUrl: auth.currentUser.photoURL || null,
                     createdAt: new Date().toISOString()
                 };
 
-                // 3. Save to Private Profile (User Data)
                 await setDoc(userProfilePath(uid), newProfileData, { merge: true });
 
                 // 4. Save to Public Uniqueness List (Global Check)
                 await setDoc(usernameUniquenessPath(username), { uid: uid });
 
                 currentUserData = newProfileData;
-                successElement.textContent = 'Profile saved successfully! Redirecting...';
+                document.getElementById('usernameSuccess').textContent = 'Profile saved successfully! Redirecting...';
                 
                 setTimeout(() => {
                     toggleLoading('usernameLoading', false);
@@ -441,8 +526,14 @@
                 
             } catch (error) {
                 toggleLoading('usernameLoading', false);
-                errorElement.textContent = `Error saving profile: ${error.message}`;
-                console.error("Error saving username:", error);
+                console.error("Error during profile setup:", error);
+                let displayError = error.message;
+                if (error.code === 'auth/email-already-in-use') {
+                    displayError = 'The provided email is already registered. Please use a different email or sign in with that existing account.';
+                } else if (error.code === 'auth/requires-recent-login') {
+                    displayError = 'Session expired. Please sign out and sign back in with Google to set your password.';
+                }
+                errorElement.textContent = `Error: ${displayError}`;
             }
         };
 
@@ -465,20 +556,15 @@
                 // 2. Set up Auth State Listener
                 onAuthStateChanged(auth, (user) => {
                     if (user) {
-                        console.log("Auth state changed: Logged in. UID:", user.uid, "Anonymous:", user.isAnonymous);
-                        // Check if the user has completed their profile setup
                         checkUserProfile(user);
                     } else {
                         currentUserData = null;
-                        console.log("Auth state changed: Logged out.");
-                        // This should ideally only happen if the user explicitly signs out and we fail to sign back in anonymously.
                         showScreen('authScreen');
                     }
                 });
 
             } catch (error) {
                 console.error("Firebase initialization failed:", error);
-                // Show auth screen as fallback
                 showScreen('authScreen');
             }
         };
