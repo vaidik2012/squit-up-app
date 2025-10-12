@@ -1110,10 +1110,13 @@
         }
         
         function renderLoadingView() {
+            // UPDATED: Added w-full h-full, flex, justify-center, and items-center to center the content.
             return `
-                <div class="text-center">
-                    <div class="w-12 h-12 border-4 border-indigo-500 border-t-transparent border-solid rounded-full animate-spin mx-auto mb-4"></div>
-                    <p class="text-indigo-300 font-semibold">${appState.loadingMessage}</p>
+                <div class="w-full h-full flex flex-col justify-center items-center">
+                    <div class="text-center">
+                        <div class="w-12 h-12 border-4 border-indigo-500 border-t-transparent border-solid rounded-full animate-spin mx-auto mb-4"></div>
+                        <p class="text-indigo-300 font-semibold">${appState.loadingMessage}</p>
+                    </div>
                 </div>
             `;
         }
