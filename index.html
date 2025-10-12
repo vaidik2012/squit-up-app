@@ -348,8 +348,15 @@
 
                 } catch (error) {
                     console.error("Firebase Initialization Error:", error);
+                    let displayMessage = `Error initializing app. Check console for details.`;
+
+                    // Detect the specific error related to disabled providers
+                    if (error.code === 'auth/admin-restricted-operation') {
+                        displayMessage = `Firebase: Error (auth/admin-restricted-operation). Please enable 'Email/Password' and 'Anonymous' sign-in methods in your Firebase project console.`;
+                    }
+                    
                     // Display a persistent error if initialization failed
-                    this.displayError(`Error initializing app. ${error.message}`, false, 0); 
+                    this.displayError(displayMessage, false, 0); 
                     this.updateLoadingState(false);
                     // Ensure the form is visible to show the error
                     document.getElementById('auth-form').classList.remove('hidden');
@@ -472,6 +479,14 @@
                     const snapshot = await getDocs(q);
 
                     if (snapshot.empty) {
+                        // Attempt to see if the user entered an email instead of Squit ID
+                        if (squitId.includes('@')) {
+                             // Try to sign in directly with email/password
+                            await signInWithEmailAndPassword(auth, squitId, password);
+                            console.log("Login successful with Email.");
+                            return;
+                        }
+                        
                         return this.displayError(`No account found with @user_id: ${squitId}`);
                     }
                     
