@@ -1,286 +1,320 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut } from 'firebase/auth';
-import { getFirestore, collection, query, limit, onSnapshot, orderBy, doc, getDoc, setDoc, serverTimestamp, where, getDocs, updateDoc, arrayUnion } from 'firebase/firestore';
-
-// --- Global Variable Initialization (Mandatory for Canvas Environment) ---
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-
-// Initialize Firebase App and Services outside the component
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const auth = getAuth(app);
-
-// Helper function to get the current user ID (or a temporary one if unauthenticated)
-const getCurrentUserId = (user) => user?.uid || `anon-${crypto.randomUUID()}`;
-
-// --- Firestore Security Rules Pathing ---
-// Public data for global users (e.g., list of registered user profiles)
-const getPublicUserCollectionRef = () => collection(db, 'artifacts', appId, 'public', 'data', 'users');
-
-// Private user data (e.g., user's personal chat list)
-const getUserChatListCollectionRef = (userId) => collection(db, 'artifacts', appId, 'users', userId, 'chats');
-
-// Chat Message Collection (Public for participants)
-const getChatMessagesCollectionRef = (chatId) => collection(db, 'artifacts', appId, 'public', 'data', 'messages', chatId, 'messages');
-
-// --- Components ---
-
-/**
- * Visually engaging Splash Screen with a fixed 3-second display time.
- */
-const SplashScreen = ({ onReady }) => {
-  const [progress, setProgress] = useState(0);
-
-  useEffect(() => {
-    // Start the progress bar animation immediately
-    const start = Date.now();
-    const duration = 3000; // 3 seconds fixed duration
-
-    const animateProgress = () => {
-      const elapsed = Date.now() - start;
-      const newProgress = Math.min(100, (elapsed / duration) * 100);
-      setProgress(newProgress);
-
-      if (newProgress < 100) {
-        requestAnimationFrame(animateProgress);
-      } else {
-        // Once progress is 100, call the callback to proceed to auth check
-        onReady();
-      }
-    };
-
-    requestAnimationFrame(animateProgress);
-
-    // Cleanup not strictly necessary since onReady handles the transition,
-    // but ensures no stray animations if component is unmounted early (unlikely here)
-    return () => setProgress(100); 
-  }, [onReady]);
-
-  return (
-    <div className="flex flex-col items-center justify-center h-full bg-gray-900 text-white p-8">
-      <div className="w-24 h-24 mb-6 rounded-full bg-indigo-500 flex items-center justify-center shadow-lg animate-pulse">
-        <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 20 20">
-          <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-        </svg>
-      </div>
-      <h1 className="text-4xl font-extrabold mb-3 tracking-tight">ChatWave</h1>
-      <p className="text-gray-400 mb-8 font-medium">Loading your chats and data...</p>
-
-      {/* Progress Bar */}
-      <div className="w-full max-w-sm bg-gray-700 rounded-full h-2.5 overflow-hidden">
-        <div 
-          className="bg-indigo-400 h-2.5 rounded-full transition-all duration-300 ease-linear" 
-          style={{ width: `${progress}%` }}
-        ></div>
-      </div>
-    </div>
-  );
-};
-
-
-/**
- * Placeholder for the main Chat Dashboard.
- */
-const Dashboard = ({ user, userId, setView }) => {
-    const handleLogout = async () => {
-        try {
-            await signOut(auth);
-            // onAuthStateChanged listener will handle the state change and setView('login')
-        } catch (error) {
-            console.error("Logout failed:", error);
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatWave Messenger</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body, html, #app-container {
+            height: 100%;
+            margin: 0;
+            overflow: hidden; /* Prevent body scroll */
         }
-    };
+        .progress-bar {
+            transition: width 0.3s ease-linear;
+        }
+    </style>
+</head>
+<body>
+    <!-- Main container for the application -->
+    <div id="app-container" class="flex flex-col min-h-screen bg-gray-100">
+        <!-- Content will be rendered here -->
+    </div>
 
-    return (
-        <div className="flex flex-col h-full bg-white">
-            {/* Header */}
-            <header className="flex justify-between items-center p-4 bg-indigo-600 text-white shadow-md">
-                <h2 className="text-xl font-bold">Chat Dashboard</h2>
-                <div className="flex items-center space-x-4">
-                    <span className="text-sm font-medium">User ID: <code className="bg-indigo-700 p-1 rounded-md text-xs">{userId}</code></span>
-                    <button 
-                        onClick={handleLogout}
-                        className="bg-indigo-700 hover:bg-indigo-800 text-white text-sm font-semibold py-1.5 px-3 rounded-lg transition duration-150"
-                    >
-                        Logout
-                    </button>
-                </div>
-            </header>
+    <script type="module">
+        // --- Firebase Imports ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, serverTimestamp, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-            {/* Main Content Area */}
-            <main className="flex-1 overflow-y-auto p-4 md:p-8">
-                <div className="max-w-4xl mx-auto">
-                    <h3 className="text-2xl font-semibold text-gray-800 mb-4">Welcome back, {user ? 'Authenticated User' : 'Anonymous User'}!</h3>
-                    <p className="text-gray-600 mb-8">This is where your chat list and friend search features will go. The splash screen successfully transitioned here after 3 seconds.</p>
-                    
-                    {/* Placeholder for future "Friend Search" feature */}
-                    <div className="p-6 bg-gray-50 rounded-xl border border-gray-200">
-                        <h4 className="text-lg font-medium text-gray-700 mb-3">Next Step: Friend Search</h4>
-                        <p className="text-sm text-gray-500">We should implement the ability to search for other User IDs in the public user collection to start a new chat!</p>
+        // --- Global Variable Initialization (Mandatory for Canvas Environment) ---
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        // --- Firebase Instances ---
+        let app, db, auth;
+        let unsubscribeAuth = null;
+        
+        // --- Application State ---
+        let appState = {
+            view: 'splash', // 'splash', 'loading-auth', 'dashboard', 'login'
+            user: null, // Firebase User object
+            userId: null, // String user ID
+            error: null,
+            isFirebaseInitialized: false,
+        };
+
+        // --- State Management ---
+        function setState(newState) {
+            appState = { ...appState, ...newState };
+            appState.userId = getCurrentUserId(appState.user); // Recalculate userId whenever user changes
+            renderApp();
+        }
+
+        // Helper function to get the current user ID (or a temporary one if unauthenticated)
+        function getCurrentUserId(user) {
+            return user?.uid || `anon-${crypto.randomUUID()}`;
+        }
+
+        // --- Firestore Utility Functions ---
+        // Public data for global users (e.g., list of registered user profiles)
+        const getPublicUserCollectionRef = () => collection(db, 'artifacts', appId, 'public', 'data', 'users');
+
+        // --- Rendering Functions ---
+
+        /**
+         * Renders the visually engaging Splash Screen with a fixed 3-second display time.
+         */
+        function renderSplashScreen() {
+            const container = document.getElementById('app-container');
+            container.className = "flex items-center justify-center h-screen bg-gray-900";
+            container.innerHTML = `
+                <div id="splash-content" class="flex flex-col items-center justify-center p-8">
+                    <div class="w-24 h-24 mb-6 rounded-full bg-indigo-500 flex items-center justify-center shadow-lg animate-pulse">
+                        <svg class="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                    <h1 class="text-4xl font-extrabold mb-3 tracking-tight text-white">ChatWave</h1>
+                    <p class="text-gray-400 mb-8 font-medium">Loading your chats and data...</p>
+
+                    <!-- Progress Bar -->
+                    <div class="w-full max-w-sm bg-gray-700 rounded-full h-2.5 overflow-hidden">
+                        <div id="progress-bar" class="bg-indigo-400 h-2.5 rounded-full progress-bar" style="width: 0%;"></div>
                     </div>
                 </div>
-            </main>
-        </div>
-    );
-};
+            `;
 
-/**
- * Placeholder for the Login/Signup page.
- */
-const Login = ({ setView }) => {
-    return (
-        <div className="flex flex-col items-center justify-center h-full bg-gray-100 p-8">
-            <div className="bg-white p-10 rounded-xl shadow-2xl max-w-md w-full text-center">
-                <h1 className="text-3xl font-extrabold text-gray-800 mb-6">Welcome to ChatWave</h1>
-                <p className="text-gray-600 mb-8">Please log in or sign up to continue.</p>
-                
-                {/* Placeholder Login Form */}
-                <div className="space-y-4">
-                    <input 
-                        type="email" 
-                        placeholder="Email (Placeholder)" 
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-                        disabled
-                    />
-                    <input 
-                        type="password" 
-                        placeholder="Password (Placeholder)" 
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-                        disabled
-                    />
-                </div>
-                
-                <button 
-                    onClick={() => console.log('Login logic placeholder')}
-                    className="w-full mt-6 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-lg shadow-md transition duration-150 disabled:opacity-50"
-                    disabled
-                >
-                    Log In
-                </button>
-                
-                <p className="text-sm text-gray-500 mt-4">For now, we rely on the custom token or anonymous sign-in.</p>
-            </div>
-        </div>
-    );
-};
+            // Start the progress bar animation and timer
+            const progressBar = document.getElementById('progress-bar');
+            const duration = 3000; // 3 seconds fixed duration
+            const start = Date.now();
 
+            function animateProgress() {
+                const elapsed = Date.now() - start;
+                const progress = Math.min(100, (elapsed / duration) * 100);
+                progressBar.style.width = `${progress}%`;
 
-/**
- * Main Application Component (Router, Auth Handler).
- */
-export default function App() {
-    const [user, setUser] = useState(null);
-    // View can be: 'splash' -> 'loading' -> 'login' or 'dashboard'
-    const [view, setView] = useState('splash');
-    const [error, setError] = useState(null);
-
-    // Memoize the userId for stable dependencies
-    const userId = useMemo(() => getCurrentUserId(user), [user]);
-
-    // Phase 1: Authentication Handler - Runs ONLY after the 3-second splash screen
-    const handleAuthentication = useCallback(async () => {
-        // Switch to the 'loading' state to hide the splash screen and wait for Firebase
-        setView('loading');
-        setError(null);
-
-        // 1. Set up Auth State Listener
-        const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-            if (currentUser) {
-                // User is signed in. Ensure their public profile exists.
-                setUser(currentUser);
-                setView('dashboard');
-                
-                // Check if public profile exists for this user
-                const userDocRef = doc(getPublicUserCollectionRef(), currentUser.uid);
-                const userDocSnap = await getDoc(userDocRef);
-
-                if (!userDocSnap.exists()) {
-                    // Create a minimal public profile
-                    await setDoc(userDocRef, {
-                        uid: currentUser.uid,
-                        createdAt: serverTimestamp(),
-                        // A mock display name for better UX
-                        displayName: `User_${currentUser.uid.substring(0, 8)}`, 
-                        // We will add more fields like status, profile image, etc., later
-                    });
+                if (progress < 100) {
+                    requestAnimationFrame(animateProgress);
+                } else {
+                    // Once complete, proceed to authentication phase
+                    setState({ view: 'loading-auth' });
                 }
-
-            } else {
-                // User is signed out or initial state check complete
-                setUser(null);
-                setView('login');
             }
-        });
-
-        // 2. Perform initial sign-in attempt (custom token or anonymous)
-        try {
-            if (initialAuthToken) {
-                await signInWithCustomToken(auth, initialAuthToken);
-            } else {
-                await signInAnonymously(auth);
-            }
-        } catch (e) {
-            console.error("Firebase Sign-In Failed:", e);
-            setError(`Authentication failed: ${e.message}`);
-            setView('login'); // Fallback to login view on sign-in error
+            requestAnimationFrame(animateProgress);
         }
 
-        // Return the unsubscribe function for cleanup
-        return unsubscribe;
-    }, []);
-
-    // Phase 0: Splash Screen Timer - Controls the flow start
-    useEffect(() => {
-        if (view === 'splash') {
-            // This function is passed to the SplashScreen and called after 3 seconds
-            const startAuthFlow = () => {
-                handleAuthentication().then(unsubscribe => {
-                    // Cleanup the listener when component unmounts
-                    return () => unsubscribe && unsubscribe();
-                });
-            };
+        /**
+         * Renders the Main Dashboard (Placeholder).
+         */
+        function renderDashboard() {
+            const container = document.getElementById('app-container');
+            container.className = "flex flex-col min-h-screen bg-gray-100";
             
-            // Pass the callback to the SplashScreen component
-            // The SplashScreen component manages the 3s delay internally using requestAnimationFrame
-            // We just need to make sure handleAuthentication is called when SplashScreen is ready
-            // The actual effect of starting the auth flow happens via the onReady prop of SplashScreen.
+            const dashboardHtml = `
+                <!-- Header -->
+                <header class="flex justify-between items-center p-4 bg-indigo-600 text-white shadow-md">
+                    <h2 class="text-xl font-bold">Chat Dashboard</h2>
+                    <div class="flex items-center space-x-4">
+                        <span class="text-sm font-medium">User ID: <code class="bg-indigo-700 p-1 rounded-md text-xs">${appState.userId}</code></span>
+                        <button 
+                            id="logout-button"
+                            class="bg-indigo-700 hover:bg-indigo-800 text-white text-sm font-semibold py-1.5 px-3 rounded-lg transition duration-150"
+                        >
+                            Logout
+                        </button>
+                    </div>
+                </header>
+
+                <!-- Main Content Area -->
+                <main class="flex-1 overflow-y-auto p-4 md:p-8">
+                    <div class="max-w-4xl mx-auto">
+                        <h3 class="text-2xl font-semibold text-gray-800 mb-4">Welcome back!</h3>
+                        <p class="text-gray-600 mb-8">You are successfully authenticated. The splash screen transitioned here after 3 seconds.</p>
+                        
+                        <!-- Placeholder for future "Friend Search" feature -->
+                        <div class="p-6 bg-gray-50 rounded-xl border border-gray-200 shadow-lg">
+                            <h4 class="text-lg font-medium text-gray-700 mb-3">Next Step: Implement Friend Search</h4>
+                            <p class="text-sm text-gray-500">The application is ready. Now we can add the feature to search for other users using their IDs in the public collection.</p>
+                        </div>
+                    </div>
+                </main>
+            `;
+            container.innerHTML = dashboardHtml;
+
+            // Attach event listener after rendering
+            document.getElementById('logout-button').addEventListener('click', handleLogout);
         }
-    }, [view, handleAuthentication]);
 
+        /**
+         * Renders the Login View (Placeholder).
+         */
+        function renderLogin() {
+            const container = document.getElementById('app-container');
+            container.className = "flex items-center justify-center h-screen bg-gray-100";
+            
+            const loginHtml = `
+                <div class="bg-white p-10 rounded-xl shadow-2xl max-w-md w-full text-center">
+                    <h1 class="text-3xl font-extrabold text-gray-800 mb-6">Welcome to ChatWave</h1>
+                    <p class="text-gray-600 mb-8">Please log in or sign up to continue.</p>
+                    
+                    ${appState.error ? `<p class="text-red-500 mb-4 font-medium">${appState.error}</p>` : ''}
 
-    // Conditional Rendering based on View State
-    if (view === 'splash') {
-        return <SplashScreen onReady={() => setView('loading-auth')} />;
-    }
-
-    if (view === 'loading' || view === 'loading-auth') {
-        // Minimal loading screen while waiting for onAuthStateChanged to resolve
-        return (
-            <div className="flex items-center justify-center h-screen bg-gray-100">
-                <div className="flex items-center space-x-3 text-indigo-600 font-medium">
-                    <svg className="animate-spin h-5 w-5 text-indigo-600" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <span>{view === 'loading' ? 'Loading App...' : 'Authenticating...'}</span>
+                    <!-- Placeholder Login Form -->
+                    <div class="space-y-4">
+                        <input 
+                            type="email" 
+                            placeholder="Email (Placeholder)" 
+                            class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                            disabled
+                        />
+                        <input 
+                            type="password" 
+                            placeholder="Password (Placeholder)" 
+                            class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                            disabled
+                        />
+                    </div>
+                    
+                    <button 
+                        class="w-full mt-6 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-lg shadow-md transition duration-150 disabled:opacity-50"
+                        disabled
+                    >
+                        Log In
+                    </button>
+                    
+                    <p class="text-sm text-gray-500 mt-4">We are currently using the environment's auto-sign in.</p>
                 </div>
-                {error && <p className="text-red-500 mt-4 text-center">{error}</p>}
-            </div>
-        );
-    }
-    
-    // Once auth is ready, render the appropriate view
-    if (view === 'dashboard' && user) {
-        return <Dashboard user={user} userId={userId} setView={setView} />;
-    }
+            `;
+            container.innerHTML = loginHtml;
+        }
 
-    if (view === 'login') {
-        return <Login setView={setView} />;
-    }
+        /**
+         * Renders a minimal Loading Screen.
+         */
+        function renderLoading() {
+            const container = document.getElementById('app-container');
+            container.className = "flex items-center justify-center h-screen bg-gray-100";
+            
+            container.innerHTML = `
+                <div class="flex flex-col items-center justify-center">
+                    <div class="flex items-center space-x-3 text-indigo-600 font-medium">
+                        <svg class="animate-spin h-5 w-5 text-indigo-600" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>Authenticating...</span>
+                    </div>
+                    ${appState.error ? `<p class="text-red-500 mt-4 text-center">${appState.error}</p>` : ''}
+                </div>
+            `;
+        }
+        
+        // --- Main Render Loop ---
+        function renderApp() {
+            console.log("Current App State:", appState.view, appState.userId);
 
-    // Default catch-all (should ideally not be reached)
-    return <div className="flex items-center justify-center h-screen bg-red-100 text-red-700">Application State Error.</div>;
-}
+            switch (appState.view) {
+                case 'splash':
+                    renderSplashScreen();
+                    break;
+                case 'loading-auth':
+                    renderLoading();
+                    break;
+                case 'dashboard':
+                    renderDashboard();
+                    break;
+                case 'login':
+                    renderLogin();
+                    break;
+                default:
+                    document.getElementById('app-container').innerHTML = `<div class="p-8 text-red-600">Unknown Application State: ${appState.view}</div>`;
+            }
+        }
+
+        // --- Authentication & Initialization Logic ---
+        
+        async function handleLogout() {
+            try {
+                await signOut(auth);
+                // The onAuthStateChanged listener will catch this and update the state to 'login'
+            } catch (error) {
+                console.error("Logout failed:", error);
+                setState({ error: 'Logout failed.' });
+            }
+        }
+
+        async function handleAuthentication() {
+            // 1. Set up Auth State Listener
+            if (unsubscribeAuth) unsubscribeAuth(); // Clear previous listener if any
+
+            unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
+                if (currentUser) {
+                    // User is signed in. Ensure their public profile exists.
+                    setState({ user: currentUser, view: 'dashboard', error: null });
+                    
+                    const userDocRef = doc(getPublicUserCollectionRef(), currentUser.uid);
+                    const userDocSnap = await getDoc(userDocRef);
+
+                    if (!userDocSnap.exists()) {
+                        // Create a minimal public profile
+                        await setDoc(userDocRef, {
+                            uid: currentUser.uid,
+                            createdAt: serverTimestamp(),
+                            displayName: `User_${currentUser.uid.substring(0, 8)}`, 
+                        });
+                        console.log("Created new public user profile.");
+                    }
+
+                } else {
+                    // User is signed out or initial state check complete
+                    setState({ user: null, view: 'login' });
+                }
+            });
+
+            // 2. Perform initial sign-in attempt (custom token or anonymous)
+            try {
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (e) {
+                console.error("Firebase Sign-In Failed:", e);
+                setState({ error: `Authentication failed: ${e.message}`, view: 'login' });
+            }
+        }
+
+        // --- Application Entry Point ---
+        window.onload = function() {
+            try {
+                // Initialize Firebase services
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                setState({ isFirebaseInitialized: true });
+                
+                // Start the initial render which shows the splash screen
+                renderApp(); 
+                
+                // The splash screen's internal timer will call setState({ view: 'loading-auth' }) after 3s,
+                // which then triggers handleAuthentication().
+                
+                // Cleanup on window unload (though often not strictly necessary in this environment)
+                window.onunload = () => {
+                    if (unsubscribeAuth) unsubscribeAuth();
+                };
+
+            } catch (e) {
+                console.error("Firebase Initialization Failed:", e);
+                // Set a permanent error state if Firebase fails to initialize
+                setState({ view: 'login', error: `Fatal Error: Cannot connect to Firebase services.` });
+            }
+        };
+
+    </script>
+</body>
+</html>
