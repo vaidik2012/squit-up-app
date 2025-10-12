@@ -115,7 +115,7 @@
             }, 5000);
         }
 
-        // --- 1. Core Firebase Setup & Listener (FIXED) ---
+        // --- 1. Core Firebase Setup & Listener ---
         async function initializeAppAndAuth() {
             try {
                 if (Object.keys(firebaseConfig).length === 0) throw new Error("Firebase config missing.");
@@ -124,13 +124,29 @@
                 db = getFirestore(app);
                 auth = getAuth(app);
                 
-                // Use onAuthStateChanged to handle initial persistence check
                 let authChecked = false;
 
+                // Listen for changes in authentication state
                 onAuthStateChanged(auth, async (user) => {
-                    if (authChecked) return; // Only run initial check once
+                    // Prevent this from running during the explicit signInWithGoogle path
+                    if (authChecked) {
+                        // If auth changes mid-app (e.g., explicit sign out), handle it
+                        if (!user) {
+                            handleUserSignedOut();
+                        } else if (!appState.authReady) {
+                             // This is mainly for initial load, but ensures persistence is caught
+                             appState.currentUser = user;
+                             appState.authReady = true;
+                             if (!user.isAnonymous) {
+                                await checkUserProfile(user.uid);
+                             } else {
+                                handleUserSignedOut(); // If we end up anonymous after a change, go to login
+                             }
+                        }
+                        return;
+                    }
+                    
                     authChecked = true;
-
                     appState.currentUser = user;
                     appState.authReady = true;
 
@@ -144,7 +160,7 @@
                     if (initialAuthToken) {
                         try {
                             const cred = await signInWithCustomToken(auth, initialAuthToken);
-                            // Rerunning auth check to update state after custom sign-in
+                            // Custom sign-in successful, now check profile
                             await checkUserProfile(cred.user.uid);
                             return;
                         } catch(e) {
@@ -152,7 +168,7 @@
                         }
                     }
 
-                    // 3. If still not signed in (no persistent session, no custom token, or custom token failed), sign in anonymously.
+                    // 3. If still not signed in (no persistent session or token failed), sign in anonymously.
                     if (!user || user.isAnonymous) {
                         await signInAnonymously(auth);
                         handleUserSignedOut(); // This will render the LOGIN view
@@ -169,6 +185,7 @@
 
         // --- 2. Profile Check Logic (The Gatekeeper) ---
         async function checkUserProfile(uid) {
+            appState.currentUser = auth.currentUser; // Ensure currentUser is up to date
             const profileRef = doc(db, USER_PROFILES_COLLECTION, uid);
             try {
                 const profileSnap = await getDoc(profileRef);
@@ -187,6 +204,7 @@
                         photoURL: auth.currentUser.photoURL || 'https://placehold.co/64x64/f5576c/ffffff?text=U'
                     };
                     appState.view = 'REGISTER_ID';
+                    showStatus(`Welcome! Just need a unique @ID to get started.`, 'warning');
                 }
             } catch (error) {
                 console.error("Error reading profile:", error);
@@ -196,11 +214,20 @@
             renderView();
         }
 
-        // --- 3. Auth Actions (Same as before) ---
+        // --- 3. Auth Actions (FIXED FOR AUTOMATIC TRANSITION) ---
         window.signInWithGoogle = async function() {
             const provider = new GoogleAuthProvider();
             try {
-                await signInWithPopup(auth, provider);
+                // Sign in with popup
+                const result = await signInWithPopup(auth, provider);
+                
+                // *** FIX: Manually trigger the profile check immediately after successful sign-in ***
+                if (result.user) {
+                    await checkUserProfile(result.user.uid);
+                } else {
+                    showStatus("Sign-in completed, but user data was not immediately available.", 'warning');
+                }
+
             } catch (error) {
                 console.error("Google Sign-In Error:", error);
                 if (error.code !== 'auth/popup-closed-by-user') {
@@ -251,6 +278,7 @@
                     const profileRef = doc(db, USER_PROFILES_COLLECTION, uid);
                     
                     const idMapQuery = query(collection(db, USER_ID_MAP_COLLECTION), where('uniqueId', '==', newUserId));
+                    // Firestore transactions support getDocs for query
                     const querySnapshot = await getDocs(idMapQuery); 
 
                     if (!querySnapshot.empty) {
@@ -359,7 +387,13 @@
         function renderRegistrationView() {
             if (!appState.profile) return renderLoadingView();
             const userEmail = appState.profile.email;
-            const defaultId = (appState.profile.displayName || '').toLowerCase().split(' ')[0] || '';
+            // Create a default ID suggestion from the display name or email
+            let defaultId = (appState.profile.displayName || '').toLowerCase().split(' ')[0] || '';
+            if (defaultId.length === 0 && appState.profile.email) {
+                defaultId = appState.profile.email.split('@')[0];
+            }
+            // Sanitize the default ID
+            defaultId = defaultId.replace(/[^a-z0-9_]/g, '').substring(0, 15);
 
             return `
                 <div class="card w-full max-w-md text-center">
@@ -375,7 +409,7 @@
                         <label for="user-id-input" class="text-left text-sm font-medium text-gray-600">Choose your unique @ID (Required to chat):</label>
                         <div class="flex items-center bg-white rounded-xl border-2 border-pink-300 focus-within:border-pink-500 shadow-inner">
                             <span class="text-pink-500 pl-3 font-bold text-lg">@</span>
-                            <input type="text" id="user-id-input" placeholder="e.g. ${defaultId}" value="${defaultId}"
+                            <input type="text" id="user-id-input" placeholder="e.g. ${defaultId || 'cool_user_id'}" value="${defaultId}"
                                 class="flex-grow p-3 bg-transparent text-gray-800 focus:outline-none rounded-r-xl" 
                                 maxlength="20" onkeyup="this.value=this.value.toLowerCase().replace(/[^a-z0-9_]/g, '')" />
                         </div>
