@@ -37,14 +37,23 @@
         .friend-list-item:hover {
             background-color: #fce7f3; /* Light pink hover */
         }
+
+        /* Custom animation for the 3-second splash screen progress bar */
+        @keyframes progress {
+            0% { width: 0%; }
+            100% { width: 100%; }
+        }
+        .animate-progress-bar {
+            animation: progress 3s linear forwards;
+        }
     </style>
 </head>
 <body>
 
     <!-- Main Container for Views -->
-    <!-- CRITICAL FIX: Add flex, items-center, and justify-center here so the loading screen is centered immediately -->
+    <!-- Ensures the splash/loading screen is centered immediately -->
     <div id="app-container" class="w-screen h-screen p-0 overflow-hidden flex items-center justify-center">
-        <!-- Views will be rendered here (Initial loading content is set by JS immediately) -->
+        <!-- Initial view will be set to SPLASH by JS on load -->
     </div>
 
     <!-- Custom Alert/Status Message Box -->
@@ -86,8 +95,10 @@
         const appState = {
             currentUser: null,
             profile: null, // User's public profile data (including @user_id)
-            view: 'LOADING', // 'LOADING', 'LOGIN', 'REGISTER_ID', 'DASHBOARD'
-            authReady: false
+            view: 'SPLASH', // 'SPLASH', 'LOGIN', 'REGISTER_ID', 'DASHBOARD'
+            authReady: false,
+            // Flag to ensure we don't proceed until the 3-second splash is over
+            splashTimeElapsed: false 
         };
 
         // --- Firestore Path Helpers ---
@@ -114,8 +125,8 @@
             }, 5000);
         }
 
-        // --- 1. Core Firebase Setup & Listener ---
-        async function initializeAppAndAuth() {
+        // --- 1. Core Firebase Setup & Listener (Starts after splash) ---
+        async function startAppFlow() {
             try {
                 if (Object.keys(firebaseConfig).length === 0) throw new Error("Firebase config missing.");
                 
@@ -123,28 +134,21 @@
                 db = getFirestore(app);
                 auth = getAuth(app);
                 
-                let authChecked = false;
+                let authChecked = false; // Flag to ensure initial check is only performed once
 
                 // Listen for changes in authentication state
                 onAuthStateChanged(auth, async (user) => {
-                    // Prevent this from running during the explicit signInWithGoogle path
-                    if (authChecked) {
-                        // If auth changes mid-app (e.g., explicit sign out), handle it
-                        if (!user) {
-                            handleUserSignedOut();
-                        } else if (!appState.authReady) {
-                             // This is mainly for initial load, but ensures persistence is caught
-                             appState.currentUser = user;
-                             appState.authReady = true;
-                             if (!user.isAnonymous) {
-                                await checkUserProfile(user.uid);
-                             } else {
-                                handleUserSignedOut(); // If we end up anonymous after a change, go to login
-                             }
-                        }
-                        return;
+                    // We only want the first, definitive check after the splash screen is done.
+                    if (authChecked && user && appState.authReady) {
+                        // Subsequent state changes (like sign out) are handled below
+                        return; 
                     }
                     
+                    if (!appState.splashTimeElapsed) {
+                        // If the auth listener fires before the 3s timeout is over, just wait.
+                        return;
+                    }
+
                     authChecked = true;
                     appState.currentUser = user;
                     appState.authReady = true;
@@ -159,7 +163,6 @@
                     if (initialAuthToken) {
                         try {
                             const cred = await signInWithCustomToken(auth, initialAuthToken);
-                            // Custom sign-in successful, now check profile
                             await checkUserProfile(cred.user.uid);
                             return;
                         } catch(e) {
@@ -170,7 +173,8 @@
                     // 3. If still not signed in (no persistent session or token failed), sign in anonymously.
                     if (!user || user.isAnonymous) {
                         await signInAnonymously(auth);
-                        handleUserSignedOut(); // This will render the LOGIN view
+                        // Force anonymous users to the LOGIN screen
+                        handleUserSignedOut(); 
                     }
                 });
 
@@ -334,12 +338,15 @@
                 appContainer.classList.remove('flex', 'items-center', 'justify-center', 'p-4');
                 appContainer.classList.add('flex-col');
             } else {
-                // Login/Register/Loading: Centered card view (p-4 adds padding around the centered element)
+                // Login/Register/Splash: Centered card view (p-4 adds padding around the centered element)
                 appContainer.classList.add('flex', 'items-center', 'justify-center', 'p-4');
                 appContainer.classList.remove('flex-col');
             }
 
             switch (appState.view) {
+                case 'SPLASH':
+                    htmlContent = renderSplashView();
+                    break;
                 case 'LOGIN':
                     htmlContent = renderLoginView();
                     break;
@@ -349,20 +356,33 @@
                 case 'DASHBOARD':
                     htmlContent = renderDashboardView(); 
                     break;
-                case 'LOADING':
                 default:
-                    htmlContent = renderLoadingView();
+                    // Should theoretically be unreachable
+                    htmlContent = renderSplashView();
                     break;
             }
 
             appContainer.innerHTML = htmlContent;
         }
 
-        function renderLoadingView() {
+        function renderSplashView() {
             return `
-                <div class="text-center">
-                    <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-pink-500 mx-auto"></div>
-                    <p class="mt-4 text-lg font-semibold text-white">Loading SQUIT UP!!...</p>
+                <!-- Splash Screen with Graphics and Shadows -->
+                <div class="card w-full max-w-md text-center bg-white/95 backdrop-blur-sm p-10">
+                    <div class="animate-pulse flex justify-center mb-6">
+                        <!-- Custom Icon: Simplified chat bubble/logo -->
+                        <div class="relative w-16 h-16 bg-pink-500 rounded-2xl shadow-xl transform rotate-45">
+                            <div class="absolute inset-0 bg-pink-400 opacity-50 rounded-2xl"></div>
+                            <div class="absolute w-8 h-8 bg-white rounded-full top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 -rotate-45"></div>
+                        </div>
+                    </div>
+                    <h2 class="text-4xl font-extrabold text-[#f5576c] mb-2">SQUIT UP !!</h2>
+                    <p class="text-gray-700 text-lg font-semibold mb-4">loading your chats and data...</p>
+                    
+                    <!-- Progress Bar -->
+                    <div class="w-full bg-gray-200 rounded-full h-2.5 shadow-inner">
+                        <div class="bg-pink-500 h-2.5 rounded-full animate-progress-bar"></div>
+                    </div>
                 </div>
             `;
         }
@@ -384,7 +404,7 @@
         }
 
         function renderRegistrationView() {
-            if (!appState.profile) return renderLoadingView();
+            if (!appState.profile) return renderSplashView();
             const userEmail = appState.profile.email;
             // Create a default ID suggestion from the display name or email
             let defaultId = (appState.profile.displayName || '').toLowerCase().split(' ')[0] || '';
@@ -426,7 +446,7 @@
         }
 
         function renderDashboardView() {
-            if (!appState.profile) return renderLoadingView();
+            if (!appState.profile) return renderSplashView();
             const profile = appState.profile;
 
             // Dashboard: This element now uses w-full h-full to fill the screen
@@ -436,7 +456,7 @@
                     <!-- Top Header -->
                     <div class="p-6 bg-pink-500 flex-shrink-0">
                         <div class="flex justify-between items-center text-white">
-                            <h1 class="text-2xl font-extrabold">Friends</h1>
+                            <h1 class="text-2xl font-extrabold">SQUIT UP !!</h1>
                             <button onclick="handleLogout()" title="Logout" class="hover:opacity-80 transition">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H5a3 3 0 01-3-3V7a3 3 0 013-3h5a3 3 0 013 3v1"/></svg>
                             </button>
@@ -494,9 +514,17 @@
             `;
         }
 
-        // --- Initial Load ---
+        // --- Initial Load Sequence (Guarantees 3-second SPLASH view) ---
         window.onload = () => {
-            initializeAppAndAuth();
+            // 1. Immediately render the splash screen
+            appState.view = 'SPLASH';
+            renderView();
+
+            // 2. Wait 3 seconds, mark splash time elapsed, and then start the actual app flow
+            setTimeout(() => {
+                appState.splashTimeElapsed = true;
+                startAppFlow();
+            }, 3000); 
         };
 
     </script>
