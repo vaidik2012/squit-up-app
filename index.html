@@ -413,6 +413,9 @@
             pendingFriendRequests: [], // Array of UIDs who sent a request
             friendsList: [], // Array of UIDs who are friends
             allProfiles: {}, // Map of UID -> {userId, displayName, status} for display
+            
+            // NEW: Local Chat Messages (will be lost on refresh, but enables sending)
+            chatMessages: {}, // { 'friend_uid': [{senderUid, text, timestamp}, ...] }
         };
 
         const router = {
@@ -450,8 +453,62 @@
         function setActiveChat(friendUid) {
             appState.activeChat = friendUid;
             renderApp();
-            // Scroll chat area to bottom if a chat is opened/switched (not implemented yet, just a note)
+            
+            // Automatically scroll chat area to bottom when a chat is opened/switched
+            setTimeout(() => {
+                const chatArea = document.querySelector('.chat-area');
+                if (chatArea) {
+                    chatArea.scrollTop = chatArea.scrollHeight;
+                }
+            }, 50);
         }
+        
+        /**
+         * Handles sending a message (currently mock/local only).
+         * @param {Event} event - The event object (click or keydown).
+         */
+        function sendMessage(event) {
+            // If triggered by keydown, only proceed if it's the Enter key
+            if (event && event.type === 'keydown') {
+                if (event.key !== 'Enter') return;
+                event.preventDefault(); // Prevent default form behavior
+            }
+            
+            if (!appState.activeChat || !userId) return;
+
+            const inputElement = document.getElementById('chat-input-field');
+            const messageText = inputElement.value.trim();
+
+            if (!messageText) return;
+
+            const receiverUid = appState.activeChat;
+
+            const newMessage = {
+                senderUid: userId,
+                text: messageText,
+                // Simple timestamp for local display
+                timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }), 
+            };
+
+            // Initialize or update messages for the active chat
+            if (!appState.chatMessages[receiverUid]) {
+                appState.chatMessages[receiverUid] = [];
+            }
+            appState.chatMessages[receiverUid].push(newMessage);
+
+            // Clear input and re-render
+            inputElement.value = '';
+            renderApp();
+            
+            // Scroll to the bottom of the chat area after DOM update
+            setTimeout(() => {
+                const chatArea = document.querySelector('.chat-area');
+                if (chatArea) {
+                    chatArea.scrollTop = chatArea.scrollHeight;
+                }
+            }, 0);
+        }
+
 
         // --- Firebase Initialization and Auth ---
 
@@ -1084,6 +1141,28 @@
             }
 
             const friendProfile = appState.allProfiles[appState.activeChat] || { userId: 'Loading...', statusText: '...' };
+            
+            // --- Message Rendering Logic ---
+            const currentMessages = appState.chatMessages[appState.activeChat] || [];
+            
+            const messageHtml = currentMessages.map(msg => {
+                const isMyMessage = msg.senderUid === userId;
+                const alignment = isMyMessage ? 'justify-end' : 'justify-start';
+                const color = isMyMessage ? 'bg-indigo-600/70' : 'bg-[#2a2a4a]';
+                const roundedClass = isMyMessage ? 'rounded-xl rounded-br-sm' : 'rounded-xl rounded-tl-sm';
+                const senderId = appState.allProfiles[msg.senderUid]?.userId || (isMyMessage ? 'You' : 'User');
+                
+                return `
+                    <div class="flex ${alignment} mb-4">
+                        <div class="${color} p-3 ${roundedClass} max-w-xs text-white shadow-lg break-words">
+                            <p class="text-xs font-semibold text-indigo-200 mb-1">${senderId}</p>
+                            <p class="text-base">${msg.text}</p>
+                            <p class="text-xs text-gray-400 mt-1 text-right">${msg.timestamp}</p>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            // --- End Message Rendering Logic ---
 
             return `
                 <div class="main-content">
@@ -1103,28 +1182,23 @@
 
                     <!-- Chat Messages Area -->
                     <div class="chat-area">
-                        <!-- Current Chat Messages (Mock/Placeholder) -->
-                        <div class="flex flex-col h-full justify-end pt-4">
-                            <p class="text-center text-gray-600 italic text-sm mb-2">Your chat with @${friendProfile.userId}</p>
-                            <!-- Start of mock messages -->
-                            <div class="flex justify-start mb-2">
-                                <div class="bg-indigo-600/70 p-3 rounded-xl rounded-tl-sm max-w-xs text-white shadow-md">
-                                    <p>Hi! This is your first chat with ${friendProfile.userId}.</p>
-                                </div>
-                            </div>
-                            <div class="flex justify-end mb-2">
-                                <div class="bg-[#2a2a4a] p-3 rounded-xl rounded-br-sm max-w-xs text-white shadow-md">
-                                    <p>Wow! Chat is working now!</p>
-                                </div>
-                            </div>
-                            <!-- End of mock messages -->
-                        </div>
+                        <p class="text-center text-gray-600 italic text-sm mb-4 flex-shrink-0">Chat history with @${friendProfile.userId}</p>
+                        ${messageHtml}
                     </div>
 
                     <!-- Message Input -->
                     <div class="message-input-area">
-                        <input type="text" placeholder="Send a message..." class="input-field flex-grow px-4 py-3 rounded-l-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 border-r-0">
-                        <button class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-6 py-3 rounded-r-lg transition duration-150">
+                        <input 
+                            type="text" 
+                            id="chat-input-field" 
+                            placeholder="Send a message..." 
+                            class="input-field flex-grow px-4 py-3 rounded-l-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 border-r-0"
+                            onkeydown="window.sendMessage(event)"
+                        >
+                        <button 
+                            onclick="window.sendMessage({type: 'click'})" 
+                            class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-6 py-3 rounded-r-lg transition duration-150"
+                        >
                             Send
                         </button>
                     </div>
@@ -1442,6 +1516,7 @@
         window.removeUser = removeUser;
         window.showCustomAlert = showCustomAlert;
         window.setActiveChat = setActiveChat; // New function exposed
+        window.sendMessage = sendMessage; // NEW: Chat message sending function
 
         // Initialize on load
         window.onload = initializeFirebase;
