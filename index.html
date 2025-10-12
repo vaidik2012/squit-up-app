@@ -1,367 +1,395 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { initializeApp } from 'firebase/app';
-import { 
-  getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, signInWithCustomToken, signInAnonymously 
-} from 'firebase/auth';
-import { 
-  getFirestore, doc, getDoc, setDoc, collection, query, where, getDocs 
-} from 'firebase/firestore';
-
-// --- Global Context from Canvas Environment (MANDATORY) ---
-const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-// --- Firebase Paths ---
-const USER_PROFILES_COLLECTION = `artifacts/${appId}/public/data/user_profiles`;
-const USER_ID_MAP_COLLECTION = `artifacts/${appId}/public/data/user_id_map`;
-
-// Styles for the UI (using Tailwind CSS classes)
-const containerClasses = "min-h-screen bg-gray-900 text-white flex items-center justify-center p-4 font-inter";
-const cardClasses = "bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-md transition-all duration-300";
-const buttonClasses = "w-full py-3 px-4 rounded-lg font-bold transition-all duration-200 shadow-md";
-
-/**
- * Main application component.
- * Manages the authentication state and navigation flow.
- */
-const App = () => {
-  const [db, setDb] = useState(null);
-  const [auth, setAuth] = useState(null);
-  const [user, setUser] = useState(null); // Firebase user object
-  const [profile, setProfile] = useState(null); // Firestore profile data
-  const [appState, setAppState] = useState('LOADING'); // 'LOADING', 'SIGN_IN', 'CREATE_ID', 'DASHBOARD'
-  const [loadingMessage, setLoadingMessage] = useState('Starting app...');
-  
-  const [usernameInput, setUsernameInput] = useState('');
-  const [usernameError, setUsernameError] = useState('');
-
-  // 1. Initialize Firebase and Auth State Listener
-  useEffect(() => {
-    try {
-      if (Object.keys(firebaseConfig).length === 0) {
-        throw new Error("Firebase config is missing or empty.");
-      }
-      const firebaseApp = initializeApp(firebaseConfig);
-      const firestore = getFirestore(firebaseApp);
-      const firebaseAuth = getAuth(firebaseApp);
-      
-      setDb(firestore);
-      setAuth(firebaseAuth);
-
-      // Authenticate with custom token if available, otherwise sign in anonymously
-      const signInUser = async () => {
-        setLoadingMessage('Authenticating...');
-        try {
-          if (initialAuthToken) {
-            await signInWithCustomToken(firebaseAuth, initialAuthToken);
-          } else {
-            await signInAnonymously(firebaseAuth);
-          }
-        } catch (error) {
-          console.error("Authentication failed:", error);
-          // Fallback to anonymous if custom token fails
-          await signInAnonymously(firebaseAuth);
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SQUIT UP!! - Private Chat</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #2f3136; }
+        .discord-bg { background-color: #36393f; }
+        .squit-blue { background-color: #5865f2; }
+        .squit-blue-hover:hover { background-color: #4752c4; }
+        
+        /* Custom styles for the app container */
+        .app-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
         }
-      };
-      signInUser();
-
-      // Listen for auth state changes
-      const unsubscribe = onAuthStateChanged(firebaseAuth, (currentUser) => {
-        setUser(currentUser);
-        if (currentUser) {
-          // A user is signed in (either Google or Anonymous)
-          setLoadingMessage('Checking profile...');
-          checkProfile(firestore, currentUser.uid);
-        } else {
-          // No user (initial state or sign out)
-          setAppState('SIGN_IN');
+        .card {
+            background-color: #2f3136;
+            padding: 2.5rem;
+            border-radius: 1rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4);
+            border: 1px solid #42464d;
         }
-      });
+    </style>
+</head>
+<body class="discord-bg">
 
-      return () => unsubscribe();
-    } catch (e) {
-      console.error("Firebase initialization error:", e);
-      setLoadingMessage('Error: Cannot initialize Firebase.');
-      setAppState('SIGN_IN'); // Show sign-in as a fallback
-    }
-  }, []);
+    <!-- Main Container for Views -->
+    <div id="app-container" class="app-container">
+        <!-- Views will be rendered here (LOGIN, REGISTER, DASHBOARD) -->
+        <div class="text-gray-400">Initializing app...</div>
+    </div>
 
-  // 2. Check Firestore Profile for @user_id
-  const checkProfile = useCallback(async (firestore, uid) => {
-    if (!uid) return;
-
-    try {
-      const profileRef = doc(firestore, USER_PROFILES_COLLECTION, uid);
-      const profileSnap = await getDoc(profileRef);
-
-      if (profileSnap.exists() && profileSnap.data().uniqueId) {
-        // SUCCESS: User has an @user_id, proceed to dashboard
-        setProfile(profileSnap.data());
-        setAppState('DASHBOARD');
-        setLoadingMessage('Welcome back!');
-      } else {
-        // NEW USER FLOW: User signed in but needs to create an @user_id
-        setAppState('CREATE_ID');
-      }
-    } catch (error) {
-      console.error("Error checking profile:", error);
-      setAppState('CREATE_ID'); // Default to ID creation on error
-    }
-  }, []);
-
-  // 3. Google Sign-In Handler
-  const handleGoogleSignIn = async () => {
-    if (!auth) return;
-    setLoadingMessage('Signing in with Google...');
-    setAppState('LOADING');
-    try {
-      const provider = new GoogleAuthProvider();
-      // Ensure Google sign-in is possible (not anonymous)
-      if (user && user.isAnonymous) {
-          await signOut(auth);
-      }
-      await signInWithPopup(auth, provider);
-      // onAuthStateChanged will handle the state transition
-    } catch (error) {
-      console.error("Google Sign-In failed:", error);
-      // Handle 'auth/popup-closed-by-user' or other errors
-      setAppState('SIGN_IN');
-      alertUser('Sign-in Failed', error.message);
-    }
-  };
-
-  // 4. Check for Unique @user_id Availability
-  const isUsernameUnique = async (username) => {
-    if (!db) return false;
+    <!-- Custom Alert/Status Message Box -->
+    <div id="status-message" class="fixed top-4 right-4 p-4 rounded-lg shadow-xl text-white opacity-0 transition-opacity duration-300 pointer-events-none hidden"></div>
     
-    // Sanitize and validate username
-    const sanitizedUsername = username.toLowerCase().trim();
-    if (sanitizedUsername.length < 3 || !/^[a-z0-9_]+$/.test(sanitizedUsername)) {
-      setUsernameError('ID must be 3+ characters and contain only lowercase letters, numbers, or underscores.');
-      return false;
-    }
-    
-    setLoadingMessage('Checking ID uniqueness...');
-    // Query the user_id_map collection
-    const idMapRef = collection(db, USER_ID_MAP_COLLECTION);
-    const q = query(idMapRef, where('uniqueId', '==', sanitizedUsername));
-    
-    try {
-      // NOTE: getDocs is correctly used here to fetch a snapshot based on the query.
-      const querySnapshot = await getDocs(q);
-      
-      if (!querySnapshot.empty) {
-        setUsernameError(`@${sanitizedUsername} is already taken. Choose a different one.`);
-        return false;
-      }
-      
-      setUsernameError('');
-      return true;
-      
-    } catch (error) {
-      console.error("Error checking username uniqueness:", error);
-      setUsernameError('An unexpected error occurred while checking ID. Please try again.');
-      return false;
-    }
-  };
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { 
+            getAuth, onAuthStateChanged, signOut, 
+            GoogleAuthProvider, signInWithPopup, signInAnonymously, signInWithCustomToken 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, doc, getDoc, setDoc, collection, query, where, getDocs, serverTimestamp, runTransaction 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-  // 5. Register the final @user_id
-  const handleRegisterID = async () => {
-    if (!user || !db) return;
+        // --- Global Environment Configuration (MANDATORY) ---
+        const providedConfig = {
+            apiKey: "AIzaSyB1zvVHaBrbzX5iA9fBVNGa_3sY1-WCSpY",
+            authDomain: "squit-up-auth.firebaseapp.com",
+            projectId: "squit-up-auth",
+            storageBucket: "squit-up-auth.firebasestorage.app",
+            messagingSenderId: "503910898443",
+            appId: "1:503910898443:web:c5a56eb24cd4f183d8600e",
+            measurementId: "G-K4LHFHSNJC"
+        };
+        
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config) 
+            : providedConfig;
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        // --- END Configuration ---
 
-    const uniqueId = usernameInput.toLowerCase().trim();
+        // Firebase Service Variables
+        let app, db, auth;
+        
+        // Global State
+        const appState = {
+            currentUser: null,
+            profile: null, // User's public profile data (including @user_id)
+            view: 'LOADING', // 'LOADING', 'LOGIN', 'REGISTER_ID', 'DASHBOARD'
+            authReady: false
+        };
 
-    if (!(await isUsernameUnique(uniqueId))) {
-      return; // Stop if validation failed (error is set by isUsernameUnique)
-    }
-    
-    setLoadingMessage('Registering new ID...');
-    setAppState('LOADING');
+        // --- Firestore Path Helpers ---
+        // Profile stores user data, indexed by Firebase UID (private link)
+        const USER_PROFILES_COLLECTION = `artifacts/${appId}/public/data/userProfiles`; 
+        // ID Map stores the unique ID and links it to the UID (public map for uniqueness check)
+        const USER_ID_MAP_COLLECTION = `artifacts/${appId}/public/data/userIdMap`;
 
-    try {
-      // 1. Create a document in the user_id_map for uniqueness check
-      const mapRef = doc(db, USER_ID_MAP_COLLECTION, uniqueId);
-      await setDoc(mapRef, { 
-        uid: user.uid, 
-        uniqueId: uniqueId, 
-        createdAt: new Date().toISOString() 
-      });
+        // --- UI Element References ---
+        const appContainer = document.getElementById('app-container');
+        const statusMessageDiv = document.getElementById('status-message');
 
-      // 2. Update the user's main profile document
-      const profileRef = doc(db, USER_PROFILES_COLLECTION, user.uid);
-      const profileData = {
-        uniqueId: uniqueId,
-        displayName: user.displayName || 'Anonymous User',
-        email: user.email || 'N/A',
-        pfpUrl: user.photoURL || '',
-        lastLogin: new Date().toISOString()
-      };
-      
-      await setDoc(profileRef, profileData, { merge: true });
+        // --- Utility Functions ---
+        function showStatus(message, type = 'success') {
+            statusMessageDiv.textContent = message;
+            statusMessageDiv.classList.remove('hidden', 'bg-red-500', 'bg-green-500', 'bg-yellow-500', 'opacity-0', 'pointer-events-none');
+            statusMessageDiv.classList.add('opacity-100', 'pointer-events-auto');
 
-      // SUCCESS: Transition to dashboard
-      setProfile({ ...profileData, uniqueId });
-      setAppState('DASHBOARD');
-      
-    } catch (error) {
-      console.error("Registration failed:", error);
-      alertUser('Registration Failed', 'Could not save profile. Check the console for details.');
-      setAppState('CREATE_ID'); // Go back to ID creation on failure
-    }
-  };
+            if (type === 'error') {
+                statusMessageDiv.classList.add('bg-red-600');
+            } else if (type === 'warning') {
+                statusMessageDiv.classList.add('bg-yellow-600');
+            } else {
+                statusMessageDiv.classList.add('bg-green-600');
+            }
+            
+            setTimeout(() => {
+                statusMessageDiv.classList.remove('opacity-100', 'pointer-events-auto');
+                statusMessageDiv.classList.add('opacity-0');
+                setTimeout(() => statusMessageDiv.classList.add('hidden'), 300);
+            }, 5000);
+        }
 
-  // Custom Alert Modal (instead of alert())
-  const [modal, setModal] = useState({ visible: false, title: '', message: '' });
-  const alertUser = (title, message) => setModal({ visible: true, title, message });
+        // --- 1. Core Firebase Setup & Listener ---
+        async function initializeAppAndAuth() {
+            try {
+                if (Object.keys(firebaseConfig).length === 0) throw new Error("Firebase config missing.");
+                
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                // Attempt to use the Canvas provided token for seamless auth, if available
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken).catch(e => {
+                        console.warn("Custom token failed (expected in Canvas). Proceeding to onAuthStateChanged.", e);
+                    });
+                } else {
+                    // Sign in anonymously if no token is available, to satisfy security rules
+                    await signInAnonymously(auth);
+                }
 
-  // --- Rendering Functions ---
+                // Set up the listener for all authentication state changes
+                onAuthStateChanged(auth, async (user) => {
+                    appState.currentUser = user;
+                    appState.authReady = true;
 
-  const renderModal = () => (
-    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
-      <div className={`${cardClasses} bg-purple-900 border-2 border-purple-500`}>
-        <h3 className="text-xl font-extrabold text-purple-200 mb-4">{modal.title}</h3>
-        <p className="text-gray-200 mb-6">{modal.message}</p>
-        <button 
-          className={`${buttonClasses} bg-purple-600 hover:bg-purple-500`} 
-          onClick={() => setModal({ visible: false, title: '', message: '' })}
-        >
-          OK
-        </button>
-      </div>
-    </div>
-  );
+                    if (!user || user.isAnonymous) {
+                        // Not a Google-authenticated user, show login screen
+                        handleUserSignedOut();
+                        return;
+                    }
 
-  const renderHeader = (title, subtitle) => (
-    <>
-      <div className="text-center mb-8">
-        <h1 className="text-4xl font-extrabold text-purple-400">SQUIT UP! 🚀</h1>
-        <p className="text-gray-400 mt-1 text-sm">{subtitle}</p>
-      </div>
-    </>
-  );
+                    // Google-authenticated user: check for profile
+                    await checkUserProfile(user.uid);
+                });
 
-  const renderSignIn = () => (
-    <div className={cardClasses}>
-      {renderHeader("SQUIT UP!", "Sign in to start chatting with friends.")}
-      <button 
-        onClick={handleGoogleSignIn} 
-        className={`${buttonClasses} bg-blue-600 hover:bg-blue-500 flex items-center justify-center text-lg`}
-      >
-        <img 
-          src="https://www.google.com/images/icons/product/search-32.png" 
-          alt="Google logo" 
-          className="w-5 h-5 mr-3 bg-white rounded-full p-0.5"
-          onError={(e) => { e.target.style.display = 'none'; }} // Fallback if image fails
-        />
-        Sign in with Google
-      </button>
-      <p className="text-xs text-gray-500 mt-4 text-center">
-        Note: Your account will be tied to your Google profile for persistence.
-      </p>
-    </div>
-  );
+            } catch (error) {
+                console.error("Initialization Error:", error);
+                appState.view = 'LOGIN';
+                renderView();
+                showStatus("Failed to initialize app.", 'error');
+            }
+        }
 
-  const renderCreateId = () => (
-    <div className={cardClasses}>
-      {renderHeader("One More Step!", "Create your unique @User ID for friends to find you.")}
-      <p className="text-sm text-gray-400 mb-4 text-center">
-        Logged in as: <span className="font-semibold text-white">{user.email || user.uid}</span>
-      </p>
-      
-      <div className="mb-6">
-        <label htmlFor="username" className="block text-sm font-medium text-gray-300 mb-2">@User ID</label>
-        <div className="flex items-center bg-gray-700 rounded-lg">
-          <span className="text-gray-400 pl-3">@</span>
-          <input
-            id="username"
-            type="text"
-            value={usernameInput}
-            onChange={(e) => {
-              setUsernameInput(e.target.value.replace(/[^a-zA-Z0-9_]/g, '')); // Basic sanitation
-              setUsernameError('');
-            }}
-            onBlur={() => usernameInput && isUsernameUnique(usernameInput)}
-            className="flex-grow bg-gray-700 text-white p-3 rounded-r-lg focus:ring-purple-500 focus:border-purple-500 border border-transparent focus:outline-none"
-            placeholder="e.g. your_unique_id"
-            maxLength="20"
-          />
-        </div>
-        {usernameError && <p className="mt-2 text-sm text-red-400">{usernameError}</p>}
-      </div>
-      
-      <button 
-        onClick={handleRegisterID} 
-        className={`${buttonClasses} bg-purple-600 hover:bg-purple-500 disabled:opacity-50`}
-        disabled={!usernameInput || usernameError}
-      >
-        Register My ID
-      </button>
-      
-      <button 
-        onClick={() => signOut(auth)} 
-        className="mt-4 w-full text-sm text-gray-400 hover:text-red-400 transition-colors"
-      >
-        Logout
-      </button>
-    </div>
-  );
+        // --- 2. Profile Check Logic (The Gatekeeper) ---
+        async function checkUserProfile(uid) {
+            const profileRef = doc(db, USER_PROFILES_COLLECTION, uid);
+            try {
+                const profileSnap = await getDoc(profileRef);
 
-  const renderDashboard = () => (
-    <div className={`${cardClasses} max-w-2xl`}>
-      {renderHeader(`Welcome, @${profile.uniqueId}!`, "You are in the Chat Dashboard.")}
-      <div className="bg-green-900/50 border border-green-700 p-4 rounded-lg mb-6">
-        <p className="font-semibold text-green-300">Success! You are signed in and your profile is complete.</p>
-        <p className="text-sm text-gray-300 mt-2">
-          Firebase UID: {user.uid}
-        </p>
-        <p className="text-sm text-gray-300">
-          Your unique ID: <span className="text-lg font-mono text-green-400">@{profile.uniqueId}</span>
-        </p>
-      </div>
-      
-      <div className="h-64 bg-gray-700/50 rounded-lg p-4 flex items-center justify-center text-gray-400 text-xl">
-        Chat Window Area
-      </div>
-      
-      <button 
-        onClick={() => signOut(auth)} 
-        className="mt-6 w-full py-3 bg-red-600 hover:bg-red-500 rounded-lg font-bold transition-colors"
-      >
-        Sign Out
-      </button>
-    </div>
-  );
+                if (profileSnap.exists() && profileSnap.data().uniqueId) {
+                    // Profile found with ID: proceed to Dashboard
+                    appState.profile = { uid, ...profileSnap.data() };
+                    appState.view = 'DASHBOARD';
+                    showStatus(`Welcome back, @${appState.profile.uniqueId}!`);
+                } else {
+                    // Profile is missing ID or is incomplete: force registration
+                    appState.profile = { uid, displayName: appState.currentUser.displayName };
+                    appState.view = 'REGISTER_ID';
+                }
+            } catch (error) {
+                console.error("Error reading profile:", error);
+                appState.view = 'REGISTER_ID'; // Default to registration on read error
+                showStatus("Error loading profile. Please create a new ID.", 'warning');
+            }
+            renderView();
+        }
 
-  const renderLoading = () => (
-    <div className="text-center">
-      <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-purple-500 mx-auto"></div>
-      <p className="mt-4 text-lg font-semibold text-gray-300">{loadingMessage}</p>
-    </div>
-  );
+        // --- 3. Auth Actions ---
+        window.signInWithGoogle = async function() {
+            const provider = new GoogleAuthProvider();
+            try {
+                // This sign-in will trigger onAuthStateChanged, which calls checkUserProfile
+                await signInWithPopup(auth, provider);
+            } catch (error) {
+                console.error("Google Sign-In Error:", error);
+                if (error.code !== 'auth/popup-closed-by-user') {
+                     showStatus(`Sign-in failed: ${error.message}`, 'error');
+                }
+            }
+        }
 
-  let content;
-  switch (appState) {
-    case 'SIGN_IN':
-      content = renderSignIn();
-      break;
-    case 'CREATE_ID':
-      content = renderCreateId();
-      break;
-    case 'DASHBOARD':
-      content = renderDashboard();
-      break;
-    case 'LOADING':
-    default:
-      content = renderLoading();
-  }
+        window.handleLogout = async function() {
+            try {
+                await signOut(auth);
+                showStatus("Logged out successfully.");
+            } catch (error) {
+                console.error("Logout Error:", error);
+            }
+        }
 
-  return (
-    <div className={containerClasses}>
-      {content}
-      {modal.visible && renderModal()}
-    </div>
-  );
-};
+        function handleUserSignedOut() {
+            appState.profile = null;
+            appState.currentUser = null;
+            appState.view = 'LOGIN';
+            renderView();
+        }
 
-export default App;
+        // --- 4. ID Registration Logic ---
+        window.registerUserId = async function() {
+            const userIdInput = document.getElementById('user-id-input');
+            const newUserId = userIdInput.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, ''); // Sanitize
+            const uid = appState.currentUser.uid;
+            
+            if (!newUserId || newUserId.length < 3) {
+                document.getElementById('id-error').textContent = 'ID must be 3+ characters (a-z, 0-9, or _).';
+                return;
+            }
+            document.getElementById('id-error').textContent = '';
+
+            // Optimistic view change while processing
+            userIdInput.disabled = true;
+            document.querySelector('#register-btn').disabled = true;
+            document.querySelector('#register-btn').textContent = 'Checking and Saving...';
+
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const profileRef = doc(db, USER_PROFILES_COLLECTION, uid);
+                    
+                    // 1. Check uniqueness using the ID map collection
+                    const idMapQuery = query(collection(db, USER_ID_MAP_COLLECTION), where('uniqueId', '==', newUserId));
+                    const querySnapshot = await getDocs(idMapQuery); 
+
+                    if (!querySnapshot.empty) {
+                        throw new Error(`The @user_id "${newUserId}" is already taken by another user. Choose a different one.`);
+                    }
+
+                    // 2. Register the ID in the public map
+                    const mapRef = doc(db, USER_ID_MAP_COLLECTION, newUserId);
+                    transaction.set(mapRef, { uid: uid, uniqueId: newUserId, createdAt: serverTimestamp() });
+
+                    // 3. Register the ID in the user's private profile
+                    const profileData = {
+                        uid: uid,
+                        uniqueId: newUserId,
+                        displayName: appState.currentUser.displayName || newUserId,
+                        email: appState.currentUser.email || 'N/A',
+                        photoURL: appState.currentUser.photoURL || '',
+                        registrationTime: serverTimestamp()
+                    };
+                    transaction.set(profileRef, profileData, { merge: true });
+                });
+
+                // Update local state and proceed to dashboard
+                appState.profile = {
+                    uid: uid,
+                    uniqueId: newUserId,
+                    displayName: appState.currentUser.displayName || newUserId,
+                    photoURL: appState.currentUser.photoURL || ''
+                };
+                showStatus(`Success! Your ID @${newUserId} is registered.`);
+                appState.view = 'DASHBOARD';
+                renderView();
+
+            } catch (e) {
+                console.error("Registration failed:", e);
+                document.getElementById('id-error').textContent = e.message || "Failed to register ID. Please try again.";
+                showStatus("Registration failed.", 'error');
+            } finally {
+                userIdInput.disabled = false;
+                document.querySelector('#register-btn').disabled = false;
+                document.querySelector('#register-btn').textContent = 'Register My @ID';
+            }
+        }
+
+
+        // --- 5. Rendering Functions ---
+
+        function renderView() {
+            let htmlContent = '';
+            
+            switch (appState.view) {
+                case 'LOGIN':
+                    htmlContent = renderLoginView();
+                    break;
+                case 'REGISTER_ID':
+                    htmlContent = renderRegistrationView();
+                    break;
+                case 'DASHBOARD':
+                    htmlContent = renderDashboardView();
+                    break;
+                case 'LOADING':
+                default:
+                    htmlContent = renderLoadingView();
+                    break;
+            }
+
+            appContainer.innerHTML = htmlContent;
+        }
+
+        function renderLoadingView() {
+            return `
+                <div class="text-center">
+                    <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-squit-blue mx-auto"></div>
+                    <p class="mt-4 text-lg font-semibold text-gray-300">Loading SQUIT UP!!...</p>
+                </div>
+            `;
+        }
+
+        function renderLoginView() {
+            return `
+                <div class="card w-full max-w-md text-center">
+                    <h2 class="text-4xl font-extrabold text-white mb-2">Welcome to SQUIT UP!!</h2>
+                    <p class="text-gray-400 mb-8">Sign in with Google to continue.</p>
+                    <button onclick="signInWithGoogle()" 
+                            class="w-full flex items-center justify-center squit-blue squit-blue-hover text-white font-semibold py-3 px-6 rounded-lg transition duration-300 shadow-md">
+                        <!-- Google SVG Icon -->
+                        <svg class="w-5 h-5 mr-3" viewBox="0 0 48 48" fill="none"><path fill="#FBC02D" d="M43.61 20.087H24v7.818h11.458c-.521 2.846-2.128 4.706-4.992 6.645L36 38.312C41.385 34.908 43.61 28.025 43.61 20.087z"/><path fill="#E53935" d="M24 8.007c6.16 0 10.352 2.373 12.868 4.54l-5.65 4.382c-1.397-.99-3.212-1.615-5.32-1.615-4.493 0-8.204 3.01-9.57 7.283H7.668V16.71c2.47-4.86 7.42-8.703 16.332-8.703z"/><path fill="#4CAF50" d="M14.43 28.003c-.22.66-.34 1.353-.34 2.06s.12 1.4.34 2.06l5.77 4.54c1.87-3.79 5.86-6.52 10.15-6.52 1.95 0 3.73.535 5.25 1.54l5.65-4.38C34.35 23.38 29.89 21 24 21c-4.14 0-7.85 1.7-10.32 4.19l4.89 3.513z"/><path fill="#1565C0" d="M24 43c4.14 0 7.85-1.7 10.32-4.19l-5.77-4.54c-1.87 3.79-5.86 6.52-10.15 6.52-8.82 0-14.71-6.72-16.33-12.78L7.67 31.29C9.87 35.89 14.73 38.31 24 38.31c5.385 0 10.095-2.225 13.48-5.725l5.77 4.54C39.35 41.3 32.4 43 24 43z"/></svg>
+                        Sign In with Google
+                    </button>
+                </div>
+            `;
+        }
+
+        function renderRegistrationView() {
+            const userEmail = appState.currentUser ? appState.currentUser.email || appState.currentUser.uid : 'N/A';
+            const defaultId = (appState.currentUser.displayName || '').toLowerCase().split(' ')[0] || '';
+
+            return `
+                <div class="card w-full max-w-md text-center">
+                    <h2 class="text-3xl font-bold text-white mb-2">One More Step!</h2>
+                    <p class="text-gray-400 mb-6">Create your unique @user_id to access SQUIT UP!!</p>
+                    
+                    <p class="text-sm text-gray-500 mb-4">Account: <span class="text-white font-semibold">${userEmail}</span></p>
+
+                    <div class="flex flex-col space-y-2">
+                        <label for="user-id-input" class="text-left text-sm font-medium text-gray-300">Choose your unique @ID:</label>
+                        <div class="flex items-center bg-[#202225] rounded-lg border border-gray-700 focus-within:border-squit-blue">
+                            <span class="text-gray-400 pl-3">@</span>
+                            <input type="text" id="user-id-input" placeholder="e.g. ${defaultId}" value="${defaultId}"
+                                class="flex-grow p-3 bg-transparent text-white focus:outline-none rounded-r-lg" 
+                                maxlength="20" onkeyup="this.value=this.value.toLowerCase().replace(/[^a-z0-9_]/g, '')" />
+                        </div>
+                        <p id="id-error" class="text-sm text-red-400 text-left h-5"></p>
+
+                        <button onclick="registerUserId()" id="register-btn"
+                                class="w-full squit-blue squit-blue-hover text-white font-semibold py-3 rounded-lg transition duration-300 mt-4">
+                            Register My @ID
+                        </button>
+                        <button onclick="handleLogout()" class="text-sm text-gray-500 hover:text-red-400 mt-4">Cancel & Logout</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderDashboardView() {
+            if (!appState.profile) return '';
+            const profile = appState.profile;
+
+            return `
+                <div class="card w-full max-w-lg text-center">
+                    <h2 class="text-3xl font-bold text-green-400 mb-2">Dashboard Access Granted</h2>
+                    <p class="text-gray-300 mb-8">You are now logged in and ready to chat!</p>
+                    
+                    <div class="bg-gray-800 p-6 rounded-xl space-y-3">
+                        <img src="${profile.photoURL || 'https://placehold.co/64x64/5865f2/ffffff?text=S'}" 
+                             class="w-16 h-16 rounded-full mx-auto object-cover border-4 border-green-500" 
+                             onerror="this.onerror=null;this.src='https://placehold.co/64x64/5865f2/ffffff?text=S';">
+                        <p class="text-2xl font-extrabold text-white">${profile.displayName}</p>
+                        <p class="text-lg text-green-400 font-mono">@${profile.uniqueId}</p>
+                        <p class="text-sm text-gray-500">Firebase UID: ${profile.uid}</p>
+                    </div>
+
+                    <div class="h-32 mt-6 bg-gray-700 rounded-lg flex items-center justify-center text-gray-400">
+                        (Your Chat Interface Goes Here)
+                    </div>
+
+                    <button onclick="handleLogout()" 
+                            class="w-full bg-red-600 hover:bg-red-500 text-white font-semibold py-3 rounded-lg transition duration-300 mt-6">
+                        Logout
+                    </button>
+                </div>
+            `;
+        }
+
+        // --- Initial Load ---
+        window.onload = () => {
+            initializeAppAndAuth();
+        };
+
+    </script>
+</body>
+</html>
