@@ -74,12 +74,22 @@
             color: #ffffff;
             font-weight: 600;
             border-radius: 0.5rem;
-            padding: 0.5rem 1.25rem; /* Reduced padding for smaller size */
+            padding: 0.75rem 1.5rem; 
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .btn-primary-small {
+            background-image: linear-gradient(145deg, #6366f1, #8b5cf6); /* Indigo to Violet gradient */
+            color: #ffffff;
+            font-weight: 600;
+            border-radius: 0.5rem;
+            padding: 0.5rem 1.25rem; 
             transition: all 0.3s ease;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
 
-        .btn-primary:hover {
+        .btn-primary:hover, .btn-primary-small:hover {
             opacity: 0.9;
             box-shadow: 0 6px 8px rgba(0, 0, 0, 0.2);
         }
@@ -146,9 +156,11 @@
             padding: 2rem;
             border-radius: 1rem;
             box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
-            max-width: 500px; /* Adjusted size for better feel */
+            max-width: 500px;
             width: 90%;
             transition: transform 0.3s ease-out;
+            max-height: 90vh; /* Added to prevent overflow on small screens */
+            overflow-y: auto;
         }
 
         /* Loading Spinner Center Fix */
@@ -189,7 +201,24 @@
             left: 50%;
             transform: translate(-50%, -50%);
         }
+        
+        /* Responsive adjustments for the layout */
+        @media (max-width: 768px) {
+            .dashboard-layout {
+                grid-template-columns: 1fr; /* Stack sidebar and main content */
+            }
 
+            .sidebar {
+                display: none; /* Hide sidebar by default on mobile */
+            }
+            
+            .sidebar.mobile-open {
+                display: flex;
+                position: absolute;
+                width: 100%;
+                z-index: 20;
+            }
+        }
     </style>
 </head>
 <body>
@@ -219,14 +248,21 @@
     <script type="module">
         // --- Firebase Imports ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, query, where, arrayUnion, arrayRemove, setLogLevel, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut as firebaseSignOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, doc, getDoc, setDoc, updateDoc, 
+            onSnapshot, collection, query, where, arrayUnion, 
+            arrayRemove, setLogLevel, writeBatch, getDocs, deleteDoc
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
         setLogLevel('Debug');
 
         // --- Global State ---
         let app, db, auth;
+        
+        // Canvas environment variables (MUST be used)
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
 
         let appState = {
             userId: null,
@@ -237,24 +273,23 @@
             usersList: [],
             view: 'loading', // 'loading', 'auth', 'dashboard'
             activeChatId: null, // UID of the friend currently chatting with
-            chatMessages: {}, // Keyed by friendId: [{sender: uid, text: "msg", timestamp: "ISO"}] <-- NON-PERSISTENT
-            isAuthReady: false
+            // CRITICAL: This is the local, NON-PERSISTENT message storage!
+            chatMessages: {}, // Keyed by friendId: [{sender: uid, text: "msg", timestamp: "ISO"}] 
+            isAuthReady: false,
+            isProfileModalOpen: false,
+            isAddFriendModalOpen: false,
         };
 
-        // Mock friend data for demo purposes
-        const mockFriend = {
-            uid: 'mock-friend-1234',
-            displayName: 'GSA Bot',
-            status: 'online',
-            pfpUrl: 'https://placehold.co/40x40/4f46e5/ffffff?text=GSA',
-            bio: 'Hello, I am a helpful AI friend!',
-            pronouns: 'it/its'
-        };
+        // --- Firestore Paths ---
+        const PUBLIC_COLLECTION = `artifacts/${appId}/public/data/users`;
+        
+        /** Gets the user document reference */
+        const getUserDocRef = (uid) => doc(db, PUBLIC_COLLECTION, uid);
 
         // --- Utility Functions ---
 
         /** Shows a custom, transient alert message */
-        function showCustomAlert(message, type = 'info') {
+        window.showCustomAlert = function(message, type = 'info') {
             const container = document.getElementById('modal-container');
             let bgColor, icon;
 
@@ -304,31 +339,44 @@
                 document.getElementById('app-container').classList.remove('hidden');
                 renderDashboardView();
             }
+            
+            // Re-render modals if they should be open
+            if (appState.isProfileModalOpen) {
+                renderModal('editProfile');
+            } else if (appState.isAddFriendModalOpen) {
+                renderModal('addFriend');
+            } else {
+                document.getElementById('modal-container').innerHTML = ''; // Clear modals if none are open
+            }
         }
 
         function renderAuthView() {
             const container = document.getElementById('auth-view-container');
-            if (appState.userProfile) {
+            // If user is authenticated but profile is missing, show setup form
+            if (appState.userId && !appState.userProfile) {
                 // Profile setup view
+                const tempProfile = {
+                    displayName: auth.currentUser?.email.split('@')[0] || '',
+                    email: auth.currentUser?.email || '',
+                    bio: '', pronouns: '', status: 'online', pfpUrl: '', bannerUrl: ''
+                };
                 container.innerHTML = `
                     <div class="text-center">
-                        <h2 class="text-2xl font-bold mb-4 text-indigo-400">Welcome, ${appState.userProfile.email.split('@')[0]}!</h2>
+                        <h2 class="text-2xl font-bold mb-4 text-indigo-400">Welcome, ${tempProfile.displayName}!</h2>
                         <p class="text-gray-300 mb-6">Please complete your profile.</p>
                         <div class="bg-gray-700 p-6 rounded-lg space-y-4">
-                            ${renderProfileForm(appState.userProfile, true)}
-                            <button onclick="saveProfile()" class="btn-primary w-full">Save Profile and Enter SQUIT</button>
+                            ${renderProfileForm(tempProfile, true)}
+                            <button onclick="saveProfile(true)" class="btn-primary w-full">Save Profile and Enter SQUIT</button>
                         </div>
                         <button onclick="signOut()" class="text-gray-400 hover:text-red-400 mt-4 text-sm">Sign Out</button>
                     </div>
                 `;
             } else {
-                // Simple sign in/out view (Mock for now)
+                // Simple sign in/out view (Fallback/Error)
                  container.innerHTML = `
                     <div class="text-center">
                         <h2 class="text-4xl font-extrabold text-yellow-400 mb-8 tracking-wider">SQUIT UP! 🚀</h2>
-                        <p class="text-gray-300 mb-6">Sign in to start chatting.</p>
-                        <button onclick="signIn()" class="btn-primary w-full py-3 text-lg">Sign In with Google (Mock)</button>
-                        <button onclick="signOut()" class="text-gray-400 hover:text-red-400 mt-4 text-sm">Sign Out</button>
+                        <p class="text-gray-300 mb-6">Connecting...</p>
                     </div>
                 `;
             }
@@ -336,7 +384,7 @@
 
         function renderProfileForm(profile, isSetup = false) {
             return `
-                <div class="space-y-3">
+                <div class="space-y-3 text-left">
                     <label class="block text-sm font-medium text-gray-300">Display Name</label>
                     <input id="displayNameInput" type="text" value="${profile.displayName || ''}" placeholder="Choose a unique display name" class="w-full p-2 rounded-lg bg-gray-600 border border-gray-500 text-white focus:ring-indigo-500">
                     
@@ -374,7 +422,6 @@
             
             // --- Render Sidebar ---
             
-            // 1. Profile Header
             const profile = appState.userProfile;
             const statusColor = profile.status === 'online' ? 'bg-green-500' : profile.status === 'idle' ? 'bg-yellow-500' : profile.status === 'dnd' ? 'bg-red-500' : 'bg-gray-500';
 
@@ -415,11 +462,11 @@
                                 ${appState.activeChatId === friend.uid ? 'bg-indigo-700/50' : 'hover:bg-gray-700'}">
                                 
                                 <div class="relative">
-                                    <img src="${friend.pfpUrl || 'https://placehold.co/40x40/4f46e5/ffffff?text=U'}" alt="${friend.displayName}" class="w-10 h-10 rounded-full object-cover">
+                                    <img src="${friend.pfpUrl || 'https://placehold.co/40x40/4f46e5/ffffff?text=U'}" alt="${friend.displayName}" class="w-10 h-10 rounded-full object-cover" onerror="this.onerror=null;this.src='https://placehold.co/40x40/4f46e5/ffffff?text=U';">
                                     <span class="absolute right-0 bottom-0 w-3 h-3 ${friend.status === 'online' ? 'bg-green-500' : 'bg-gray-500'} rounded-full border-2 border-[#1f2937]"></span>
                                 </div>
                                 <div class="ml-3">
-                                    <p class="text-sm font-semibold text-white">${friend.displayName}</p>
+                                    <p class="text-sm font-semibold text-white truncate">${friend.displayName}</p>
                                     <p class="text-xs text-gray-400 truncate">${friend.bio || friend.status}</p>
                                 </div>
                             </div>
@@ -431,12 +478,12 @@
                 <!-- Profile Card Footer -->
                 <div onclick="openModal('editProfile')" class="profile-card p-3 bg-gray-900 border-t border-gray-700 flex items-center transition duration-200">
                     <div class="relative">
-                        <img src="${profile.pfpUrl || 'https://placehold.co/40x40/4f46e5/ffffff?text=U'}" alt="PFP" class="w-10 h-10 rounded-full object-cover">
+                        <img src="${profile.pfpUrl || 'https://placehold.co/40x40/4f46e5/ffffff?text=U'}" alt="PFP" class="w-10 h-10 rounded-full object-cover" onerror="this.onerror=null;this.src='https://placehold.co/40x40/4f46e5/ffffff?text=U';">
                         <span class="absolute right-0 bottom-0 w-3 h-3 ${statusColor} rounded-full border-2 border-gray-900"></span>
                     </div>
                     <div class="ml-3 overflow-hidden flex-grow">
                         <p class="text-sm font-bold text-white truncate">${profile.displayName}</p>
-                        <p class="text-xs text-gray-400 truncate">${profile.email}</p>
+                        <p class="text-xs text-gray-400 truncate">${profile.email.split('@')[0]}</p>
                     </div>
                     <!-- Sign Out Button (Icon only) -->
                     <button onclick="signOut(event)" class="text-gray-400 hover:text-white transition p-2 rounded-full hover:bg-[#374151]">
@@ -457,23 +504,32 @@
                         <svg class="w-20 h-20 mb-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.549A9.957 9.957 0 0012 22c4.97 0 9-3.582 9-8s-4.03-8-9-8-9 3.582-9 8h.082a8.07 8.07 0 00.322 1.353v.065"></path></svg>
                         <h3 class="text-xl font-semibold mb-2 text-white">Select a Friend to Chat</h3>
                         <p class="text-center">Click on any friend in the sidebar to open a conversation and start messaging.</p>
+                        <div class="mt-4 text-xs text-indigo-400">Your User ID: ${appState.userId}</div>
                     </div>
                 `;
             }
         }
 
         function renderChatView(container, friendUid) {
-            const friend = appState.friends.find(f => f.uid === friendUid) || mockFriend;
+            const friend = appState.friends.find(f => f.uid === friendUid) || {
+                uid: friendUid,
+                displayName: 'Unknown User',
+                status: 'offline',
+                pfpUrl: 'https://placehold.co/40x40/374151/ffffff?text=?',
+                bio: 'User data not found.'
+            };
+            
+            // Retrieve messages from the NON-PERSISTENT local state
             const messages = appState.chatMessages[friendUid] || [];
             const myUid = appState.userId;
 
             container.innerHTML = `
                 <!-- Chat Header -->
                 <div class="chat-header p-4 flex items-center bg-gray-800 border-b border-gray-700 shadow-md">
-                    <img src="${friend.pfpUrl || 'https://placehold.co/40x40/4f46e5/ffffff?text=U'}" alt="${friend.displayName}" class="w-10 h-10 rounded-full object-cover">
+                    <img src="${friend.pfpUrl}" alt="${friend.displayName}" class="w-10 h-10 rounded-full object-cover" onerror="this.onerror=null;this.src='https://placehold.co/40x40/374151/ffffff?text=U';">
                     <div class="ml-3">
                         <p class="text-lg font-bold text-white">${friend.displayName}</p>
-                        <p class="text-xs text-gray-400">@${friend.uid.substring(0, 8)}</p>
+                        <p class="text-xs text-gray-400 truncate">${friend.bio || friend.status}</p>
                     </div>
                 </div>
 
@@ -489,12 +545,12 @@
                     `).join('')}
                 </div>
 
-                <!-- Chat Input/Footer -->
+                <!-- Chat Input/Footer - WIRED UP -->
                 <div class="chat-footer p-4 flex items-center bg-gray-700/50">
                     <input type="text" id="chatInput" placeholder="Message to @${friend.displayName}..." 
                         class="flex-grow p-3 rounded-l-lg bg-gray-800 text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition duration-150"
                         onkeypress="if(event.key === 'Enter') sendMessage(event)">
-                    <button onclick="sendMessage(event)" class="btn-primary flex items-center space-x-2 rounded-r-lg shadow-lg">
+                    <button onclick="sendMessage(event)" class="btn-primary-small flex items-center space-x-2 rounded-r-lg shadow-lg">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
                         </svg>
@@ -511,11 +567,75 @@
             }, 50);
         }
 
-        // --- Action Handlers ---
+        // --- Modals ---
 
-        // NEW: Local (Non-Persistent) sendMessage function
+        window.openModal = function(type) {
+            closeModal(); // Close any existing modal first
+            if (type === 'editProfile') appState.isProfileModalOpen = true;
+            if (type === 'addFriend') appState.isAddFriendModalOpen = true;
+            renderModal(type);
+        }
+
+        window.closeModal = function() {
+            appState.isProfileModalOpen = false;
+            appState.isAddFriendModalOpen = false;
+            renderApp(); // Rerender to remove modal
+        }
+        
+        function renderModal(type) {
+            const container = document.getElementById('modal-container');
+            if (!container) return;
+            
+            let title = '';
+            let content = '';
+
+            if (type === 'editProfile') {
+                title = 'Edit Your Profile';
+                content = `
+                    ${renderProfileForm(appState.userProfile)}
+                    <button onclick="saveProfile(false)" class="btn-primary w-full mt-4">Save Changes</button>
+                `;
+            } else if (type === 'addFriend') {
+                title = 'Add Friend';
+                content = `
+                    <p class="text-gray-400 mb-4">Enter a friend's User ID (the long string of letters and numbers).</p>
+                    <input id="friendIdInput" type="text" placeholder="Friend's User ID" class="w-full p-3 rounded-lg bg-gray-800 border border-gray-600 text-white focus:ring-indigo-500">
+                    <button onclick="sendFriendRequest()" class="btn-primary w-full mt-4">Send Friend Request</button>
+                    
+                    <p class="text-xs text-gray-500 mt-6 pt-3 border-t border-gray-700">Your User ID (Share this with friends):</p>
+                    <div class="flex items-center space-x-2 bg-gray-900 p-2 rounded-lg">
+                        <span id="myUserIdDisplay" class="text-sm font-mono flex-grow select-all break-all">${appState.userId}</span>
+                        <button onclick="copyToClipboard('myUserIdDisplay')" class="text-indigo-400 hover:text-indigo-300 transition" title="Copy ID">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5H6M10 7H8M18 6h-4a2 2 0 00-2 2v2M18 6V4M14 6V4"></path></svg>
+                        </button>
+                    </div>
+                `;
+            } else {
+                return; // Nothing to render
+            }
+
+            container.innerHTML = `
+                <div class="modal-overlay" onclick="closeModal()">
+                    <div class="modal-content" onclick="event.stopPropagation()">
+                        <div class="flex justify-between items-start border-b border-gray-700 pb-3 mb-4">
+                            <h3 class="text-xl font-bold text-white">${title}</h3>
+                            <button onclick="closeModal()" class="text-gray-400 hover:text-white transition">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                            </button>
+                        </div>
+                        ${content}
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- Action Handlers (Firebase integration) ---
+
+        /** * [CURRENT NON-PERSISTENT VERSION] Sends a message by updating local state and re-rendering.
+         * This function handles button click and Enter keypress events from the chat input.
+         */
         window.sendMessage = function(event) {
-            // Check if triggered by Enter keypress to prevent accidental form submission
+            // Check if triggered by Enter keypress
             if (event.type === 'keypress' && event.key !== 'Enter') return;
             if (event.key === 'Enter' || event.type === 'click') event.preventDefault(); 
             
@@ -525,7 +645,7 @@
 
             if (messageText === "" || !receiverUid) return;
 
-            // This is the NON-PERSISTENT part: storing the message locally.
+            // This is the NON-PERSISTENT part: storing the message locally in appState.
             const newMessage = {
                 sender: appState.userId,
                 text: messageText,
@@ -537,7 +657,7 @@
             }
             appState.chatMessages[receiverUid].push(newMessage);
 
-            // Clear the input and re-render
+            // Clear the input and re-render the dashboard to update the chat window
             input.value = "";
             renderDashboardView(); 
         }
@@ -547,19 +667,329 @@
             renderDashboardView(); 
         }
 
-        // --- Other Action functions (simplified for brevity) ---
-        // (Other functions like openModal, closeModal, etc. were also present here)
-        // ... (Functions for Friend Requests, Profile Edit, Auth were present)
-        
-        // --- Initialization ---
-
-        async function initializeAppAndAuth() {
-            // ... (Firebase initialization and auth logic)
-            // ... (The actual initialization code was here)
+        window.copyToClipboard = function(elementId) {
+            const element = document.getElementById(elementId);
+            if (!element) return;
+            try {
+                // Use execCommand('copy') for better iframe compatibility
+                const range = document.createRange();
+                range.selectNode(element);
+                window.getSelection().removeAllRanges();
+                window.getSelection().addRange(range);
+                document.execCommand('copy');
+                window.getSelection().removeAllRanges();
+                showCustomAlert('User ID copied to clipboard!', 'success');
+            } catch (err) {
+                console.error('Failed to copy text: ', err);
+                showCustomAlert('Could not copy ID automatically.', 'error');
+            }
         }
         
-        // initializeAppAndAuth(); // Function call to start the app
+        /** Signs the user out of Firebase and resets the app state. */
+        window.signOut = async function(event) {
+            if (event) event.stopPropagation(); // Prevent profile card click event
+            try {
+                await firebaseSignOut(auth);
+                // The onAuthStateChanged listener will handle state reset
+            } catch (error) {
+                console.error("Sign Out Error:", error);
+                showCustomAlert("Failed to sign out.", 'error');
+            }
+        }
 
+        /** Saves or updates the user profile data to Firestore. */
+        window.saveProfile = async function(isInitialSetup) {
+            const displayName = document.getElementById('displayNameInput').value.trim();
+            const bio = document.getElementById('bioInput').value.trim();
+            const pronouns = document.getElementById('pronounsInput').value.trim();
+            const status = document.getElementById('statusInput').value;
+            const pfpUrl = document.getElementById('pfpUrlInput').value.trim();
+            const bannerUrl = document.getElementById('bannerUrlInput').value.trim();
+
+            if (!displayName || displayName.length < 3) {
+                return showCustomAlert("Display Name must be at least 3 characters.", 'error');
+            }
+            
+            const profileData = {
+                uid: appState.userId,
+                email: auth.currentUser.email,
+                displayName: displayName,
+                bio: bio,
+                pronouns: pronouns,
+                status: status,
+                pfpUrl: pfpUrl,
+                bannerUrl: bannerUrl,
+                lastUpdated: new Date().toISOString()
+            };
+
+            try {
+                // Use setDoc to create or overwrite the document
+                await setDoc(getUserDocRef(appState.userId), profileData, { merge: true });
+                showCustomAlert(isInitialSetup ? "Profile created successfully!" : "Profile updated successfully!", 'success');
+                appState.userProfile = profileData; // Update local state immediately
+                closeModal(); // Close modal if open
+                appState.view = 'dashboard';
+                renderApp();
+            } catch (error) {
+                console.error("Error saving profile:", error);
+                showCustomAlert("Failed to save profile. See console.", 'error');
+            }
+        }
+
+        /** Sends a friend request to a target user ID. */
+        window.sendFriendRequest = async function() {
+            const friendIdInput = document.getElementById('friendIdInput');
+            const targetUid = friendIdInput.value.trim();
+
+            if (!targetUid || targetUid === appState.userId) {
+                return showCustomAlert("Please enter a valid, different User ID.", 'error');
+            }
+
+            // 1. Check if user already friends, pending, or sent
+            if (appState.friends.some(f => f.uid === targetUid)) {
+                return showCustomAlert("You are already friends with this user.", 'info');
+            }
+            if (appState.sentRequests.some(r => r.uid === targetUid)) {
+                return showCustomAlert("Friend request already sent.", 'info');
+            }
+            if (appState.pendingRequests.some(r => r.uid === targetUid)) {
+                return showCustomAlert("This user has already sent you a request. Check Pending Requests.", 'info');
+            }
+
+            try {
+                const targetUserDoc = await getDoc(getUserDocRef(targetUid));
+
+                if (!targetUserDoc.exists()) {
+                    return showCustomAlert("User ID not found.", 'error');
+                }
+
+                // 2. Add current user's UID to the target's 'pending' array
+                await updateDoc(getUserDocRef(targetUid), {
+                    pending: arrayUnion(appState.userId)
+                });
+
+                // 3. Add target user's UID to the current user's 'sent' array (for tracking)
+                await updateDoc(getUserDocRef(appState.userId), {
+                    sent: arrayUnion(targetUid)
+                });
+                
+                friendIdInput.value = ''; // Clear input
+                showCustomAlert(`Friend request sent to ${targetUserDoc.data().displayName}!`, 'success');
+                // The onSnapshot listener will update appState.sentRequests automatically
+            } catch (error) {
+                console.error("Error sending friend request:", error);
+                showCustomAlert("Failed to send friend request.", 'error');
+            }
+        }
+
+        /** Accepts a pending friend request. */
+        window.acceptFriendRequest = async function(requesterUid) {
+            try {
+                const batch = writeBatch(db);
+                const myRef = getUserDocRef(appState.userId);
+                const requesterRef = getUserDocRef(requesterUid);
+
+                // 1. Remove from my 'pending' array, add to my 'friends' array
+                batch.update(myRef, {
+                    pending: arrayRemove(requesterUid),
+                    friends: arrayUnion(requesterUid)
+                });
+
+                // 2. Remove from requester's 'sent' array, add to their 'friends' array
+                batch.update(requesterRef, {
+                    sent: arrayRemove(appState.userId),
+                    friends: arrayUnion(appState.userId)
+                });
+
+                await batch.commit();
+                showCustomAlert("Friend request accepted!", 'success');
+                // Listeners will handle state update
+            } catch (error) {
+                console.error("Error accepting request:", error);
+                showCustomAlert("Failed to accept friend request.", 'error');
+            }
+        }
+
+        /** Rejects a pending friend request. */
+        window.rejectFriendRequest = async function(requesterUid) {
+            try {
+                const batch = writeBatch(db);
+                const myRef = getUserDocRef(appState.userId);
+                const requesterRef = getUserDocRef(requesterUid);
+
+                // 1. Remove from my 'pending' array
+                batch.update(myRef, {
+                    pending: arrayRemove(requesterUid)
+                });
+
+                // 2. Remove from requester's 'sent' array
+                batch.update(requesterRef, {
+                    sent: arrayRemove(appState.userId)
+                });
+
+                await batch.commit();
+                showCustomAlert("Friend request rejected.", 'info');
+                // Listeners will handle state update
+            } catch (error) {
+                console.error("Error rejecting request:", error);
+                showCustomAlert("Failed to reject friend request.", 'error');
+            }
+        }
+        
+        // --- Listeners & Data Fetching ---
+
+        /** Fetches all public user profiles (excluding current user) for display/friend searching. */
+        function setupAllUsersListener() {
+            if (!db) return;
+            const q = query(collection(db, PUBLIC_COLLECTION), where("uid", "!=", appState.userId));
+            
+            // NOTE: We don't use this list yet, but we will for a searchable user directory.
+            return onSnapshot(q, (snapshot) => {
+                const users = snapshot.docs.map(doc => doc.data());
+                // appState.usersList = users; 
+                // console.log("All other users fetched:", users.length);
+            }, (error) => {
+                console.error("Error fetching all users:", error);
+            });
+        }
+        
+        /** Sets up real-time listener for the current user's profile and social data. */
+        function setupUserProfileListener(uid) {
+            if (!db || !uid) return;
+
+            return onSnapshot(getUserDocRef(uid), async (docSnapshot) => {
+                if (docSnapshot.exists()) {
+                    const data = docSnapshot.data();
+                    appState.userProfile = data;
+                    
+                    // Update social arrays
+                    const friendUids = data.friends || [];
+                    const pendingUids = data.pending || [];
+                    const sentUids = data.sent || [];
+                    
+                    // Fetch profile data for UIDs in the arrays
+                    appState.friends = await fetchProfilesByUids(friendUids);
+                    appState.pendingRequests = await fetchProfilesByUids(pendingUids);
+                    appState.sentRequests = await fetchProfilesByUids(sentUids);
+
+                    // If we were on the auth view, transition to dashboard
+                    if (appState.view === 'auth' || appState.view === 'loading') {
+                        appState.view = 'dashboard';
+                    }
+                    
+                } else {
+                    // User document doesn't exist, prompt for profile setup
+                    appState.userProfile = null;
+                    appState.view = 'auth';
+                }
+                renderApp();
+            }, (error) => {
+                console.error("Error listening to user profile:", error);
+                showCustomAlert("Failed to load profile data in real-time.", 'error');
+            });
+        }
+
+        /** Helper to fetch multiple profiles efficiently (not real-time). */
+        async function fetchProfilesByUids(uids) {
+            if (uids.length === 0) return [];
+
+            const profiles = [];
+            for (const uid of uids) {
+                try {
+                    const docSnap = await getDoc(getUserDocRef(uid));
+                    if (docSnap.exists()) {
+                        profiles.push(docSnap.data());
+                    }
+                } catch (e) {
+                    console.error("Error fetching profile for UID:", uid, e);
+                }
+            }
+            return profiles;
+        }
+
+        // --- Initialization ---
+        let profileUnsubscribe = null;
+        let usersUnsubscribe = null;
+
+        /** Handles Firebase initialization and authentication status changes. */
+        async function initializeAppAndAuth() {
+            if (!app) {
+                try {
+                    app = initializeApp(firebaseConfig);
+                    db = getFirestore(app);
+                    auth = getAuth(app);
+                } catch (e) {
+                    console.error("Firebase Initialization Failed:", e);
+                    document.getElementById('loadingOverlay').innerHTML = `<h3 class="text-xl text-red-400">Error: Failed to initialize Firebase. Check console.</h3>`;
+                    return;
+                }
+            }
+
+            // Centralized listener for authentication state
+            onAuthStateChanged(auth, async (user) => {
+                // Clean up previous listeners
+                if (profileUnsubscribe) profileUnsubscribe();
+                if (usersUnsubscribe) usersUnsubscribe();
+                
+                if (user) {
+                    appState.userId = user.uid;
+                    
+                    // 1. Setup listeners for the authenticated user's profile and social data
+                    profileUnsubscribe = setupUserProfileListener(user.uid);
+                    usersUnsubscribe = setupAllUsersListener();
+                    appState.isAuthReady = true;
+                    // The listeners will trigger the first render
+                    
+                } else {
+                    // User is signed out (or initially anonymous)
+                    
+                    // Attempt to sign in with custom token if available
+                    const initialToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                    
+                    if (initialToken) {
+                        try {
+                            await signInWithCustomToken(auth, initialToken);
+                            // This will trigger the 'user' block above
+                        } catch (error) {
+                            console.warn("Custom token sign-in failed. Falling back to anonymous:", error.message);
+                            try {
+                                // Fallback to anonymous sign-in
+                                await signInAnonymously(auth);
+                            } catch (anonError) {
+                                console.error("Anonymous Sign In Error:", anonError);
+                                showCustomAlert("Failed to sign in anonymously.", 'error');
+                                appState.view = 'auth';
+                                appState.isAuthReady = true;
+                                renderApp();
+                            }
+                        }
+                    } else {
+                        // Sign in anonymously if no custom token
+                        try {
+                            await signInAnonymously(auth);
+                        } catch (anonError) {
+                            console.error("Anonymous Sign In Error:", anonError);
+                            showCustomAlert("Failed to sign in anonymously.", 'error');
+                            appState.view = 'auth';
+                            appState.isAuthReady = true;
+                            renderApp();
+                        }
+                    }
+                    
+                    // Reset non-auth state
+                    appState.userId = null;
+                    appState.userProfile = null;
+                    appState.activeChatId = null;
+                    appState.chatMessages = {}; // Clear local messages on sign out
+                    if (appState.isAuthReady) {
+                        appState.view = 'auth';
+                        renderApp();
+                    }
+                }
+            });
+        }
+
+        initializeAppAndAuth();
     </script>
 </body>
 </html>
