@@ -1309,55 +1309,101 @@
                 console.log('Searching for user:', friendUserId);
                 console.log('Current user:', currentUser.userId);
                 
-                // First try database search
+                // COMPREHENSIVE USER SEARCH - Check EVERYWHERE
                 let targetUser = null;
                 let targetUserData = null;
                 
+                // Method 1: Search Firestore database
                 try {
+                    console.log('Searching Firestore database...');
                     const userQuery = await db.collection('users').where('userId', '==', friendUserId).get();
                     
                     if (!userQuery.empty) {
                         targetUser = userQuery.docs[0];
                         targetUserData = targetUser.data();
-                        console.log('Found user in database:', targetUserData);
+                        console.log('✅ Found user in Firestore database:', targetUserData);
+                    } else {
+                        console.log('❌ User not found in Firestore database');
                     }
                 } catch (dbError) {
-                    console.warn('Database search failed, checking localStorage:', dbError);
+                    console.warn('⚠️ Firestore search failed:', dbError);
                 }
                 
-                // If not found in database, check all localStorage entries
+                // Method 2: Search ALL localStorage entries (including other browser sessions)
                 if (!targetUser) {
-                    console.log('User not found in database, checking localStorage...');
-                    let foundInLocalStorage = false;
+                    console.log('Searching ALL localStorage entries...');
                     
-                    // Check all possible localStorage entries
+                    // Get all localStorage keys
+                    const allKeys = [];
                     for (let i = 0; i < localStorage.length; i++) {
-                        const key = localStorage.key(i);
+                        allKeys.push(localStorage.key(i));
+                    }
+                    
+                    console.log('Found localStorage keys:', allKeys);
+                    
+                    for (const key of allKeys) {
                         if (key && key.startsWith('squitup_user_')) {
                             try {
                                 const userData = JSON.parse(localStorage.getItem(key));
+                                console.log(`Checking localStorage entry ${key}:`, userData);
+                                
                                 if (userData && userData.userId === friendUserId) {
-                                    // Found the user in localStorage
+                                    // Found the user in localStorage!
                                     const uid = key.replace('squitup_user_', '');
                                     targetUserData = userData;
                                     targetUser = { id: uid };
-                                    foundInLocalStorage = true;
-                                    console.log('Found user in localStorage:', userData);
+                                    console.log('✅ Found user in localStorage:', userData);
                                     break;
                                 }
                             } catch (e) {
-                                // Skip invalid localStorage entries
+                                console.warn(`Invalid localStorage entry ${key}:`, e);
                             }
                         }
                     }
                     
-                    if (!foundInLocalStorage) {
-                        alert(`User ${friendUserId} not found. Please check the @user_id and try again.`);
-                        sendButton.disabled = false;
-                        sendButton.textContent = 'Send Friend Request';
-                        return;
+                    if (!targetUser) {
+                        console.log('❌ User not found in localStorage either');
                     }
                 }
+                
+                // Method 3: Try to find user by searching all possible storage locations
+                if (!targetUser) {
+                    console.log('Trying alternative search methods...');
+                    
+                    // Check if user might exist but with different casing
+                    const lowerFriendId = friendUserId.toLowerCase();
+                    
+                    try {
+                        const allUsersQuery = await db.collection('users').get();
+                        allUsersQuery.forEach(doc => {
+                            const userData = doc.data();
+                            if (userData.userId && userData.userId.toLowerCase() === lowerFriendId) {
+                                targetUser = doc;
+                                targetUserData = userData;
+                                console.log('✅ Found user with case-insensitive search:', userData);
+                            }
+                        });
+                    } catch (e) {
+                        console.warn('Case-insensitive search failed:', e);
+                    }
+                }
+                
+                // If STILL not found, show detailed error
+                if (!targetUser) {
+                    console.log('🔍 DETAILED SEARCH RESULTS:');
+                    console.log('- Searched Firestore database: ❌');
+                    console.log('- Searched localStorage: ❌');
+                    console.log('- Searched case-insensitive: ❌');
+                    console.log('- Target @user_id:', friendUserId);
+                    
+                    // Show helpful error message
+                    alert(`❌ User ${friendUserId} not found!\n\n🔍 Make sure:\n• The @user_id is spelled correctly\n• The user has created their account\n• They're using the exact same @user_id\n\n💡 Ask them to check their profile to confirm their @user_id!`);
+                    sendButton.disabled = false;
+                    sendButton.textContent = 'Send Friend Request';
+                    return;
+                }
+                
+                console.log('✅ USER FOUND! Proceeding with friend request...');
 
                 // Check if already friends
                 const friendshipQuery = await db.collection('friendships')
@@ -1790,5 +1836,5 @@
         `;
         document.head.appendChild(style);
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'98d46f1df5e48584',t:'MTc2MDI0OTQyNS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'98d473f515948584',t:'MTc2MDI0OTYyNC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
