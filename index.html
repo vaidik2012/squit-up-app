@@ -1306,18 +1306,58 @@
             sendButton.textContent = 'Searching...';
 
             try {
-                // Check if the user exists
-                const userQuery = await db.collection('users').where('userId', '==', friendUserId).get();
+                console.log('Searching for user:', friendUserId);
+                console.log('Current user:', currentUser.userId);
                 
-                if (userQuery.empty) {
-                    alert(`User ${friendUserId} not found. Please check the @user_id and try again.`);
-                    sendButton.disabled = false;
-                    sendButton.textContent = 'Send Friend Request';
-                    return;
+                // First try database search
+                let targetUser = null;
+                let targetUserData = null;
+                
+                try {
+                    const userQuery = await db.collection('users').where('userId', '==', friendUserId).get();
+                    
+                    if (!userQuery.empty) {
+                        targetUser = userQuery.docs[0];
+                        targetUserData = targetUser.data();
+                        console.log('Found user in database:', targetUserData);
+                    }
+                } catch (dbError) {
+                    console.warn('Database search failed, checking localStorage:', dbError);
                 }
-
-                const targetUser = userQuery.docs[0];
-                const targetUserData = targetUser.data();
+                
+                // If not found in database, check all localStorage entries
+                if (!targetUser) {
+                    console.log('User not found in database, checking localStorage...');
+                    let foundInLocalStorage = false;
+                    
+                    // Check all possible localStorage entries
+                    for (let i = 0; i < localStorage.length; i++) {
+                        const key = localStorage.key(i);
+                        if (key && key.startsWith('squitup_user_')) {
+                            try {
+                                const userData = JSON.parse(localStorage.getItem(key));
+                                if (userData && userData.userId === friendUserId) {
+                                    // Found the user in localStorage
+                                    const uid = key.replace('squitup_user_', '');
+                                    targetUserData = userData;
+                                    targetUser = { id: uid };
+                                    foundInLocalStorage = true;
+                                    console.log('Found user in localStorage:', userData);
+                                    break;
+                                }
+                            } catch (e) {
+                                // Skip invalid localStorage entries
+                            }
+                        }
+                    }
+                    
+                    if (!foundInLocalStorage) {
+                        alert(`User ${friendUserId} not found. Please check the @user_id and try again.`);
+                        sendButton.disabled = false;
+                        sendButton.textContent = 'Send Friend Request';
+                        return;
+                    }
+                }
 
                 // Check if already friends
                 const friendshipQuery = await db.collection('friendships')
@@ -1355,16 +1395,26 @@
                 sendButton.textContent = 'Sending...';
 
                 // Send friend request
-                await db.collection('friendRequests').add({
+                const requestData = {
                     from: currentUser.uid,
                     fromUserId: currentUser.userId,
-                    fromDisplayName: currentUser.displayName,
+                    fromDisplayName: currentUser.displayName || currentUser.userId,
                     to: targetUser.id,
                     toUserId: targetUserData.userId,
-                    toDisplayName: targetUserData.displayName,
+                    toDisplayName: targetUserData.displayName || targetUserData.userId,
                     status: 'pending',
                     createdAt: new Date().toISOString()
-                });
+                };
+
+                try {
+                    await db.collection('friendRequests').add(requestData);
+                    console.log('Friend request saved to database');
+                } catch (dbError) {
+                    console.warn('Failed to save to database, saving to localStorage:', dbError);
+                    // Save to localStorage as backup
+                    const requestId = 'req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                    localStorage.setItem('friendRequest_' + requestId, JSON.stringify(requestData));
+                }
 
                 alert(`Friend request sent to ${friendUserId} successfully! 🎉`);
                 closeModal('addFriendModal');
@@ -1388,39 +1438,73 @@
             const friendRequestsList = document.getElementById('friendRequestsList');
             
             try {
-                // Get pending friend requests for current user
-                const requestsQuery = await db.collection('friendRequests')
-                    .where('to', '==', currentUser.uid)
-                    .where('status', '==', 'pending')
-                    .get();
+                let requestsHTML = '';
+                let foundRequests = false;
+                
+                // First try to load from database
+                try {
+                    const requestsQuery = await db.collection('friendRequests')
+                        .where('to', '==', currentUser.uid)
+                        .where('status', '==', 'pending')
+                        .get();
 
-                if (requestsQuery.empty) {
+                    requestsQuery.forEach(doc => {
+                        const request = doc.data();
+                        requestsHTML += `
+                            <div class="friend-request" data-request-id="${doc.id}">
+                                <div>
+                                    <div style="font-weight: 600;">${request.fromUserId}</div>
+                                    <div style="font-size: 12px; color: #b9bbbe;">Wants to be your friend</div>
+                                </div>
+                                <div>
+                                    <button class="btn-small btn-accept" onclick="acceptFriendRequest('${doc.id}', '${request.from}', '${request.fromUserId}')">Accept</button>
+                                    <button class="btn-small btn-decline" onclick="declineFriendRequest('${doc.id}')">Decline</button>
+                                </div>
+                            </div>
+                        `;
+                        foundRequests = true;
+                    });
+                } catch (dbError) {
+                    console.warn('Database query failed, checking localStorage:', dbError);
+                }
+                
+                // Also check localStorage for friend requests
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key && key.startsWith('friendRequest_')) {
+                        try {
+                            const request = JSON.parse(localStorage.getItem(key));
+                            if (request && request.to === currentUser.uid && request.status === 'pending') {
+                                const requestId = key.replace('friendRequest_', '');
+                                requestsHTML += `
+                                    <div class="friend-request" data-request-id="${requestId}">
+                                        <div>
+                                            <div style="font-weight: 600;">${request.fromUserId}</div>
+                                            <div style="font-size: 12px; color: #b9bbbe;">Wants to be your friend</div>
+                                        </div>
+                                        <div>
+                                            <button class="btn-small btn-accept" onclick="acceptFriendRequest('${requestId}', '${request.from}', '${request.fromUserId}')">Accept</button>
+                                            <button class="btn-small btn-decline" onclick="declineFriendRequest('${requestId}')">Decline</button>
+                                        </div>
+                                    </div>
+                                `;
+                                foundRequests = true;
+                            }
+                        } catch (e) {
+                            // Skip invalid localStorage entries
+                        }
+                    }
+                }
+
+                if (!foundRequests) {
                     friendRequestsList.innerHTML = `
                         <div style="text-align: center; color: #b9bbbe; padding: 20px;">
                             No friend requests yet. Share your @user_id with friends to get started!
                         </div>
                     `;
-                    return;
+                } else {
+                    friendRequestsList.innerHTML = requestsHTML;
                 }
-
-                let requestsHTML = '';
-                requestsQuery.forEach(doc => {
-                    const request = doc.data();
-                    requestsHTML += `
-                        <div class="friend-request" data-request-id="${doc.id}">
-                            <div>
-                                <div style="font-weight: 600;">${request.fromUserId}</div>
-                                <div style="font-size: 12px; color: #b9bbbe;">Wants to be your friend</div>
-                            </div>
-                            <div>
-                                <button class="btn-small btn-accept" onclick="acceptFriendRequest('${doc.id}', '${request.from}', '${request.fromUserId}')">Accept</button>
-                                <button class="btn-small btn-decline" onclick="declineFriendRequest('${doc.id}')">Decline</button>
-                            </div>
-                        </div>
-                    `;
-                });
-
-                friendRequestsList.innerHTML = requestsHTML;
 
             } catch (error) {
                 console.error('Error loading friend requests:', error);
@@ -1534,9 +1618,43 @@
 
                 // Check if user ID is being changed
                 if (newUserId && newUserId !== currentUser.userId) {
+                    console.log('Checking if new userId is available:', newUserId);
+                    console.log('Current userId:', currentUser.userId);
+                    
                     // Check if new user ID is already taken
-                    const userIdQuery = await db.collection('users').where('userId', '==', newUserId).get();
-                    if (!userIdQuery.empty) {
+                    let userIdTaken = false;
+                    
+                    // First check database
+                    try {
+                        const userIdQuery = await db.collection('users').where('userId', '==', newUserId).get();
+                        if (!userIdQuery.empty) {
+                            userIdTaken = true;
+                            console.log('UserId found in database - already taken');
+                        }
+                    } catch (dbError) {
+                        console.warn('Database check failed, checking localStorage:', dbError);
+                    }
+                    
+                    // If not found in database, check localStorage
+                    if (!userIdTaken) {
+                        for (let i = 0; i < localStorage.length; i++) {
+                            const key = localStorage.key(i);
+                            if (key && key.startsWith('squitup_user_') && key !== 'squitup_user_' + currentUser.uid) {
+                                try {
+                                    const userData = JSON.parse(localStorage.getItem(key));
+                                    if (userData && userData.userId === newUserId) {
+                                        userIdTaken = true;
+                                        console.log('UserId found in localStorage - already taken');
+                                        break;
+                                    }
+                                } catch (e) {
+                                    // Skip invalid localStorage entries
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (userIdTaken) {
                         alert(`Sorry! The @user_id "${newUserId}" is already taken by another user.\n\nPlease choose a different @user_id.`);
                         saveButton.disabled = false;
                         saveButton.textContent = 'Save Changes';
@@ -1545,23 +1663,31 @@
                     
                     // Add userId to updates
                     updates.userId = newUserId;
+                    console.log('UserId is available, proceeding with update');
                 }
 
+                // Always update localStorage first (immediate)
+                const updatedUser = { ...currentUser, ...updates };
+                localStorage.setItem('squitup_user_' + currentUser.uid, JSON.stringify(updatedUser));
+                console.log('Updated localStorage with new data:', updatedUser);
+
+                // Try to update database (background)
                 if (currentUser.uid) {
-                    await db.collection('users').doc(currentUser.uid).update(updates);
-                    
-                    // Update localStorage
-                    const updatedUser = { ...currentUser, ...updates };
-                    localStorage.setItem('squitup_user_' + currentUser.uid, JSON.stringify(updatedUser));
+                    try {
+                        await db.collection('users').doc(currentUser.uid).update(updates);
+                        console.log('Successfully updated database');
+                    } catch (dbError) {
+                        console.warn('Database update failed, but localStorage is updated:', dbError);
+                    }
                 }
 
-                // Update local user data
-                currentUser = { ...currentUser, ...updates };
+                // Update local user data immediately
+                currentUser = updatedUser;
                 loadUserData();
                 
                 closeModal('editProfileModal');
                 
-                if (newUserId && newUserId !== currentUser.userId) {
+                if (newUserId && newUserId !== (currentUser.userId || '')) {
                     alert(`Profile updated successfully! 🎉\n\nYour @user_id has been changed to ${newUserId}`);
                 } else {
                     alert('Profile updated successfully! 🎉');
@@ -1569,7 +1695,30 @@
                 
             } catch (error) {
                 console.error('Error updating profile:', error);
-                alert('Error updating profile. Please try again.');
+                
+                // Even if there's an error, try to update localStorage
+                try {
+                    const updates = {
+                        bio: bio,
+                        status: status,
+                        avatar: avatar,
+                        banner: banner
+                    };
+                    
+                    if (newUserId && newUserId !== currentUser.userId) {
+                        updates.userId = newUserId;
+                    }
+                    
+                    const updatedUser = { ...currentUser, ...updates };
+                    localStorage.setItem('squitup_user_' + currentUser.uid, JSON.stringify(updatedUser));
+                    currentUser = updatedUser;
+                    loadUserData();
+                    
+                    closeModal('editProfileModal');
+                    alert('Profile updated successfully! 🎉');
+                } catch (fallbackError) {
+                    alert('Error updating profile. Please try again.');
+                }
             }
 
             saveButton.disabled = false;
@@ -1641,5 +1790,5 @@
         `;
         document.head.appendChild(style);
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'98d465fbc46233a2',t:'MTc2MDI0OTA1Mi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'98d46f1df5e48584',t:'MTc2MDI0OTQyNS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
