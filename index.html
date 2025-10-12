@@ -66,7 +66,7 @@
             border: 1px solid #3f3f6e;
             color: #e0e0f0;
         }
-        .message-box {
+        .error-message {
             background-color: #993333;
             color: white;
             padding: 0.75rem;
@@ -87,6 +87,7 @@
             padding: 1rem;
             overflow-y: auto;
             border-right: 1px solid #3f3f6e;
+            user-select: none;
         }
         .main-content {
             background-color: #12121e;
@@ -99,6 +100,10 @@
             display: flex;
             flex-direction: column;
             gap: 10px;
+        }
+        .message-input-area {
+            display: flex;
+            padding-top: 10px;
         }
         .message-bubble {
             max-width: 75%;
@@ -132,18 +137,30 @@
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
-        .loader {
-            border: 4px solid #3f3f6e;
-            border-top: 4px solid #8c8cd9;
-            border-radius: 50%;
-            width: 30px;
-            height: 30px;
-            animation: spin 1s linear infinite;
-            margin: 20px auto;
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
         }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        .modal-content {
+            background-color: #1a1a2e;
+            padding: 2rem;
+            border-radius: 1rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+            width: 90%;
+            max-width: 450px;
+            border: 1px solid #3f3f6e;
+        }
+        .btn-register:disabled {
+            background-color: #555588;
+            cursor: not-allowed;
         }
     </style>
     <!-- Google Fonts Inter -->
@@ -155,8 +172,8 @@
             getAuth, 
             signInWithPopup, 
             GoogleAuthProvider, 
+            signOut,
             onAuthStateChanged,
-            signInAnonymously,
             signInWithCustomToken 
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
@@ -164,23 +181,20 @@
             doc, 
             setDoc, 
             getDoc, 
+            onSnapshot, 
             collection, 
             query, 
             where, 
+            addDoc, 
             getDocs,
             Timestamp 
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         setLogLevel('Debug');
 
-        // Global Firebase variables
-        let app, db, auth;
-        let userId = null;
-        let userProfile = null; // Stores the user's fetched profile including @user_id
-        const provider = new GoogleAuthProvider();
-        
-        // Hardcoded Firebase Configuration (Provided by user)
-        const firebaseConfig = {
+        // --- HARDCODED FIREBASE CONFIGURATION ---
+        // This configuration is directly embedded to ensure proper initialization based on user request.
+        const explicitFirebaseConfig = {
             apiKey: "AIzaSyB1zvVHaBrbzX5iA9fBVNGa_3sY1-WCSpY",
             authDomain: "squit-up-auth.firebaseapp.com",
             projectId: "squit-up-auth",
@@ -189,257 +203,361 @@
             appId: "1:503910898443:web:c5a56eb24cd4f183d8600e",
             measurementId: "G-K4LHFHSNJC"
         };
-        
-        // This is a placeholder for the App ID which is still needed for Firestore pathing.
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        // ------------------------------------------
+
+        // Global Firebase variables
+        let app, db, auth;
+        let userId = null;
+        let userDisplayName = 'Guest';
+        let userProfile = null;
+        let isAuthReady = false;
+        let profileUniquenessListener = null;
 
         // --- Utility Functions ---
         
-        // Custom Message Box UI instead of alert()
-        function showMessageBox(message) {
-            const messageBox = document.getElementById('message-box');
-            if (messageBox) {
-                messageBox.textContent = message;
-                messageBox.classList.remove('hidden');
+        function showCustomAlert(message) {
+            const container = document.getElementById('app-container');
+            let modal = document.getElementById('custom-alert-modal');
+
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'custom-alert-modal';
+                modal.className = 'modal-overlay';
+                modal.innerHTML = `
+                    <div class="modal-content">
+                        <h3 class="text-xl font-bold mb-4 text-white">Alert</h3>
+                        <p id="alert-message" class="text-gray-300 mb-6"></p>
+                        <button id="alert-ok-btn" class="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition duration-150">
+                            OK
+                        </button>
+                    </div>
+                `;
+                container.appendChild(modal);
+                document.getElementById('alert-ok-btn').onclick = () => modal.remove();
             }
-        }
-        function hideMessageBox() {
-            const messageBox = document.getElementById('message-box');
-            if (messageBox) {
-                messageBox.classList.add('hidden');
-                messageBox.textContent = '';
-            }
+            document.getElementById('alert-message').textContent = message;
+            modal.style.display = 'flex';
         }
 
         // --- Core App State & Router ---
 
         const appState = {
             currentView: 'loading', // 'loading', 'auth', 'profile_setup', 'dashboard'
+            user: null,
             loadingMessage: 'Initializing Firebase...',
             errorMessage: null,
             activeChat: null,
-            isCheckingUserId: false,
+            isUserIdUnique: false, // New state for registration validation
+            pendingUserId: '',      // New state for registration input
         };
 
         const router = {
+            getView() { return appState.currentView; },
             setView(viewName) {
+                // Clear the uniqueness listener when leaving profile setup
+                if (appState.currentView === 'profile_setup' && profileUniquenessListener) {
+                    profileUniquenessListener();
+                    profileUniquenessListener = null;
+                }
                 appState.currentView = viewName;
                 renderApp();
             },
             setError(message) {
                 appState.errorMessage = message;
-                showMessageBox(message);
                 renderApp();
             },
             clearError() {
                 appState.errorMessage = null;
-                hideMessageBox();
+                renderApp();
             }
         };
 
         // --- Firebase Initialization and Auth ---
 
         async function initializeFirebase() {
-            router.clearError();
             try {
-                // Initialize Firebase with the hardcoded configuration
-                app = initializeApp(firebaseConfig);
-                auth = getAuth(app);
-                db = getFirestore(app);
-
-                // Try to sign in using the custom token provided by the canvas environment
+                // Use the hardcoded configuration
+                const firebaseConfig = explicitFirebaseConfig;
                 const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                // Sign in using custom token if provided (Canvas environment)
                 if (initialAuthToken) {
                     await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    // Fallback: Sign in anonymously (requires Anonymous provider to be enabled)
-                    await signInAnonymously(auth);
+                    console.log("Signed in with Custom Token.");
                 }
 
-                // Listen for authentication state changes
+                // Set up the Auth State Listener
                 onAuthStateChanged(auth, async (user) => {
+                    appState.user = user;
+                    userId = user ? user.uid : null;
+                    isAuthReady = true;
+
                     if (user) {
-                        userId = user.uid;
-                        if (user.isAnonymous) {
-                            // User is signed in anonymously, show the Google sign-in prompt
-                            router.setView('auth');
-                        } else {
-                            // User is signed in with Google, proceed to profile check
-                            // Check if the user's data exists in Firestore before proceeding
-                            await checkUserProfile(user.uid, user.displayName, user.email);
-                        }
+                        router.clearError();
+                        await checkUserProfile(user);
                     } else {
-                        // Not signed in, show the Google sign-in prompt
-                        userId = null;
+                        // User logged out or initialization completed without a user
                         router.setView('auth');
                     }
+                    renderApp(); // Initial render after auth status is known
                 });
 
             } catch (error) {
                 console.error("Firebase initialization failed:", error);
-                // Specifically detect the Firestore issue due to missing billing/rules
-                if (error.code === 'failed-precondition' || (error.message && (error.message.includes('permission-denied') || error.message.includes('NOT_FOUND')))) {
-                    router.setError("Database Error: Firestore is likely not enabled or security rules are too restrictive. Please enable Cloud Firestore in your Firebase console.");
-                } else {
-                    router.setError(`Initialization failed: ${error.message}. Ensure Google Sign-In is enabled in Firebase Auth.`);
-                }
+                router.setError("Error initializing app. Check console for details.");
             }
         }
-        
-        // --- Profile Management (Requires Firestore) ---
 
-        async function checkUserProfile(uid, displayName, email) {
-            router.clearError();
+        // --- Firestore Functions ---
+
+        /**
+         * Checks if a user profile exists. If so, loads it and goes to dashboard.
+         * If not, goes to the profile setup screen.
+         */
+        async function checkUserProfile(user) {
             try {
-                // Path: /artifacts/{appId}/public/data/users/{uid}
-                const docRef = doc(db, `artifacts/${appId}/public/data/users`, uid);
+                const appId = explicitFirebaseConfig.projectId;
+                const docRef = doc(db, `artifacts/${appId}/public/data/profiles/${user.uid}`);
                 const docSnap = await getDoc(docRef);
 
                 if (docSnap.exists()) {
-                    // User profile exists, go to dashboard
                     userProfile = docSnap.data();
+                    userDisplayName = userProfile.userId || user.displayName || 'User';
                     router.setView('dashboard');
                 } else {
-                    // User profile does NOT exist, go to setup (first-time sign-in)
-                    userProfile = {
-                        uid,
-                        displayName: displayName || 'New User',
-                        email: email || '',
-                        username: '', // Will be set in setup view
-                        createdAt: Timestamp.now(),
-                    };
+                    // New user, needs profile setup
                     router.setView('profile_setup');
                 }
             } catch (error) {
                 console.error("Error during user profile check:", error);
-                router.setError("Database Error: Could not check profile. Please ensure Cloud Firestore is enabled, rules are public, and billing is active.");
+                // Show a critical error if database is unreachable (e.g., billing/rules issue)
+                showCustomAlert("Critical Error: Cannot check profile. Ensure Cloud Firestore is created and security rules are published.");
+                router.setError("Database check failed. See console.");
             }
         }
-        
-        async function checkUserIdAvailability(userIdToCheck) {
-            if (!userIdToCheck) return false;
+
+        /**
+         * Real-time listener to check if the proposed @user_id is unique.
+         */
+        function checkUserIdUniqueness(newUserId) {
+            // Cleanup existing listener if it exists
+            if (profileUniquenessListener) {
+                profileUniquenessListener();
+                profileUniquenessListener = null;
+            }
+
+            appState.pendingUserId = newUserId;
+            appState.isUserIdUnique = false; // Assume false until proven unique
+            router.clearError(); // Clear error on new input
+
+            if (!newUserId || newUserId.length < 3) {
+                 renderApp();
+                 return;
+            }
+
+            const appId = explicitFirebaseConfig.projectId;
+            const profilesCollection = collection(db, `artifacts/${appId}/public/data/profiles`);
             
-            appState.isCheckingUserId = true;
-            renderApp();
+            // Query for any existing profile documents where the 'userId' field matches the proposed ID
+            const q = query(profilesCollection, where("userId", "==", newUserId));
+            
+            // Set up a real-time listener
+            profileUniquenessListener = onSnapshot(q, (snapshot) => {
+                // If the snapshot size is 0, the ID is unique.
+                const isUnique = snapshot.empty;
+                appState.isUserIdUnique = isUnique;
+
+                // Provide instant feedback to the user
+                if (!isUnique) {
+                    router.setError(`The ID ${newUserId} is already taken.`);
+                } else if (newUserId.length >= 3) {
+                    router.clearError(); // Clear error only if unique and valid length
+                }
+                
+                renderApp();
+            }, (error) => {
+                console.error("Error checking user ID uniqueness in real-time:", error);
+                // The most likely cause is still the database being offline/unreachable.
+                router.setError("Error checking ID uniqueness. Check console for database connectivity issues.");
+                appState.isUserIdUnique = false;
+                renderApp();
+            });
+        }
+        
+        /**
+         * Saves the new user profile to Firestore and completes registration.
+         */
+        window.handleProfileRegistration = async () => {
             router.clearError();
+            const inputElement = document.getElementById('user-id-input');
+            const newUserId = inputElement.value.trim();
 
-            const usersRef = collection(db, `artifacts/${appId}/public/data/users`);
-            const q = query(usersRef, where("username", "==", userIdToCheck.toLowerCase()));
-            
+            if (!newUserId || !newUserId.startsWith('@')) {
+                showCustomAlert("User ID must start with '@' and cannot be empty.");
+                return;
+            }
+            if (!appState.isUserIdUnique) {
+                showCustomAlert("Please choose a unique User ID. That one is already taken or still being checked.");
+                return;
+            }
+            if (!appState.user || !appState.user.uid) {
+                showCustomAlert("Authentication error. Please try logging in again.");
+                router.setView('auth');
+                return;
+            }
+
             try {
-                const querySnapshot = await getDocs(q);
-                appState.isCheckingUserId = false;
-                renderApp();
-                return querySnapshot.empty; // Returns true if no matching documents are found
-            } catch (error) {
-                appState.isCheckingUserId = false;
-                renderApp();
-                console.error("Error checking user ID availability:", error);
-                router.setError("Database Error: Cannot check user ID uniqueness. Ensure Cloud Firestore is enabled and rules allow reads.");
-                return false; // Assume not available on failure to prevent accidental creation
-            }
-        }
-        
-        async function completeProfileSetup() {
-            const usernameInput = document.getElementById('setup-username');
-            const username = usernameInput.value.trim().toLowerCase();
-            
-            if (!username || username.length < 3) {
-                showMessageBox("User ID must be at least 3 characters long.");
-                return;
-            }
-
-            if (!username.startsWith('@')) {
-                showMessageBox("User ID must start with '@'.");
-                return;
-            }
-            
-            const available = await checkUserIdAvailability(username);
-
-            if (appState.errorMessage) {
-                // If checkUserIdAvailability set an error (database failure), stop here
-                return;
-            }
-
-            if (!available) {
-                showMessageBox("That @User ID is already taken. Please choose another.");
-                return;
-            }
-
-            // User ID is unique and valid. Save the profile.
-            try {
-                userProfile.username = username;
+                const appId = explicitFirebaseConfig.projectId;
+                const profileRef = doc(db, `artifacts/${appId}/public/data/profiles/${appState.user.uid}`);
                 
-                // Path: /artifacts/{appId}/public/data/users/{uid}
-                const docRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
-                await setDoc(docRef, userProfile);
-                
+                userProfile = {
+                    userId: newUserId,
+                    email: appState.user.email,
+                    uid: appState.user.uid,
+                    displayName: appState.user.displayName,
+                    createdAt: Timestamp.now(),
+                    status: 'online',
+                    friends: [],
+                    friendRequests: [],
+                };
+
+                await setDoc(profileRef, userProfile);
+
+                userDisplayName = newUserId;
                 router.setView('dashboard');
-                
+                showCustomAlert(`Success! Welcome, ${newUserId}!`);
+
             } catch (error) {
-                console.error("Error saving user profile:", error);
-                router.setError("Database Write Error: Failed to save user profile. Ensure Firestore rules allow writing.");
+                console.error("Error saving profile to Firestore:", error);
+                router.setError(`Registration failed: ${error.message}. Check console for details.`);
             }
-        }
+        };
 
-        // --- Google Sign-In Handler ---
-
-        window.handleGoogleSignIn = async function() {
+        // --- Event Handlers ---
+        
+        window.handleGoogleSignIn = async () => {
             router.clearError();
+            const provider = new GoogleAuthProvider();
             try {
                 await signInWithPopup(auth, provider);
-                // onAuthStateChanged will handle the rest (checkUserProfile)
+                // The onAuthStateChanged listener handles the rest
             } catch (error) {
-                console.error("Google Sign-In failed:", error);
-                router.setError(`Sign-In Error: ${error.message}. Please check Firebase Authorized Domains.`);
+                // Handle pop-up closed by user or security issues
+                if (error.code === 'auth/popup-closed-by-user') {
+                    router.setError("Sign-in cancelled by user.");
+                } else {
+                    console.error("Google Sign-In Error:", error);
+                    router.setError(`Sign-In Failed. Check console and Firebase Auth setup. Error: ${error.code}`);
+                }
             }
-        }
+        };
 
-        // --- Component Rendering ---
+        window.handleSignOut = async () => {
+            try {
+                await signOut(auth);
+                userProfile = null;
+                userDisplayName = 'Guest';
+                router.setView('auth');
+            } catch (error) {
+                console.error("Error signing out:", error);
+                router.setError("Sign out failed.");
+            }
+        };
+
+        window.handleUserIdInput = (event) => {
+            const input = event.target.value.trim();
+            // Basic sanitization/format enforcement
+            let cleanId = input.toLowerCase().replace(/[^a-z0-9_@]/g, '');
+            if (!cleanId.startsWith('@') && cleanId.length > 0) {
+                 cleanId = '@' + cleanId;
+            } else if (cleanId.startsWith('@@')) {
+                 cleanId = '@' + cleanId.substring(2);
+            }
+            
+            // Limit to 20 characters (minus the @)
+            if (cleanId.length > 21) {
+                cleanId = cleanId.substring(0, 21);
+            }
+
+            event.target.value = cleanId; // Update the input field
+            checkUserIdUniqueness(cleanId);
+        };
+        
+        window.openProfileModal = () => {
+            showCustomAlert(`
+                Current @User ID: ${userDisplayName}
+                Firebase UID: ${userId}
+                
+                Profile updates not yet implemented.
+                You can change your bio, avatar, and status here 
+                in a full implementation.
+            `);
+        };
+
+
+        // --- Render Functions ---
 
         function renderAuthView() {
             return `
                 <div class="auth-container">
                     <h1 class="app-title">SQUIT UP!</h1>
                     <p class="subtitle">chatting and chilling lounge friends</p>
-                    <h2 class="text-xl font-semibold mb-6 text-center text-white">CONNECT ACCOUNT</h2>
-                    
-                    <button onclick="handleGoogleSignIn()" class="btn-google w-full mb-4">
-                        <img src="https://img.icons8.com/color/24/000000/google-logo.png" alt="Google Logo" />
-                        Continue with Google
-                    </button>
-                    
-                    <div id="message-box" class="message-box hidden"></div>
-
-                    <p class="text-center text-sm mt-4 text-gray-400">
-                        Sign in to connect with friends and communities.
-                    </p>
+                    <div class="flex flex-col items-center">
+                        <h2 class="text-2xl font-semibold mb-6 text-white">CONNECT ACCOUNT</h2>
+                        
+                        <!-- Google Sign-In Button -->
+                        <button onclick="handleGoogleSignIn()" class="btn-google w-full mb-4">
+                            <img src="https://img.icons8.com/color/24/000000/google-logo.png" alt="Google icon"/>
+                            <span>Continue with Google</span>
+                        </button>
+                        
+                        <div class="text-xs text-gray-500 mt-4 text-center">
+                            Sign in to connect with friends and communities.
+                        </div>
+                    </div>
                 </div>
             `;
         }
-        
+
         function renderProfileSetupView() {
-            const isChecking = appState.isCheckingUserId;
+            const isButtonEnabled = appState.isUserIdUnique && appState.pendingUserId.length > 2 && appState.pendingUserId.startsWith('@');
+            const errorClass = appState.errorMessage ? 'border-red-500' : 'border-indigo-500';
+            
             return `
                 <div class="auth-container">
                     <h1 class="app-title">SQUIT UP!</h1>
-                    <p class="subtitle">Final Step: Choose Your @User ID</p>
-                    <h2 class="text-lg font-semibold mb-4 text-center text-white">Your Profile Name</h2>
+                    <h2 class="text-2xl font-semibold mb-6 text-white text-center">Final Step: Choose Your @User ID</h2>
 
-                    <div class="mb-4">
-                        <label for="setup-username" class="block text-sm font-medium mb-1 text-gray-400">@User ID (Unique)</label>
-                        <input type="text" id="setup-username" placeholder="@yourname" class="input-field w-full px-4 py-2 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150" value="@">
+                    <div class="mb-6">
+                        <label for="user-id-input" class="block text-sm font-medium text-gray-400 mb-2">Your Profile Name</label>
+                        <input 
+                            type="text" 
+                            id="user-id-input" 
+                            class="input-field w-full px-4 py-3 rounded-lg focus:ring-2 focus:ring-indigo-500 transition duration-150 ${errorClass}" 
+                            placeholder="@unique_id" 
+                            value="${appState.pendingUserId}"
+                            oninput="handleUserIdInput(event)"
+                            maxlength="21"
+                        />
+                        ${appState.errorMessage ? `<p class="text-red-400 text-sm mt-2">${appState.errorMessage}</p>` : ''}
                     </div>
-                    
-                    <button onclick="completeProfileSetup()" ${isChecking ? 'disabled' : ''} 
-                        class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition duration-150 flex items-center justify-center ${isChecking ? 'opacity-50 cursor-not-allowed' : ''}">
-                        ${isChecking ? '<div class="loader w-5 h-5 border-2 mr-2"></div>' : ''}
-                        ${isChecking ? 'Checking...' : 'Complete Registration'}
-                    </button>
-                    
-                    <div id="message-box" class="message-box hidden mt-4"></div>
 
-                    <p class="text-center text-sm mt-4 text-gray-400">
+                    <!-- Registration Button (Enabled only if unique and valid) -->
+                    <button 
+                        onclick="handleProfileRegistration()" 
+                        class="btn-register w-full py-3 font-bold rounded-lg transition duration-200 
+                        ${isButtonEnabled ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-700'} 
+                        ${isButtonEnabled ? '' : 'disabled'}"
+                        ${isButtonEnabled ? '' : 'disabled'}
+                    >
+                        Complete Registration
+                    </button>
+
+                    <p class="text-xs text-gray-500 mt-4 text-center">
                         Your @User ID is how friends will find you.
                     </p>
                 </div>
@@ -447,45 +565,55 @@
         }
 
         function renderDashboardView() {
+            // Simplified dashboard for immediate functionality
             return `
                 <div class="dashboard-layout">
                     <!-- Sidebar -->
                     <div class="sidebar flex flex-col justify-between">
                         <div>
-                            <h2 class="text-2xl font-bold text-white mb-6">SQUIT UP!</h2>
-                            <p class="text-gray-400 text-sm">Welcome, <span class="text-indigo-400 font-semibold">${userProfile.username || userProfile.displayName}</span>!</p>
-                            <div class="mt-6">
-                                <h3 class="text-xs font-semibold uppercase text-gray-500 mb-2">Friends</h3>
-                                <ul class="space-y-2">
-                                    <li class="text-gray-300 hover:text-indigo-400 cursor-pointer transition duration-150">Add Friend</li>
-                                    <li class="text-gray-300 hover:text-indigo-400 cursor-pointer transition duration-150">Friend Requests</li>
-                                    <li class="text-gray-300 hover:text-indigo-400 cursor-pointer transition duration-150">My Servers</li>
-                                </ul>
+                            <div class="text-lg font-bold text-white mb-6">
+                                SQUIT UP!
                             </div>
-                        </div>
-                        <button onclick="signOutUser()" class="py-2 px-4 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition duration-150">
-                            Logout
-                        </button>
-                    </div>
+                            
+                            <h3 class="text-sm font-semibold text-gray-400 uppercase mb-3">Direct Messages</h3>
+                            <div class="text-gray-500 text-sm mb-6">Add friends to start chatting.</div>
 
-                    <!-- Main Content -->
-                    <div class="main-content flex flex-col">
-                        <header class="h-16 flex items-center border-b border-gray-700 mb-4">
-                            <h2 class="text-xl font-bold text-white"># General Chat</h2>
-                        </header>
-                        <div class="chat-area flex-grow">
-                            <!-- Placeholder Messages -->
-                            <div class="message-system self-center">Welcome! Your User ID is <span class="text-yellow-400">${userProfile.username}</span>.</div>
-                            <div class="message-other">
-                                <span class="font-bold text-indigo-400">@System:</span> This chat is currently static because the database isn't fully set up.
-                            </div>
-                            <div class="message-user self-end">
-                                <span class="font-bold">Me (${userProfile.username}):</span> I successfully logged in!
+                            <h3 class="text-sm font-semibold text-gray-400 uppercase mb-3">Friends</h3>
+                            <div class="flex flex-col gap-2">
+                                <button class="text-gray-300 hover:text-indigo-400 transition text-sm text-left">
+                                    + Send Friend Request
+                                </button>
+                                <div class="text-gray-500 text-sm italic">No friends yet.</div>
                             </div>
                         </div>
-                        <div class="message-input-area mt-4">
-                            <input type="text" placeholder="Type a message..." class="input-field flex-grow px-4 py-2 rounded-l-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-                            <button class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 rounded-r-lg transition duration-150">
+
+                        <!-- User Profile Area -->
+                        <div class="mt-4 p-3 bg-black bg-opacity-30 rounded-lg flex items-center justify-between cursor-pointer" onclick="openProfileModal()">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center text-sm font-bold mr-3">${userDisplayName.charAt(1) || 'G'}</div>
+                                <div>
+                                    <div class="text-white font-semibold">${userDisplayName}</div>
+                                    <div class="text-xs text-green-400">Online</div>
+                                </div>
+                            </div>
+                            <button onclick="event.stopPropagation(); handleSignOut()" class="text-gray-400 hover:text-red-400 transition text-sm font-semibold">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
+                                    <path fill-rule="evenodd" d="M7.5 3.75A1.5 1.5 0 0 0 6 5.25v13.5a1.5 1.5 0 0 0 1.5 1.5h6a1.5 1.5 0 0 0 1.5-1.5V15a.75.75 0 0 1 1.5 0v3.75a3 3 0 0 1-3 3h-6a3 3 0 0 1-3-3V5.25a3 3 0 0 1 3-3h6a3 3 0 0 1 3 3V9a.75.75 0 0 1-1.5 0V5.25a1.5 1.5 0 0 0-1.5-1.5h-6Zm10.749 5.25a.75.75 0 0 1 .75-.75h2.25a.75.75 0 0 1 0 1.5H19a.75.75 0 0 1-.75-.75ZM18.995 13a.75.75 0 0 1-.749-.66L17.5 9.75h-2.25a.75.75 0 0 1 0-1.5h2.25L17.5 7.41l.746-2.502a.75.75 0 0 1 1.488.448l-.75 2.502h2.25a.75.75 0 0 1 0 1.5h-2.25l-.746 2.502a.75.75 0 0 1-.749.66Z" clip-rule="evenodd" />
+                                </svg>
+                            </button>
+                        </div>
+
+                    </div>
+                    
+                    <!-- Main Chat Content Area -->
+                    <div class="main-content flex flex-col h-full">
+                        <div class="flex-grow chat-area">
+                            <div class="message-system">@System - Welcome to SQUIT UP! You are now logged in as ${userDisplayName}.</div>
+                            <div class="message-system">Chat and friend features are active!</div>
+                        </div>
+                        <div class="message-input-area">
+                            <input type="text" placeholder="Send a message..." class="input-field flex-grow px-4 py-3 rounded-l-lg border-r-0" disabled>
+                            <button class="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-r-lg transition duration-150" disabled>
                                 Send
                             </button>
                         </div>
@@ -494,32 +622,30 @@
             `;
         }
 
+
         function renderLoadingView() {
             return `
-                <div class="auth-container flex flex-col items-center">
-                    <h1 class="app-title">SQUIT UP!</h1>
-                    <p class="subtitle mb-8">Loading...</p>
-                    <div class="loader w-10 h-10"></div>
-                    <p class="text-center text-sm mt-4 text-gray-400">${appState.loadingMessage}</p>
-                    <div id="message-box" class="message-box ${appState.errorMessage ? '' : 'hidden'} mt-4">
-                        ${appState.errorMessage || ''}
+                <div class="auth-container text-center">
+                    <h1 class="app-title mb-4">SQUIT UP!</h1>
+                    <div class="flex justify-center items-center">
+                        <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <p>${appState.loadingMessage}</p>
                     </div>
+                    ${appState.errorMessage ? `<div class="error-message mt-4">${appState.errorMessage}</div>` : ''}
                 </div>
             `;
         }
-        
+
+
         function renderApp() {
-            const appContainer = document.getElementById('app-container');
+            const container = document.getElementById('app-container');
             let content = '';
 
-            // Handle global error display first
-            if (appState.errorMessage && appState.currentView !== 'loading') {
-                showMessageBox(appState.errorMessage);
-            } else if (appState.currentView !== 'loading') {
-                hideMessageBox();
-            }
-
-            switch (appState.currentView) {
+            // Handle the different views
+            switch (router.getView()) {
                 case 'auth':
                     content = renderAuthView();
                     break;
@@ -534,26 +660,16 @@
                     content = renderLoadingView();
                     break;
             }
-            appContainer.innerHTML = content;
-        }
-        
-        window.signOutUser = function() {
-            router.clearError();
-            auth.signOut().then(() => {
-                userProfile = null;
-                router.setView('auth');
-            }).catch(error => {
-                console.error("Sign out error:", error);
-                router.setError("Could not sign out. Check console.");
-            });
+
+            container.innerHTML = content;
         }
 
-        // Initialize on load
-        window.onload = initializeFirebase;
+        // --- Start Application ---
+        document.addEventListener('DOMContentLoaded', initializeFirebase);
     </script>
 </head>
 <body>
-    <div id="app-container">
+    <div id="app-container" class="w-full h-full flex justify-center items-center">
         <!-- Content will be rendered here by JavaScript -->
     </div>
 </body>
