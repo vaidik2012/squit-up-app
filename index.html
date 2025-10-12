@@ -600,3 +600,431 @@
                         <button class="sticker-btn" onclick="showStickerPicker()">🎭</button>
                         <input type="text" id="messageInput" placeholder="Select a friend to chat" onkeypress="handleMessageInput(event)" disabled>
                         <button class="btn btn-primary" style="width: auto; margin: 0; padding: 8px 16px;" onclick="sendMessage()" disabled>Send</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+        <div id="createServerModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Create Your Server</h3>
+                <button class="close-btn" onclick="closeModal('createServerModal')">&times;</button>
+            </div>
+            <div class="form-group">
+                <label for="serverName">Server Name</label>
+                <input type="text" id="serverName" placeholder="Enter server name">
+            </div>
+            <div class="form-group">
+                <label>Server Type</label>
+                <select id="serverType" style="width: 100%; padding: 12px; border: 2px solid #e1e5e9; border-radius: 10px; background: white;">
+                    <option value="text">Text Channels Only</option>
+                    <option value="voice">Text + Voice Channels</option>
+                </select>
+            </div>
+            <button class="btn btn-primary" onclick="createServer()">Create Server</button>
+        </div>
+    </div>
+
+        <div id="addFriendModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Add Friend</h3>
+                <button class="close-btn" onclick="closeModal('addFriendModal')">&times;</button>
+            </div>
+            <div class="form-group">
+                <label for="friendUserId">Friend's @user_id</label>
+                <input type="text" id="friendUserId" placeholder="Enter @user_id">
+            </div>
+            <button class="btn btn-primary" onclick="sendFriendRequest()">Send Friend Request</button>
+        </div>
+    </div>
+
+        <div id="friendRequestsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Friend Requests</h3>
+                <button class="close-btn" onclick="closeModal('friendRequestsModal')">&times;</button>
+            </div>
+            <div id="friendRequestsList">
+                <div style="text-align: center; color: #b9bbbe; padding: 20px;">
+                    No friend requests yet. Share your @user_id with friends to get started!
+                </div>
+            </div>
+        </div>
+    </div>
+
+        <div id="profileModal" class="modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3>User Profile</h3>
+                <button class="close-btn" onclick="closeModal('profileModal')">&times;</button>
+            </div>
+            <div class="profile-banner" onclick="changeBanner()">
+                <div class="profile-avatar-large" id="profileAvatarLarge" onclick="changeAvatar(event)">U</div>
+            </div>
+            <div class="profile-info">
+                <div class="profile-username" id="profileUsername">Username</div>
+                <div style="color: #8e9297; font-size: 16px; margin-bottom: 10px;" id="profileUserId">@user_id</div>
+                <div class="profile-bio" id="profileBio">Click to add a bio...</div>
+                <div class="profile-status" id="profileStatus">Online</div>
+                <button class="btn btn-primary" style="margin-top: 15px;" onclick="editProfile()">Edit Profile</button>
+            </div>
+        </div>
+    </div>
+
+        <div id="editProfileModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Edit Profile</h3>
+                <button class="close-btn" onclick="closeModal('editProfileModal')">&times;</button>
+            </div>
+            <div class="form-group">
+                <label for="editUserId">@user_id</label>
+                <input type="text" id="editUserId" placeholder="Enter new @user_id">
+            </div>
+            <div class="form-group">
+                <label for="editBio">Bio</label>
+                <textarea id="editBio" style="width: 100%; padding: 12px; border: 2px solid #e1e5e9; border-radius: 10px; min-height: 80px; resize: vertical; box-sizing: border-box;" placeholder="Tell us about yourself..."></textarea>
+            </div>
+            <div class="form-group">
+                <label for="editStatus">Status</label>
+                <input type="text" id="editStatus" placeholder="What's your status?">
+            </div>
+            <div class="form-group">
+                <label>Profile Picture (URL or GIF)</label>
+                <input type="url" id="editAvatar" placeholder="Enter image/GIF URL">
+            </div>
+            <div class="form-group">
+                <label>Banner (URL or GIF)</label>
+                <input type="url" id="editBanner" placeholder="Enter banner image/GIF URL">
+            </div>
+            <button class="btn btn-primary" onclick="saveProfile()">Save Changes</button>
+        </div>
+    </div>
+
+        <div id="emojiModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Choose Emoji</h3>
+                <button class="close-btn" onclick="closeModal('emojiModal')">&times;</button>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(8, 1fr); gap: 10px; max-height: 300px; overflow-y: auto;">
+                <span class="emoji-option" onclick="insertEmoji('😀')">😀</span>
+                <span class="emoji-option" onclick="insertEmoji('😂')">😂</span>
+                <span class="emoji-option" onclick="insertEmoji('😍')">😍</span>
+                <span class="emoji-option" onclick="insertEmoji('🤔')">🤔</span>
+                <span class="emoji-option" onclick="insertEmoji('😎')">😎</span>
+                <span class="emoji-option" onclick="insertEmoji('😭')">😭</span>
+                <span class="emoji-option" onclick="insertEmoji('😱')">😱</span>
+                <span class="emoji-option" onclick="insertEmoji('🔥')">🔥</span>
+                <span class="emoji-option" onclick="insertEmoji('💯')">💯</span>
+                <span class="emoji-option" onclick="insertEmoji('❤️')">❤️</span>
+                <span class="emoji-option" onclick="insertEmoji('👍')">👍</span>
+                <span class="emoji-option" onclick="insertEmoji('👎')">👎</span>
+                <span class="emoji-option" onclick="insertEmoji('🎉')">🎉</span>
+                <span class="emoji-option" onclick="insertEmoji('🚀')">🚀</span>
+                <span class="emoji-option" onclick="insertEmoji('⭐')">⭐</span>
+                <span class="emoji-option" onclick="insertEmoji('🌟')">🌟</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Firebase Configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyB1zvVHaBrbzX5iA9fBVNGa_3sY1-WCSpY",
+            authDomain: "squit-up-auth.firebaseapp.com",
+            projectId: "squit-up-auth",
+            storageBucket: "squit-up-auth.firebasestorage.app",
+            messagingSenderId: "503910898443",
+            appId: "1:503910898443:web:c5a56eb24cd4f183d8600e",
+            measurementId: "G-K4LHFHSNJC"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        // Global variables
+        let currentUser = null;
+        let currentChannel = 'general';
+        let messages = [];
+        let friends = [];
+        let servers = [];
+
+        // Check if user is already logged in
+        auth.onAuthStateChanged((user) => {
+            if (user) {
+                checkUserProfile(user);
+            } else {
+                showAuthPage();
+            }
+        });
+
+        function showAuthPage() {
+            document.getElementById('authPage').style.display = 'flex';
+            document.getElementById('dashboard').style.display = 'none';
+        }
+
+        function showDashboard() {
+            document.getElementById('authPage').style.display = 'none';
+            document.getElementById('dashboard').style.display = 'block';
+            loadUserData();
+        }
+
+        async function signInWithGoogle() {
+            const provider = new firebase.auth.GoogleAuthProvider();
+            try {
+                console.log('Starting Google sign in...');
+                const result = await auth.signInWithPopup(provider);
+                const user = result.user;
+                console.log('Google sign in successful:', user.email);
+                await checkUserProfile(user);
+            } catch (error) {
+                console.error('Google sign in error:', error);
+                
+                // Show user-friendly error message
+                let errorMessage = 'Unable to sign in with Google. ';
+                if (error.code === 'auth/popup-blocked') {
+                    errorMessage += 'Please allow popups for this site and try again.';
+                } else if (error.code === 'auth/popup-closed-by-user') {
+                    errorMessage += 'Sign-in was cancelled. Please try again.';
+                } else {
+                    errorMessage += 'Please check your internet connection and try again.';
+                }
+                
+                alert(errorMessage);
+            }
+        }
+
+        async function checkUserProfile(user) {
+            // Only proceed if user is properly authenticated with Google
+            if (!user || !user.email || !user.uid) {
+                console.error('Invalid user object, redirecting to auth');
+                showAuthPage();
+                return;
+            }
+
+            try {
+                console.log('Checking user profile for authenticated user:', user.uid, user.email);
+                
+                // First, try to find user by Firebase UID (most reliable)
+                const userDoc = await db.collection('users').doc(user.uid).get();
+                if (userDoc.exists) {
+                    currentUser = { ...userDoc.data(), uid: user.uid };
+                    console.log('Existing user found by UID, logging in:', currentUser);
+                    showDashboard();
+                    return;
+                }
+                
+                // Critical: Check if ANY account exists with this email (prevent duplicates)
+                const emailQuery = await db.collection('users').where('email', '==', user.email).get();
+                if (!emailQuery.empty) {
+                    // User exists with this email - log them into their existing account
+                    const userDoc = emailQuery.docs[0];
+                    const userData = userDoc.data();
+                    
+                    // Update the document with the correct UID if needed
+                    await db.collection('users').doc(user.uid).set(userData);
+                    // Delete the old document if it has a different ID
+                    if (userDoc.id !== user.uid) {
+                        await userDoc.ref.delete();
+                    }
+                    
+                    currentUser = { ...userData, uid: user.uid };
+                    console.log('Existing account found with this Gmail, logging in:', currentUser);
+                    showDashboard();
+                    
+                    // Show message about existing account
+                    setTimeout(() => {
+                        alert(`Welcome back! 🎉\n\nI found your existing account "${userData.userId}" linked to ${user.email}.\n\nYou've been logged into your previous account automatically!`);
+                    }, 500);
+                    return;
+                }
+                
+                // Check localStorage for previously created account (prevents re-creation after refresh)
+                const savedUserData = localStorage.getItem('squitup_user_' + user.uid);
+                if (savedUserData) {
+                    try {
+                        const userData = JSON.parse(savedUserData);
+                        currentUser = { ...userData, uid: user.uid };
+                        console.log('Found saved user data in localStorage, logging in:', currentUser);
+                        showDashboard();
+                        
+                        // Try to sync with database in background
+                        db.collection('users').doc(user.uid).set(userData).catch(error => {
+                            console.warn('Background sync failed:', error);
+                        });
+                        
+                        setTimeout(() => {
+                            alert(`Welcome back, ${userData.userId}! 🎉\n\nYou've been automatically logged into your account.`);
+                        }, 500);
+                        return;
+                    } catch (e) {
+                        console.warn('Invalid saved user data, proceeding with new setup');
+                        localStorage.removeItem('squitup_user_' + user.uid);
+                    }
+                }
+                
+                // New user - show setup modal (only after successful Google auth)
+                console.log('New authenticated user detected, showing setup modal');
+                currentUser = { 
+                    uid: user.uid, 
+                    email: user.email, 
+                    displayName: user.displayName,
+                    photoURL: user.photoURL
+                };
+                document.getElementById('authPage').style.display = 'none';
+                document.getElementById('setupModal').style.display = 'block';
+                
+            } catch (error) {
+                console.error('Error during user profile check:', error);
+                alert('An error occurred while checking your account. Please try logging in again.');
+                auth.signOut();
+                showAuthPage();
+            }
+        }
+
+        async function completeSetup() {
+            const newUserId = document.getElementById('newUserId').value.trim();
+            if (!newUserId) {
+                alert('Please choose an @user_id.');
+                return;
+            }
+
+            const sanitizedUserId = newUserId.startsWith('@') ? newUserId : '@' + newUserId;
+            
+            try {
+                // Check if user ID already exists
+                const idQuery = await db.collection('users').where('userId', '==', sanitizedUserId).limit(1).get();
+                
+                if (!idQuery.empty) {
+                    alert('Error: This @user_id is already taken. Please try another one.');
+                    return;
+                }
+
+                // Save user data
+                const userData = {
+                    uid: currentUser.uid,
+                    email: currentUser.email,
+                    userId: sanitizedUserId,
+                    displayName: currentUser.displayName || sanitizedUserId,
+                    avatar: currentUser.photoURL || '',
+                    bio: 'Hey there! I\'m new to SQUIT up!',
+                    status: 'Online',
+                    friends: [],
+                    friendRequests: []
+                };
+                
+                await db.collection('users').doc(currentUser.uid).set(userData);
+                localStorage.setItem('squitup_user_' + currentUser.uid, JSON.stringify(userData));
+                currentUser = userData;
+                
+                closeModal('setupModal');
+                showDashboard();
+                alert(`Success! Your SQUIT up account has been created with the ID ${sanitizedUserId}. Welcome!`);
+            } catch (error) {
+                console.error('Error completing setup:', error);
+                alert('An unexpected error occurred during setup. Please try again.');
+            }
+        }
+
+        // --- START of User Requested Changes ---
+
+        async function saveProfile() {
+            if (!currentUser) {
+                alert('You must be logged in to save your profile.');
+                return;
+            }
+
+            const newUserId = document.getElementById('editUserId').value.trim();
+            const bio = document.getElementById('editBio').value.trim();
+            const status = document.getElementById('editStatus').value.trim();
+            const avatar = document.getElementById('editAvatar').value.trim();
+            const banner = document.getElementById('editBanner').value.trim();
+
+            const sanitizedNewUserId = newUserId.startsWith('@') ? newUserId : '@' + newUserId;
+            const oldUserId = currentUser.userId;
+            
+            // 1. Check if user ID is being changed and if new ID is available
+            if (sanitizedNewUserId !== oldUserId) {
+                try {
+                    const idQuery = await db.collection('users').where('userId', '==', sanitizedNewUserId).limit(1).get();
+                    
+                    if (!idQuery.empty) {
+                        // Found an existing user with this ID
+                        const existingUserDoc = idQuery.docs[0];
+                        if (existingUserDoc.id !== currentUser.uid) { // Make sure it's not the current user's *other* ID if a glitch happened
+                            alert(`Error: The user ID **${sanitizedNewUserId}** already exists. Please choose a different one.`);
+                            return;
+                        }
+                    }
+                } catch (error) {
+                    console.error("Error checking new user ID:", error);
+                    alert('An error occurred while checking the new user ID. Please try again.');
+                    return;
+                }
+            }
+
+            // 2. Update the user data
+            const updatedData = {
+                userId: sanitizedNewUserId,
+                bio: bio,
+                status: status,
+                avatar: avatar,
+                banner: banner || ''
+            };
+
+            try {
+                await db.collection('users').doc(currentUser.uid).update(updatedData);
+                currentUser = { ...currentUser, ...updatedData }; // Update local state
+                localStorage.setItem('squitup_user_' + currentUser.uid, JSON.stringify(currentUser));
+                loadUserData(); // Refresh dashboard data
+
+                closeModal('editProfileModal');
+                closeModal('profileModal');
+                showProfileModal(); // Show updated profile
+
+                if (sanitizedNewUserId !== oldUserId) {
+                    alert(`🥳 Congrats! Your user ID has been successfully changed from **${oldUserId}** to **${sanitizedNewUserId}**! 🎉\n\nSay your friends now to send your request on **${sanitizedNewUserId}** not on **${oldUserId}** and make more friends now. Congrats!`);
+                } else {
+                    alert('Profile successfully updated!');
+                }
+
+            } catch (error) {
+                console.error("Error saving profile:", error);
+                alert('An error occurred while saving your profile. Please check the console for details.');
+            }
+        }
+
+        async function sendFriendRequest() {
+            if (!currentUser) {
+                alert('You must be logged in to send friend requests.');
+                return;
+            }
+            
+            const friendUserIdInput = document.getElementById('friendUserId');
+            const friendUserId = friendUserIdInput.value.trim();
+
+            if (!friendUserId) {
+                alert('Please enter your friend\'s @user_id.');
+                return;
+            }
+
+            const sanitizedFriendId = friendUserId.startsWith('@') ? friendUserId : '@' + friendUserId;
+
+            if (sanitizedFriendId === currentUser.userId) {
+                alert('You cannot send a friend request to yourself!');
+                return;
+            }
+
+            try {
+                // Search the 'users' collection for the friend's userId
+                const friendQuery = await db.collection('users').where('userId', '==', sanitizedFriendId).limit(1).get();
+                
+                if (friendQuery.empty) {
+                    // Error: ID not found
+                    alert(`Error: The user ID **${sanitizedFriend
