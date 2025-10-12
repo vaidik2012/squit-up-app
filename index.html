@@ -1,387 +1,335 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SQUIT UP !!</title>
-    <!-- Load Tailwind CSS CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Load Google Identity Services (OAuth) SDK -->
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
-    <style>
-        /* Define Discord-like colors using CSS variables for utility */
-        :root {
-            --bg-primary: #313338; /* Main Chat Area */
-            --bg-secondary: #2b2d31; /* Channel List */
-            --bg-tertiary: #1e1f22; /* Server List & User Panel */
-            --text-normal: #dbdee1;
-            --text-muted: #949ba4;
-            --brand-purple: #5865f2;
-        }
-
-        /* Configure Tailwind to use our Discord colors */
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        'disc-primary': 'var(--bg-primary)',
-                        'disc-secondary': 'var(--bg-secondary)',
-                        'disc-tertiary': 'var(--bg-tertiary)',
-                        'disc-text': 'var(--text-normal)',
-                        'disc-muted': 'var(--text-muted)',
-                        'disc-brand': 'var(--brand-purple)',
-                    },
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
-                    }
-                }
-            }
-        }
-
-        /* Ensure the body and html take up the full viewport */
-        html, body, #app {
-            height: 100%;
-            margin: 0;
-            overflow: hidden;
-            font-family: 'Inter', sans-serif;
-        }
-        
-        /* Custom scrollbar styling for a cleaner look */
-        #chat-window::-webkit-scrollbar, #channel-sidebar .overflow-y-auto::-webkit-scrollbar {
-            width: 8px;
-        }
-        #chat-window::-webkit-scrollbar-thumb, #channel-sidebar .overflow-y-auto::-webkit-scrollbar-thumb {
-            background-color: #1e1f22;
-            border-radius: 4px;
-        }
-        #chat-window::-webkit-scrollbar-track, #channel-sidebar .overflow-y-auto::-webkit-scrollbar-track {
-            background: #2b2d31;
-        }
-
-        /* Mobile sidebar transition for better UX */
-        .sidebar-transition {
-            transition: transform 0.3s ease-in-out;
-        }
-        
-    </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SQUIT UP ! (Prototype)</title>
+  <style>
+    :root{
+      --bg:#071327; --panel:rgba(255,255,255,0.02); --muted:#9fb0c3; --accent:#6ee7b7;
+      font-family: Inter, system-ui, Arial, Helvetica, sans-serif;
+    }
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,#061021,#071a2a);color:#e6eef8}
+    .app {display:grid;grid-template-columns:72px 280px 1fr 240px; height:100vh; gap:12px; padding:12px;}
+    .card{background:var(--panel); border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,0.6); overflow:hidden}
+    .servers{display:flex;flex-direction:column;align-items:center;padding:8px;gap:8px}
+    .server{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:#081b28;cursor:pointer;user-select:none}
+    .server.active{outline:3px solid rgba(255,255,255,0.06)}
+    .sidebar{display:flex;flex-direction:column;padding:12px;gap:12px}
+    .header{display:flex;align-items:center;justify-content:space-between}
+    .channels{flex:1;overflow:auto;padding:8px;border-radius:8px;background:transparent}
+    .channel{padding:8px;border-radius:6px;cursor:pointer}
+    .channel.active{background:rgba(255,255,255,0.02)}
+    .chat{display:flex;flex-direction:column;height:100%}
+    .messages{flex:1; padding:18px; overflow:auto}
+    .msg{margin-bottom:12px;display:flex;gap:10px;align-items:flex-start}
+    .avatar{width:36px;height:36px;border-radius:8px;background:#123038;display:flex;align-items:center;justify-content:center;font-weight:600}
+    .bubble{background:rgba(255,255,255,0.02);padding:10px;border-radius:8px;max-width:70%}
+    .composer{display:flex;padding:12px;gap:8px;border-top:1px solid rgba(255,255,255,0.02)}
+    .composer input{flex:1;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.03);background:transparent;color:inherit}
+    .btn{padding:8px 12px;border-radius:8px;border:none;background:var(--accent);color:#042;cursor:pointer}
+    .members{display:flex;flex-direction:column;padding:12px;gap:8px}
+    .member{display:flex;gap:8px;align-items:center}
+    .muted{color:var(--muted);font-size:13px}
+    footer.small{font-size:12px;text-align:center;padding:8px;color:var(--muted)}
+    .signin{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(0deg, rgba(2,6,23,0.6), rgba(2,6,23,0.6));backdrop-filter: blur(4px)}
+    .signin .card{padding:28px;text-align:center;max-width:420px}
+    button.google{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#fff;color:#111;cursor:pointer}
+    @media (max-width:900px){ .app{grid-template-columns:64px 220px 1fr; } .members{display:none} }
+  </style>
 </head>
-<body class="bg-disc-primary text-disc-text">
-
-    <!-- The main application container -->
-    <div id="app" class="flex flex-col">
-
-        <!-- 1. Login Modal / Initial View -->
-        <div id="login-screen" class="absolute inset-0 bg-disc-primary z-50 flex items-center justify-center">
-            <div class="bg-disc-secondary p-8 rounded-xl shadow-2xl w-full max-w-sm">
-                <h1 class="text-3xl font-extrabold text-white text-center mb-2">SQUIT UP !!</h1>
-                <p class="text-disc-muted text-center mb-6">Sign in to join the conversation.</p>
-
-                <!-- Google Sign-In Container (GSI) -->
-                <div id="g_id_onload"
-                    <!-- !!! IMPORTANT: REPLACE THIS CLIENT_ID WITH YOUR ACTUAL GOOGLE WEB CLIENT ID !!! -->
-                    data-client_id="503910898443.apps.googleusercontent.com" 
-                    data-context="signin"
-                    data-ux_mode="popup"
-                    data-callback="handleCredentialResponse"
-                    data-auto_prompt="false">
-                </div>
-
-                <div class="g_id_signin flex justify-center"
-                    data-type="standard"
-                    data-shape="pill"
-                    data-theme="outline"
-                    data-text="signin_with"
-                    data-size="large"
-                    data-logo_alignment="left"
-                    data-width="310">
-                </div>
-
-                <p class="text-xs text-center text-disc-muted mt-4">
-                    Mock app. Login simply toggles the UI visibility.
-                </p>
-            </div>
-        </div>
-
-        <!-- 2. Main Discord-like Layout (Hidden initially) -->
-        <div id="main-ui" class="flex flex-grow hidden">
-
-            <!-- 2.1 Server List (Column 1 - Fixed Width, Darkest BG) -->
-            <div class="w-20 bg-disc-tertiary flex flex-col items-center py-3 space-y-2 flex-shrink-0">
-                <!-- Home Button/DM List (Always at the top) -->
-                <div class="h-12 w-12 rounded-2xl bg-disc-brand flex items-center justify-center cursor-pointer transition-all hover:rounded-xl shadow-lg hover:shadow-disc-brand/30">
-                    <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
-                </div>
-                <!-- Divider -->
-                <div class="w-8 h-0.5 bg-gray-600 rounded-full"></div>
-                <!-- Mock Server Icons -->
-                <div class="h-12 w-12 rounded-2xl bg-gray-700 flex items-center justify-center text-sm font-bold text-gray-400 cursor-pointer transition-all hover:rounded-xl hover:bg-green-500">PROJ</div>
-                <div class="h-12 w-12 rounded-2xl bg-gray-700 flex items-center justify-center text-sm font-bold text-gray-400 cursor-pointer transition-all hover:rounded-xl hover:bg-yellow-500">DEV</div>
-                <!-- Add Server -->
-                <div class="h-12 w-12 rounded-full bg-gray-700 flex items-center justify-center text-2xl text-green-400 cursor-pointer transition-all hover:rounded-xl hover:bg-green-600 hover:text-white">+</div>
-            </div>
-
-            <!-- 2.2 Channel List (Column 2 - Responsive Width) -->
-            <div id="channel-sidebar" class="w-64 bg-disc-secondary flex-shrink-0 flex flex-col sidebar-transition md:static absolute inset-y-0 z-40 transform -translate-x-full md:translate-x-0">
-                <div class="h-12 p-3 font-semibold text-white border-b border-gray-700 shadow-sm flex items-center justify-between flex-shrink-0">
-                    <span class="truncate">SQUIT UP !! Server</span>
-                    <svg class="w-4 h-4 text-disc-text" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
-                </div>
-
-                <div class="p-2 space-y-1 overflow-y-auto flex-grow">
-                    <!-- Text Channels Section -->
-                    <h3 class="flex items-center text-xs font-semibold uppercase text-disc-muted mb-1 mt-2 hover:text-white cursor-pointer transition-colors">
-                        <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path d="M7 9a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1zm0 4a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1zM5 2a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V4a2 2 0 00-2-2H5zM3 17V4a1 1 0 011-1h12a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1z"></path></svg>
-                        TEXT CHANNELS
-                    </h3>
-                    <div class="flex items-center p-1.5 rounded-lg bg-gray-600 cursor-pointer text-white font-medium transition-colors">
-                        <span class="mr-2 text-xl font-mono text-gray-300">#</span> general-lounge
-                    </div>
-                    <div class="flex items-center p-1.5 rounded-lg hover:bg-gray-600 cursor-pointer text-disc-muted hover:text-white transition-colors">
-                        <span class="mr-2 text-xl font-mono text-gray-500">#</span> dev-discussion
-                    </div>
-                    <!-- Voice Channels Section -->
-                    <h3 class="flex items-center text-xs font-semibold uppercase text-disc-muted mb-1 mt-4 hover:text-white cursor-pointer transition-colors">
-                        <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path d="M7 9a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1zm0 4a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1zM5 2a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V4a2 2 0 00-2-2H5zM3 17V4a1 1 0 011-1h12a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1z"></path></svg>
-                        VOICE CHANNELS
-                    </h3>
-                    <div class="flex items-center p-1.5 rounded-lg hover:bg-gray-600 cursor-pointer text-green-400 hover:text-white transition-colors">
-                        <svg class="w-5 h-5 mr-1" fill="currentColor" viewBox="0 0 20 20"><path d="M11 5H6V4h5v1zM6 8h5V7H6v1zM6 11h5v-1H6v1zM13 14h-3a1 1 0 00-1 1v2h5v-2a1 1 0 00-1-1zM5 13a1 1 0 01-1 1v2a1 1 0 01-1 1H2a1 1 0 01-1-1v-2a1 1 0 01-1-1v-2a1 1 0 011-1h1a1 1 0 011 1v2zM15 13a1 1 0 01-1 1v2a1 1 0 01-1 1h-1a1 1 0 01-1-1v-2a1 1 0 011-1v-2a1 1 0 011-1h1a1 1 0 011 1v2z"></path></svg>
-                        General Voice
-                    </div>
-                </div>
-
-                <!-- User Panel -->
-                <div class="h-16 bg-disc-tertiary p-3 flex items-center justify-between flex-shrink-0">
-                    <div class="flex items-center">
-                        <div class="h-8 w-8 rounded-full bg-disc-brand flex items-center justify-center font-bold text-white text-sm mr-2 shadow-lg">
-                            <span id="user-initial">U</span>
-                        </div>
-                        <div>
-                            <span id="user-display-name" class="text-sm font-semibold text-white truncate">User Name</span>
-                            <span class="text-xs text-disc-muted block">#0001</span>
-                        </div>
-                    </div>
-                    <!-- Logout Icon -->
-                    <div onclick="logOut()" class="text-disc-muted cursor-pointer hover:text-red-400 p-1 rounded-md hover:bg-gray-700 transition-colors" title="Log Out">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 2.3 Main Chat Area (Column 3 - Content) -->
-            <div class="flex-grow flex flex-col min-w-0">
-                <!-- Chat Header -->
-                <div class="h-12 bg-disc-primary border-b border-gray-700 shadow-md px-4 flex items-center flex-shrink-0">
-                    <!-- Mobile Menu Button -->
-                    <button id="menu-button" class="md:hidden mr-3 p-1 rounded-lg hover:bg-gray-700">
-                        <svg class="w-6 h-6 text-disc-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
-                    </button>
-                    <span class="text-xl font-semibold mr-2 text-gray-400 font-mono">#</span>
-                    <span class="font-semibold text-white truncate">general-lounge</span>
-                </div>
-
-                <!-- Chat Messages Window -->
-                <div id="chat-window" class="flex-grow overflow-y-auto p-4 space-y-5 bg-disc-primary">
-                    <!-- Mock Messages -->
-                    <div class="flex items-start group hover:bg-gray-700/50 p-1 -mx-1 rounded-md transition-colors">
-                        <div class="h-10 w-10 rounded-full bg-red-400 flex-shrink-0 mt-1"></div>
-                        <div class="ml-3 min-w-0">
-                            <div class="flex items-baseline">
-                                <span class="text-white font-semibold mr-2">SQU!T_ADMIN</span>
-                                <span class="text-xs text-disc-muted">10/12/2025 1:00 PM</span>
-                            </div>
-                            <p class="text-disc-text break-words">Welcome to **SQUIT UP !!** — A Discord UI simulation. Use the Google Sign-In to update your username in the left panel and start sending simulated messages! The UI is fully responsive.</p>
-                        </div>
-                    </div>
-
-                    <div class="flex items-start group hover:bg-gray-700/50 p-1 -mx-1 rounded-md transition-colors">
-                        <div class="h-10 w-10 rounded-full bg-yellow-400 flex-shrink-0 mt-1"></div>
-                        <div class="ml-3 min-w-0">
-                            <div class="flex items-baseline">
-                                <span class="text-white font-semibold mr-2">Dev_Tester</span>
-                                <span class="text-xs text-disc-muted">1:05 PM</span>
-                            </div>
-                            <p class="text-disc-text break-words">Looks awesome! The dark theme and rounded corners really hit the Discord aesthetic. Don't forget to implement exponential backoff for the API calls if this were a real app! 😉</p>
-                        </div>
-                    </div>
-
-                    <!-- Template for User's New Messages (Hidden) -->
-                    <div id="user-message-template" class="hidden flex items-start group hover:bg-gray-700/50 p-1 -mx-1 rounded-md transition-colors">
-                        <div class="h-10 w-10 rounded-full bg-disc-brand flex items-center justify-center font-bold text-white text-sm flex-shrink-0 mt-1">
-                            <span class="user-initial-msg">U</span>
-                        </div>
-                        <div class="ml-3 min-w-0">
-                            <div class="flex items-baseline">
-                                <span class="user-display-name-msg text-white font-semibold mr-2">User Name</span>
-                                <span class="text-xs text-disc-muted message-time">2:00 PM</span>
-                            </div>
-                            <p class="text-disc-text break-words message-content"></p>
-                        </div>
-                    </div>
-
-                </div>
-
-                <!-- Message Input Footer -->
-                <div class="p-4 flex-shrink-0">
-                    <div class="relative">
-                        <input id="message-input" type="text" placeholder="Message #general-lounge" class="w-full bg-gray-700 text-white py-3 pl-12 pr-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-disc-brand placeholder-gray-400 transition-shadow shadow-lg shadow-gray-900/50" />
-                        <!-- Plus Icon -->
-                        <svg class="absolute left-3 top-1/2 transform -translate-y-1/2 w-6 h-6 text-gray-400 hover:text-white cursor-pointer transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                    </div>
-                </div>
-            </div>
-        </div>
+<body>
+  <div class="app">
+    <!-- Servers -->
+    <div class="card servers">
+      <div style="font-weight:700;padding:6px;color:var(--accent);">SU</div>
+      <div id="serverList"></div>
+      <button id="newServerBtn" class="btn" style="margin-top:auto;width:56px;">+</button>
     </div>
 
-    <script>
-        // Use the messagingSenderId '503910898443' to form a *placeholder* Client ID.
-        // !!! You MUST replace this with your actual Google Web Client ID for OAuth to work. !!!
-        const PLACEHOLDER_CLIENT_ID = '503910898443.apps.googleusercontent.com'; 
-        
-        // UI element references
-        const loginScreen = document.getElementById('login-screen');
-        const mainUI = document.getElementById('main-ui');
-        const displayNameElement = document.getElementById('user-display-name');
-        const initialElement = document.getElementById('user-initial');
-        const channelSidebar = document.getElementById('channel-sidebar');
-        const menuButton = document.getElementById('menu-button');
-        const messageInput = document.getElementById('message-input');
-        const chatWindow = document.getElementById('chat-window');
+    <!-- Left sidebar: server name & channels -->
+    <div class="card sidebar">
+      <div class="header">
+        <div id="serverName">Squit Up — Home</div>
+        <div class="muted" id="userNameShort">Not signed</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <input id="newChannelName" placeholder="New channel name" style="flex:1;padding:8px;border-radius:8px;background:transparent;border:1px solid rgba(255,255,255,0.03)">
+        <button id="createChannel" class="btn">Add</button>
+      </div>
+      <div class="channels card" id="channelList"></div>
+      <footer class="small muted">Squit Up — Chatting & Chilling</footer>
+    </div>
 
-        // Initial user state (before login)
-        let currentUser = { name: 'Guest', initial: 'G', color: 'bg-gray-500' };
+    <!-- Center: chat -->
+    <div class="card chat">
+      <div style="padding:12px;border-bottom:1px solid rgba(255,255,255,0.02);display:flex;justify-content:space-between">
+        <div><strong id="channelTitle">#general</strong><div class="muted" id="channelDesc">Welcome to Squit Up</div></div>
+        <div class="muted" id="userStatus">Offline</div>
+      </div>
 
-        // 1. Google Sign-In Callback (GSI Mandate)
-        // This function is called automatically by the GSI SDK upon successful login.
-        window.handleCredentialResponse = (response) => {
-            if (!response.credential) {
-                console.error("Google credential response missing token.");
-                return;
-            }
-            
-            // Decode the JWT (ID token) payload
-            try {
-                const token = response.credential;
-                const payload = JSON.parse(atob(token.split('.')[1]));
-                
-                // Update local user state
-                currentUser.name = payload.name || payload.given_name || 'Authenticated User';
-                currentUser.initial = (currentUser.name[0] || 'U').toUpperCase();
-                currentUser.color = payload.picture ? `url(${payload.picture})` : 'bg-disc-brand';
-                
-                updateUIForLogin();
-                
-            } catch (e) {
-                console.error("Error decoding JWT:", e);
-                // Fallback to anonymous display if decoding fails
-                currentUser = { name: 'Anon', initial: 'A', color: 'bg-red-500' };
-                updateUIForLogin();
-            }
+      <div class="messages" id="messages"></div>
+
+      <div class="composer">
+        <input id="messageInput" placeholder="Message #general" />
+        <button id="sendBtn" class="btn">Send</button>
+      </div>
+    </div>
+
+    <!-- Right: members -->
+    <div class="card members">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <strong>Members</strong>
+        <div class="muted" id="memberCount">0</div>
+      </div>
+      <div id="memberList" style="overflow:auto;max-height:75vh"></div>
+      <div style="margin-top:auto">
+        <button id="signOutBtn" class="btn" style="width:100%">Sign out</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sign in overlay -->
+  <div id="signinOverlay" class="signin" style="display:none">
+    <div class="card">
+      <h2>Squit Up — Sign in</h2>
+      <p class="muted">Sign in with Google to continue</p>
+      <button id="googleSignIn" class="google">
+        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="G" style="height:20px"/>
+        Sign in with Google
+      </button>
+      <p style="margin-top:12px" class="muted">Local prototype — your Firebase project is used to store messages.</p>
+    </div>
+  </div>
+
+  <!-- Firebase + App logic -->
+  <script type="module">
+    // Import Firebase modular SDK from CDN
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.24.0/firebase-app.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.24.0/firebase-auth.js";
+    import { getFirestore, collection, addDoc, doc, setDoc, onSnapshot, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.24.0/firebase-firestore.js";
+
+    // --- Your provided firebaseConfig (wired as given) ---
+    const firebaseConfig = {
+      apiKey: "AIzaSyB1zvVHaBrbzX5iA9fBVNGa_3sY1-WCSpY",
+      authDomain: "squit-up-auth.firebaseapp.com",
+      projectId: "squit-up-auth",
+      storageBucket: "squit-up-auth.firebasestorage.app",
+      messagingSenderId: "503910898443",
+      appId: "1:503910898443:web:c5a56eb24cd4f183d8600e",
+      measurementId: "G-K4LHFHSNJC"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const provider = new GoogleAuthProvider();
+
+    // Initial selection
+    let currentServerId = "default-server";
+    let currentChannelId = "general";
+
+    // UI elements
+    const signinOverlay = document.getElementById('signinOverlay');
+    const googleSignIn = document.getElementById('googleSignIn');
+    const signOutBtn = document.getElementById('signOutBtn');
+    const userNameShort = document.getElementById('userNameShort');
+    const userStatus = document.getElementById('userStatus');
+    const serverList = document.getElementById('serverList');
+    const channelList = document.getElementById('channelList');
+    const messagesEl = document.getElementById('messages');
+    const memberList = document.getElementById('memberList');
+    const memberCount = document.getElementById('memberCount');
+    const sendBtn = document.getElementById('sendBtn');
+    const messageInput = document.getElementById('messageInput');
+    const newServerBtn = document.getElementById('newServerBtn');
+    const newChannelName = document.getElementById('newChannelName');
+    const createChannel = document.getElementById('createChannel');
+    const serverName = document.getElementById('serverName');
+    const channelTitle = document.getElementById('channelTitle');
+    const channelDesc = document.getElementById('channelDesc');
+
+    // utils
+    function el(tag, cls=''){const e=document.createElement(tag);if(cls)e.className=cls;return e;}
+    function timeShort(ts){
+      try{ return new Date(ts.seconds*1000).toLocaleTimeString(); }catch(e){ return ''; }
+    }
+
+    // Sign-in
+    googleSignIn.onclick = async () => {
+      try {
+        await signInWithPopup(auth, provider);
+      } catch (err) {
+        alert("Sign-in error: " + err.message);
+      }
+    };
+    signOutBtn.onclick = async () => { await signOut(auth); };
+
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        signinOverlay.style.display = 'none';
+        userNameShort.textContent = user.displayName?.split(' ')[0] || 'User';
+        userStatus.textContent = 'Online';
+        // update member entry
+        const memberRef = doc(db, 'servers', currentServerId, 'members', user.uid);
+        await setDoc(memberRef, {
+          uid: user.uid,
+          name: user.displayName,
+          photoURL: user.photoURL || null,
+          lastSeen: serverTimestamp()
+        }, { merge: true });
+      } else {
+        signinOverlay.style.display = 'flex';
+        userNameShort.textContent = 'Not signed';
+        userStatus.textContent = 'Offline';
+        memberList.innerHTML = '';
+      }
+    });
+
+    // Ensure default server+channel exists
+    async function ensureDefaultServer() {
+      const sref = doc(db, 'servers', currentServerId);
+      await setDoc(sref, { name: "Squit Up — Home", createdAt: serverTimestamp() }, { merge: true });
+      const cref = doc(db, 'servers', currentServerId, 'channels', currentChannelId);
+      await setDoc(cref, { name: "general", topic: "General chat", createdAt: serverTimestamp() }, { merge: true });
+    }
+    await ensureDefaultServer();
+
+    // Render one server (prototype)
+    function renderServers(servers) {
+      serverList.innerHTML = '';
+      for (const s of servers) {
+        const d = el('div','server'); d.textContent = (s.name||'SU').slice(0,2).toUpperCase();
+        d.onclick = () => {
+          currentServerId = s.id;
+          serverName.textContent = s.name || 'Server';
+          loadChannels();
+          subscribeMembers();
+          loadMessages();
         };
+        serverList.appendChild(d);
+      }
+    }
+    renderServers([{ id: currentServerId, name: "Squit Up — Home" }]);
 
-        function updateUIForLogin() {
-            // 1. Update User Panel in Sidebar
-            displayNameElement.textContent = currentUser.name;
-            initialElement.textContent = currentUser.initial;
-            
-            // Set the avatar background (using image if available, otherwise solid color)
-            const avatarElement = document.getElementById('user-initial').parentNode;
-            if (currentUser.color.startsWith('url')) {
-                avatarElement.style.backgroundImage = currentUser.color;
-                avatarElement.style.backgroundSize = 'cover';
-                initialElement.textContent = ''; // Hide initial if image is present
-            } else {
-                avatarElement.className = `h-8 w-8 rounded-full ${currentUser.color} flex items-center justify-center font-bold text-white text-sm mr-2 shadow-lg`;
-            }
-
-            // 2. Hide Login, Show Main UI
-            loginScreen.classList.add('hidden');
-            mainUI.classList.remove('hidden');
-
-            // 3. Scroll to bottom of chat
-            chatWindow.scrollTop = chatWindow.scrollHeight;
-        }
-
-        function logOut() {
-            // Log out simulation
-            console.log("User logged out.");
-            loginScreen.classList.remove('hidden');
-            mainUI.classList.add('hidden');
-            // Optionally, call google.accounts.id.disableAutoSelect()
-        }
-
-        // 2. Mobile Menu Toggler
-        menuButton.addEventListener('click', () => {
-            channelSidebar.classList.toggle('transform');
-            channelSidebar.classList.toggle('-translate-x-full');
+    // Load channels
+    let channelsUnsub = null;
+    function loadChannels(){
+      if (channelsUnsub) channelsUnsub();
+      channelList.innerHTML = '';
+      const q = query(collection(db, 'servers', currentServerId, 'channels'), orderBy('createdAt'));
+      channelsUnsub = onSnapshot(q, snapshot => {
+        channelList.innerHTML = '';
+        snapshot.forEach(docSnap => {
+          const ch = docSnap.data(); ch.id = docSnap.id;
+          const row = el('div','channel'); row.textContent = '# ' + (ch.name || ch.id);
+          row.onclick = () => {
+            currentChannelId = ch.id;
+            channelTitle.textContent = '#' + (ch.name || ch.id);
+            channelDesc.textContent = ch.topic || '';
+            loadMessages();
+          };
+          channelList.appendChild(row);
         });
+      });
+    }
+    loadChannels();
 
-        // 3. Chat Message Sending (Simulated)
-        messageInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && messageInput.value.trim() !== '') {
-                e.preventDefault();
-                const messageText = messageInput.value.trim();
-                messageInput.value = '';
+    // Create channel
+    createChannel.onclick = async () => {
+      const name = newChannelName.value.trim();
+      if (!name) return alert("Enter channel name");
+      const col = collection(db, 'servers', currentServerId, 'channels');
+      await addDoc(col, { name, topic: '', createdAt: serverTimestamp() });
+      newChannelName.value = '';
+    };
 
-                // Clone the message template
-                const template = document.getElementById('user-message-template');
-                const newMessage = template.cloneNode(true);
-
-                // Update content and styles
-                newMessage.id = '';
-                newMessage.classList.remove('hidden');
-                
-                // Set the current user's details for the new message
-                const avatarElement = newMessage.querySelector('.user-initial-msg').parentNode;
-                
-                if (currentUser.color.startsWith('url')) {
-                    avatarElement.style.backgroundImage = currentUser.color;
-                    avatarElement.style.backgroundSize = 'cover';
-                    newMessage.querySelector('.user-initial-msg').textContent = '';
-                } else {
-                    // Update classes for solid color avatar
-                    avatarElement.className = `h-10 w-10 rounded-full ${currentUser.color} flex items-center justify-center font-bold text-white text-sm flex-shrink-0 mt-1`;
-                    newMessage.querySelector('.user-initial-msg').textContent = currentUser.initial;
-                }
-                
-                newMessage.querySelector('.user-display-name-msg').textContent = currentUser.name;
-                newMessage.querySelector('.message-content').textContent = messageText;
-                
-                const now = new Date();
-                const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                newMessage.querySelector('.message-time').textContent = timeString;
-
-                // Append the new message
-                chatWindow.appendChild(newMessage);
-
-                // Scroll to the bottom
-                chatWindow.scrollTop = chatWindow.scrollHeight;
-            }
+    // Messages: listener & sender
+    let unsubscribeMessages = null;
+    function loadMessages(){
+      if (unsubscribeMessages) unsubscribeMessages();
+      messagesEl.innerHTML = '';
+      const msgsCol = collection(db, 'servers', currentServerId, 'channels', currentChannelId, 'messages');
+      const q = query(msgsCol, orderBy('createdAt'));
+      unsubscribeMessages = onSnapshot(q, snapshot => {
+        messagesEl.innerHTML = '';
+        snapshot.forEach(docSnap => {
+          const m = docSnap.data();
+          const row = el('div','msg');
+          const avatar = el('div','avatar'); avatar.textContent = (m.name||'U').slice(0,1).toUpperCase();
+          const bubble = el('div','bubble');
+          bubble.innerHTML = `<strong>${escapeHtml(m.name||'Anonymous')}</strong> <span class="muted" style="font-size:12px"> ${timeShort(m.createdAt||{})}</span>
+                              <div style="margin-top:6px">${escapeHtml(m.text)}</div>`;
+          row.appendChild(avatar); row.appendChild(bubble);
+          messagesEl.appendChild(row);
         });
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      });
+    }
+    // initial messages
+    loadMessages();
 
-        // 4. Initial check for responsiveness (hide sidebar on small screens)
-        function checkViewport() {
-            // Tailwind's 'md' breakpoint is 768px
-            if (window.innerWidth < 768) { 
-                // Ensure sidebar is hidden by default on mobile
-                if (!channelSidebar.classList.contains('transform')) {
-                    channelSidebar.classList.add('transform', '-translate-x-full');
-                }
-            } else {
-                 // Ensure sidebar is always visible on desktop
-                 channelSidebar.classList.remove('transform', '-translate-x-full');
-            }
-        }
-        
-        // Run on load and resize
-        window.addEventListener('load', () => {
-            // Initially scroll chat to bottom
-            chatWindow.scrollTop = chatWindow.scrollHeight;
-            checkViewport();
+    // Send message
+    sendBtn.onclick = async () => {
+      const user = auth.currentUser;
+      if (!user) return alert("Sign in first");
+      const text = messageInput.value.trim();
+      if (!text) return;
+      const msgsCol = collection(db, 'servers', currentServerId, 'channels', currentChannelId, 'messages');
+      await addDoc(msgsCol, {
+        uid: user.uid,
+        name: user.displayName,
+        text,
+        createdAt: serverTimestamp()
+      });
+      messageInput.value = '';
+    };
+
+    // Members list
+    let membersUnsub = null;
+    function subscribeMembers(){
+      if (membersUnsub) membersUnsub();
+      const q = query(collection(db, 'servers', currentServerId, 'members'), orderBy('name'));
+      membersUnsub = onSnapshot(q, snap => {
+        memberList.innerHTML = '';
+        let c=0;
+        snap.forEach(s => {
+          const m = s.data();
+          const row = el('div','member');
+          const av = el('div','avatar'); av.textContent = (m.name||'U').slice(0,1).toUpperCase();
+          const name = el('div'); name.innerHTML = `<div><strong>${escapeHtml(m.name||'User')}</strong></div><div class="muted" style="font-size:12px">${m.uid}</div>`;
+          row.appendChild(av); row.appendChild(name);
+          memberList.appendChild(row);
+          c++;
         });
-        window.addEventListener('resize', checkViewport);
-        
-    </script>
+        memberCount.textContent = c;
+      });
+    }
+    subscribeMembers();
 
+    // Add server
+    newServerBtn.onclick = async () => {
+      const name = prompt("New server name (prototype):");
+      if (!name) return;
+      const id = name.toLowerCase().replace(/\s+/g,'-').slice(0,28);
+      await setDoc(doc(db,'servers',id),{ name, createdAt: serverTimestamp() });
+      currentServerId = id;
+      serverName.textContent = name;
+      loadChannels();
+      subscribeMembers();
+      await ensureDefaultServer();
+    };
+
+    // HTML escape
+    function escapeHtml(str){
+      if(!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+  </script>
 </body>
 </html>
