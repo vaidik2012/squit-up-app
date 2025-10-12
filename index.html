@@ -178,6 +178,20 @@
         let userId = null;
         let userProfile = null; // Stores the user's fetched profile including @user_id
         const provider = new GoogleAuthProvider();
+        
+        // Hardcoded Firebase Configuration (Provided by user)
+        const firebaseConfig = {
+            apiKey: "AIzaSyB1zvVHaBrbzX5iA9fBVNGa_3sY1-WCSpY",
+            authDomain: "squit-up-auth.firebaseapp.com",
+            projectId: "squit-up-auth",
+            storageBucket: "squit-up-auth.firebasestorage.app",
+            messagingSenderId: "503910898443",
+            appId: "1:503910898443:web:c5a56eb24cd4f183d8600e",
+            measurementId: "G-K4LHFHSNJC"
+        };
+        
+        // This is a placeholder for the App ID which is still needed for Firestore pathing.
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
         // --- Utility Functions ---
         
@@ -228,24 +242,17 @@
         async function initializeFirebase() {
             router.clearError();
             try {
-                // Access global Canvas variables
-                const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-                const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-                const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-                if (Object.keys(firebaseConfig).length === 0) {
-                    throw new Error("Firebase configuration is missing or empty.");
-                }
-
+                // Initialize Firebase with the hardcoded configuration
                 app = initializeApp(firebaseConfig);
                 auth = getAuth(app);
                 db = getFirestore(app);
 
                 // Try to sign in using the custom token provided by the canvas environment
+                const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
                 if (initialAuthToken) {
                     await signInWithCustomToken(auth, initialAuthToken);
                 } else {
-                    // Fallback: Sign in anonymously to allow reading public data (like checking unique user IDs)
+                    // Fallback: Sign in anonymously (requires Anonymous provider to be enabled)
                     await signInAnonymously(auth);
                 }
 
@@ -258,6 +265,7 @@
                             router.setView('auth');
                         } else {
                             // User is signed in with Google, proceed to profile check
+                            // Check if the user's data exists in Firestore before proceeding
                             await checkUserProfile(user.uid, user.displayName, user.email);
                         }
                     } else {
@@ -273,16 +281,17 @@
                 if (error.code === 'failed-precondition' || (error.message && (error.message.includes('permission-denied') || error.message.includes('NOT_FOUND')))) {
                     router.setError("Database Error: Firestore is likely not enabled or security rules are too restrictive. Please enable Cloud Firestore in your Firebase console.");
                 } else {
-                    router.setError(`Initialization failed: ${error.message}`);
+                    router.setError(`Initialization failed: ${error.message}. Ensure Google Sign-In is enabled in Firebase Auth.`);
                 }
             }
         }
         
-        // --- Profile Management ---
+        // --- Profile Management (Requires Firestore) ---
 
         async function checkUserProfile(uid, displayName, email) {
             router.clearError();
             try {
+                // Path: /artifacts/{appId}/public/data/users/{uid}
                 const docRef = doc(db, `artifacts/${appId}/public/data/users`, uid);
                 const docSnap = await getDoc(docRef);
 
@@ -291,7 +300,7 @@
                     userProfile = docSnap.data();
                     router.setView('dashboard');
                 } else {
-                    // User profile does NOT exist, go to setup
+                    // User profile does NOT exist, go to setup (first-time sign-in)
                     userProfile = {
                         uid,
                         displayName: displayName || 'New User',
@@ -303,7 +312,7 @@
                 }
             } catch (error) {
                 console.error("Error during user profile check:", error);
-                router.setError("Error checking profile: Could not connect to database. Please ensure Cloud Firestore is enabled and rules are public.");
+                router.setError("Database Error: Could not check profile. Please ensure Cloud Firestore is enabled, rules are public, and billing is active.");
             }
         }
         
@@ -326,7 +335,7 @@
                 appState.isCheckingUserId = false;
                 renderApp();
                 console.error("Error checking user ID availability:", error);
-                router.setError("Database Error: Cannot check user ID uniqueness. Ensure Cloud Firestore is enabled.");
+                router.setError("Database Error: Cannot check user ID uniqueness. Ensure Cloud Firestore is enabled and rules allow reads.");
                 return false; // Assume not available on failure to prevent accidental creation
             }
         }
@@ -361,6 +370,7 @@
             try {
                 userProfile.username = username;
                 
+                // Path: /artifacts/{appId}/public/data/users/{uid}
                 const docRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
                 await setDoc(docRef, userProfile);
                 
@@ -381,7 +391,7 @@
                 // onAuthStateChanged will handle the rest (checkUserProfile)
             } catch (error) {
                 console.error("Google Sign-In failed:", error);
-                router.setError(`Sign-In Error: ${error.message}`);
+                router.setError(`Sign-In Error: ${error.message}. Please check Firebase Authorized Domains.`);
             }
         }
 
@@ -465,9 +475,9 @@
                         </header>
                         <div class="chat-area flex-grow">
                             <!-- Placeholder Messages -->
-                            <div class="message-system self-center">Welcome! This is where real-time chat messages will appear.</div>
+                            <div class="message-system self-center">Welcome! Your User ID is <span class="text-yellow-400">${userProfile.username}</span>.</div>
                             <div class="message-other">
-                                <span class="font-bold text-indigo-400">@System:</span> This chat is currently static until the database connection is fully established.
+                                <span class="font-bold text-indigo-400">@System:</span> This chat is currently static because the database isn't fully set up.
                             </div>
                             <div class="message-user self-end">
                                 <span class="font-bold">Me (${userProfile.username}):</span> I successfully logged in!
