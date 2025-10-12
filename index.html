@@ -42,10 +42,9 @@
 <body>
 
     <!-- Main Container for Views -->
-    <!-- w-screen h-screen ensures it always covers the viewport -->
-    <div id="app-container" class="w-screen h-screen p-0 overflow-hidden">
-        <!-- Views will be rendered here -->
-        <div class="text-white">Initializing app...</div>
+    <!-- CRITICAL FIX: Add flex, items-center, and justify-center here so the loading screen is centered immediately -->
+    <div id="app-container" class="w-screen h-screen p-0 overflow-hidden flex items-center justify-center">
+        <!-- Views will be rendered here (Initial loading content is set by JS immediately) -->
     </div>
 
     <!-- Custom Alert/Status Message Box -->
@@ -214,14 +213,14 @@
             renderView();
         }
 
-        // --- 3. Auth Actions (FIXED FOR AUTOMATIC TRANSITION) ---
+        // --- 3. Auth Actions ---
         window.signInWithGoogle = async function() {
             const provider = new GoogleAuthProvider();
             try {
                 // Sign in with popup
                 const result = await signInWithPopup(auth, provider);
                 
-                // *** FIX: Manually trigger the profile check immediately after successful sign-in ***
+                // Manually trigger the profile check immediately after successful sign-in
                 if (result.user) {
                     await checkUserProfile(result.user.uid);
                 } else {
@@ -331,11 +330,11 @@
             
             // Adjust the app container layout based on the view
             if (appState.view === 'DASHBOARD') {
-                // Dashboard: Full screen, no centering
+                // Dashboard: Full screen, remove centering
                 appContainer.classList.remove('flex', 'items-center', 'justify-center', 'p-4');
                 appContainer.classList.add('flex-col');
             } else {
-                // Login/Register/Loading: Centered card view
+                // Login/Register/Loading: Centered card view (p-4 adds padding around the centered element)
                 appContainer.classList.add('flex', 'items-center', 'justify-center', 'p-4');
                 appContainer.classList.remove('flex-col');
             }
