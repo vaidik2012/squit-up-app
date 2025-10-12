@@ -3,1010 +3,548 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SQUIT UP! Chatting and Chilling Lounge Friends</title>
-    <!-- Load Tailwind CSS -->
+    <title>Squit Up! Chat Platform</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Inter Font -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #111827; /* Darker background */
-            min-height: 100vh;
-            /* CRITICAL FIX: Ensure body does not exceed viewport height initially */
-            overflow-y: hidden; 
+            background-color: #12121e; /* Darker background */
+            color: #e0e0f0;
             display: flex;
-            flex-direction: column;
+            justify-content: center;
             align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            transition: background-color 0.3s;
         }
-
-        /* Custom glow for the exciting title */
-        .squit-title {
-            text-shadow: 0 4px 15px rgba(129, 140, 248, 0.7);
-            animation: pulse-glow 2s ease-in-out infinite alternate;
+        .auth-container {
+            background-color: #1a1a2e; /* Card background */
+            padding: 2.5rem;
+            border-radius: 1rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            width: 100%;
+            max-width: 400px;
+            animation: fadeIn 0.5s ease-out;
+            border: 1px solid #3f3f6e;
         }
-
-        @keyframes pulse-glow {
-            from { opacity: 0.8; transform: scale(1.0); }
-            to { opacity: 1.0; transform: scale(1.02); }
+        .app-title {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: #8c8cd9; /* SQUIIIT UP! purple glow */
+            text-shadow: 0 0 10px rgba(140, 140, 217, 0.7);
+            margin-bottom: 0.5rem;
+            text-align: center;
         }
-
-        /* Realistic Shadow on Buttons */
-        .btn-realistic {
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1), 0 0 0 3px rgba(129, 140, 248, 0.1);
-            transition: all 0.2s;
+        .subtitle {
+            color: #a0a0c0;
+            text-align: center;
+            margin-bottom: 2rem;
         }
-
-        .btn-realistic:hover {
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2), 0 4px 6px -4px rgba(0, 0, 0, 0.1), 0 0 0 4px rgba(129, 140, 248, 0.2);
+        .btn-google {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.75rem 1.5rem;
+            background-color: #4285f4;
+            color: white;
+            font-weight: 600;
+            border-radius: 0.5rem;
+            transition: background-color 0.2s, transform 0.1s;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+        }
+        .btn-google:hover {
+            background-color: #357ae8;
             transform: translateY(-1px);
         }
-
-        .panel-shadow {
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(55, 65, 81, 0.5);
+        .btn-google img {
+            margin-right: 0.75rem;
         }
-
-        /* Discord-like Layout Structure */
-        #dashboard-container {
+        .input-field {
+            background-color: #2a2a4a;
+            border: 1px solid #3f3f6e;
+            color: #e0e0f0;
+        }
+        .message-box {
+            background-color: #993333;
+            color: white;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            margin-top: 1rem;
+            font-weight: 600;
+            text-align: center;
+            border: 1px solid #cc6666;
+        }
+        .dashboard-layout {
             display: grid;
-            grid-template-columns: 70px 240px 1fr; /* Servers | Channels | Chat */
-            max-width: 1600px;
-            width: 100%;
-            height: 95vh;
-            margin-top: 1vh;
-            overflow: hidden;
-            border-radius: 12px;
-            /* CRITICAL FIX: Hide the whole dashboard until logged in */
-            visibility: hidden; 
+            grid-template-columns: 280px 1fr; /* Sidebar and main content */
+            height: 100vh;
+            width: 100vw;
         }
-
-        /* Mobile Layout */
-        @media (max-width: 768px) {
-            #dashboard-container {
-                grid-template-columns: 1fr;
-                grid-template-rows: 60px 1fr;
-                height: 100vh;
-                margin-top: 0;
-                border-radius: 0;
-            }
-            #server-list { display: none; } /* Hide server list on mobile */
-            #sidebar { 
-                grid-row: 1 / 2;
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                padding: 0 1rem;
-            }
+        .sidebar {
+            background-color: #1a1a2e;
+            padding: 1rem;
+            overflow-y: auto;
+            border-right: 1px solid #3f3f6e;
         }
-        
-        /* Ensure auth view is centered when dashboard is hidden */
-        #auth-view {
-            transition: all 0.5s;
-            margin-top: auto; /* Push down to center */
-            margin-bottom: auto; /* Pull up to center */
+        .main-content {
+            background-color: #12121e;
+            padding: 1rem;
+            overflow-y: auto;
+        }
+        .chat-area {
+            height: calc(100vh - 120px);
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .message-bubble {
+            max-width: 75%;
+            padding: 0.75rem;
+            border-radius: 0.75rem;
+            word-wrap: break-word;
+            line-height: 1.4;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+        }
+        .message-user {
+            background-color: #8c8cd9;
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 0.25rem;
+        }
+        .message-other {
+            background-color: #2a2a4a;
+            color: #e0e0f0;
+            align-self: flex-start;
+            border-bottom-left-radius: 0.25rem;
+        }
+        .message-system {
+            background-color: #3f3f6e;
+            color: #a0a0c0;
+            text-align: center;
+            margin: 0 auto;
+            padding: 0.5rem 1rem;
+            font-style: italic;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .loader {
+            border: 4px solid #3f3f6e;
+            border-top: 4px solid #8c8cd9;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
-</head>
-<body>
-
-    <!-- Main Container -->
-    <!-- The min-h-screen class is controlled by JS to handle switching between auth and dashboard -->
-    <div id="app-container" class="w-full h-full flex flex-col items-center min-h-screen">
-
-        <!-- Header for Auth View -->
-        <header id="auth-header" class="p-6 text-center w-full max-w-xl transition-all duration-500">
-            <h1 class="text-5xl font-extrabold text-indigo-400 mt-8 mb-4 squit-title">
-                SQUIT UP!
-            </h1>
-            <h2 class="text-xl text-gray-300 font-medium tracking-wide">
-                chatting and chilling lounge friends
-            </h2>
-        </header>
-
-        <!-- Initial Authentication Container -->
-        <div id="auth-view" class="w-full max-w-md p-8 bg-gray-800 rounded-xl panel-shadow">
-
-            <!-- Loading State -->
-            <div id="loading-state" class="text-center text-gray-400 p-8">
-                <svg class="animate-spin h-6 w-6 mx-auto mb-3 text-indigo-400" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                <p>Establishing connection...</p>
-            </div>
-
-            <!-- Login/Register Form (Initially hidden) -->
-            <div id="auth-form" class="hidden">
-                <h3 id="auth-title" class="text-2xl font-bold text-white mb-6 text-center">LOG IN</h3>
-
-                <div class="mb-4">
-                    <label for="user_id" class="block text-sm font-medium text-gray-300 mb-2">@User ID</label>
-                    <input type="text" id="user_id" class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 text-white focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 shadow-inner" placeholder="Your unique @user_id" required>
-                    <p id="user-id-message" class="text-xs mt-1 text-red-400 h-4"></p>
-                </div>
-
-                <div id="email-group" class="mb-4 hidden">
-                    <label for="email" class="block text-sm font-medium text-gray-300 mb-2">Email Address (for Firebase)</label>
-                    <input type="email" id="email" class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 text-white focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 shadow-inner" placeholder="Enter your email" required>
-                </div>
-                
-                <div class="mb-6">
-                    <label for="password" class="block text-sm font-medium text-gray-300 mb-2">Password</label>
-                    <input type="password" id="password" class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 text-white focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 shadow-inner" placeholder="Enter your password" required>
-                </div>
-
-                <!-- Error Message Display -->
-                <div id="error-message" class="text-red-400 text-sm mb-4 hidden p-3 bg-red-900 bg-opacity-30 rounded-lg panel-shadow"></div>
-
-                <!-- Action Buttons -->
-                <div class="flex flex-col space-y-4">
-                    <!-- This button triggers the login or register function based on this.authState -->
-                    <button onclick="window.App.handleAuthAction()" id="primary-auth-button" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition duration-300 btn-realistic">
-                        Log In
-                    </button>
-                    <button onclick="window.App.toggleAuthMode()" id="toggle-auth-button" class="w-full py-3 border border-indigo-600 text-indigo-400 font-semibold rounded-lg hover:bg-indigo-900 transition duration-300 btn-realistic">
-                        Create an Account
-                    </button>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Dashboard View (Hidden until logged in) -->
-        <div id="dashboard-container" class="hidden">
-            
-            <!-- Server List (Left-most Column) -->
-            <div id="server-list" class="bg-gray-900 flex flex-col items-center p-2 space-y-3 overflow-y-auto">
-                <button onclick="window.App.setModal('profile')" title="Customize Profile" class="w-12 h-12 bg-gray-700 hover:bg-indigo-600 text-indigo-300 rounded-full flex items-center justify-center transition btn-realistic">
-                    <i data-lucide="user-cog" class="w-6 h-6"></i>
-                </button>
-                <div class="w-8 h-px bg-gray-700"></div>
-                <!-- User's joined servers will go here -->
-                <button onclick="window.App.setModal('create_server')" title="Create Server" class="w-12 h-12 bg-gray-700 hover:bg-green-600 text-green-300 rounded-full flex items-center justify-center transition btn-realistic">
-                    <i data-lucide="plus" class="w-6 h-6"></i>
-                </button>
-            </div>
-            
-            <!-- Sidebar (Channels & Friends List) -->
-            <div id="sidebar" class="bg-gray-800 flex flex-col panel-shadow overflow-y-auto">
-                <div class="p-3 bg-gray-700/50 flex items-center justify-between shadow-lg">
-                    <h2 class="text-lg font-bold text-white whitespace-nowrap overflow-hidden text-ellipsis">SQUIT UP!</h2>
-                    <button onclick="window.App.handleLogout()" class="text-red-400 hover:text-red-500 transition ml-2 p-1 rounded">
-                        <i data-lucide="log-out" class="w-5 h-5"></i>
-                    </button>
-                </div>
-                
-                <div class="p-3 border-b border-gray-700">
-                    <p class="text-sm text-gray-400 font-semibold mb-2">Friends</p>
-                    <button onclick="window.App.setModal('add_friend')" class="w-full flex items-center p-2 text-sm text-indigo-300 hover:bg-indigo-900/50 rounded transition btn-realistic">
-                        <i data-lucide="user-plus" class="w-4 h-4 mr-2"></i>
-                        Send Friend Request
-                    </button>
-                </div>
-                
-                <div class="flex-grow overflow-y-auto p-3">
-                    <p class="text-sm text-gray-400 font-semibold mb-2">My Friends</p>
-                    <div id="friend-list">
-                        <!-- Friend list items will be injected here -->
-                    </div>
-                </div>
-            </div>
-
-            <!-- Chat Area -->
-            <div id="chat-area" class="bg-gray-700 flex flex-col h-full panel-shadow">
-                <div class="h-16 bg-gray-700/70 p-4 border-b border-gray-600 shadow-xl flex justify-between items-center">
-                    <h3 class="text-lg font-bold text-white">#general (Default Channel)</h3>
-                    <button id="invite-server-btn" onclick="window.App.setModal('invite_friends')" class="py-1 px-3 bg-indigo-600 text-white rounded-lg text-sm transition btn-realistic hidden">
-                        <i data-lucide="user-plus" class="w-4 h-4 inline-block mr-1"></i> Invite Friends
-                    </button>
-                </div>
-                
-                <div id="message-container" class="flex-grow p-4 overflow-y-auto space-y-3">
-                    <div class="p-3 bg-gray-800 rounded-lg panel-shadow">
-                        <p class="font-bold text-indigo-400">@System</p>
-                        <p class="text-gray-300 text-sm">Welcome to your SQUIT UP! dashboard! Start by adding friends and creating a server.</p>
-                    </div>
-                </div>
-
-                <!-- Message Input -->
-                <div class="p-4 bg-gray-800 border-t border-gray-600 shadow-2xl">
-                    <div class="flex items-center space-x-2">
-                        <button onclick="window.App.setModal('emoji_picker')" class="p-2 text-2xl text-yellow-400 hover:text-yellow-500 transition">
-                            <i data-lucide="smile" class="w-6 h-6"></i>
-                        </button>
-                        <input type="text" id="chat-input" class="flex-grow p-3 rounded-lg bg-gray-900 border border-gray-600 text-white shadow-inner" placeholder="Send a message..." onkeyup="if(event.key === 'Enter') window.App.sendMessage()">
-                        <button onclick="window.App.sendMessage()" class="py-3 px-4 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition btn-realistic">
-                            Send
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-    </div>
-
-    <!-- Modals Container -->
-    <div id="modal-container" class="fixed inset-0 bg-black bg-opacity-70 z-50 hidden items-center justify-center">
-        <!-- Modal Content will be injected here -->
-    </div>
-
-    <!-- Firebase Imports and Main Application Logic -->
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <!-- Firebase SDKs -->
     <script type="module">
-        // Import Firebase modules
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, onSnapshot, collection, query, where, getDocs, runTransaction, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { 
+            getAuth, 
+            signInWithPopup, 
+            GoogleAuthProvider, 
+            onAuthStateChanged,
+            signInAnonymously,
+            signInWithCustomToken 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            doc, 
+            setDoc, 
+            getDoc, 
+            collection, 
+            query, 
+            where, 
+            getDocs,
+            Timestamp 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        
         setLogLevel('Debug');
 
-        // --- GLOBAL APP STATE AND FIREBASE SETUP ---
-
-        // Firebase configuration provided by the user
-        const explicitFirebaseConfig = {
-            apiKey: "AIzaSyB1zvVHaBrbzX5iA9fBVNGa_3sY1-WCSpY",
-            authDomain: "squit-up-auth.firebaseapp.com",
-            projectId: "squit-up-auth",
-            storageBucket: "squit-up-auth.firebasestorage.app",
-            messagingSenderId: "503910898443",
-            appId: "1:503910898443:web:c5a56eb24cd4f183d8600e",
-            measurementId: "G-K4LHFHSNJC"
-        };
-        
-        // Global variables provided by the environment (prefer explicit config if it exists)
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        // Use the explicit config provided by the user
-        const firebaseConfig = explicitFirebaseConfig; 
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-        
+        // Global Firebase variables
         let app, db, auth;
-        let isFirebaseInitialized = false; // New flag to track initialization success
+        let userId = null;
+        let userProfile = null; // Stores the user's fetched profile including @user_id
+        const provider = new GoogleAuthProvider();
 
-        /**
-         * The main application class to manage state and Firebase interactions.
-         */
-        class SquitApp {
-            constructor() {
-                this.authState = 'login'; // 'login', 'register'
-                this.currentUser = null;
-                this.currentUserId = null; // The Firestore document ID (Firebase UID)
-                this.currentUserSquitId = null; // The @user_id chosen by the user
-                this.userMap = {}; // Maps UID to SquitID for friend lists
-                this.friends = []; // List of accepted friend UIDs
-                this.friendRequests = []; // List of pending friend requests
-                this.servers = []; // List of joined servers
-
-                // CRITICAL: Ensure collections use the provided appId for security rules
-                this.collections = {
-                    USERS: `/artifacts/${appId}/public/data/users`,
-                    FRIENDSHIPS: `/artifacts/${appId}/public/data/friendships`,
-                    SERVERS: `/artifacts/${appId}/public/data/servers`
-                };
-
-                this.emojis = [
-                    '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '🙃', '😉', '😊', '😇', '🥰', '😍', '🤩', '😘', '😗', '😚', '😙', '🥲', '😋', '😛', '😜', '🤪', '😝', '🤑', '🤗', '🤭', '🤫', '🤔', '🤨', '😐', '😑', '😶', '😶‍🌫️', '🙄', '😏', '😒', '😔', '😪', '😞', '😟', '😠', '😡', '🤬', ' 🤯', '😳', '🥵', '🥶', '😱', '😨', '😰', '😢', '😭', '😥', '😩', '😫', ' slug', '😵', '😵‍💫', '😮', '😱', '😲', '🥱', '😴', '🤤', '😪', ' zzz', '😮‍💨', ' 🤧', '🤒', '🤕', ' 🤑', '🤡', '🤠', '🥳', '😎', ' nerd', '😈', '👹', '👺', ' 💀', ' ghost', ' 👽', '🤖', ' 💩', ' 🌟', ' ✨', ' ⚡️', ' 🔥', ' 💯', ' 🌈', ' ☀️', ' 🌙', ' 🌍', ' 🚀', ' 💻', ' 📱', ' 🎮', ' ❤️', ' 💔', ' 👍', ' 👎'
-                ];
-                
-                this.initFirebase();
+        // --- Utility Functions ---
+        
+        // Custom Message Box UI instead of alert()
+        function showMessageBox(message) {
+            const messageBox = document.getElementById('message-box');
+            if (messageBox) {
+                messageBox.textContent = message;
+                messageBox.classList.remove('hidden');
             }
-
-            // --- FIREBASE INITIALIZATION & AUTH ---
-
-            async initFirebase() {
-                this.updateLoadingState(true);
-
-                try {
-                    // Check if the provided config is usable
-                    if (!firebaseConfig || !firebaseConfig.apiKey) {
-                        throw new Error("Firebase configuration is missing or incomplete.");
-                    }
-
-                    app = initializeApp(firebaseConfig);
-                    auth = getAuth(app);
-                    db = getFirestore(app);
-                    isFirebaseInitialized = true; // Set flag to true
-
-                    // Set up persistent auth listener
-                    onAuthStateChanged(auth, async (user) => {
-                        this.updateLoadingState(false);
-                        if (user && user.email) { 
-                            // Only consider users with an email (real accounts) logged in
-                            this.currentUser = user;
-                            this.currentUserId = user.uid;
-                            await this.fetchUserSquitId(user.uid);
-                            this.updateUI(true);
-                            this.setupFirestoreListeners(); // Start listening for data
-                        } else {
-                            // User is logged out OR is an anonymous user
-                            this.currentUser = null;
-                            this.currentUserId = null;
-                            this.currentUserSquitId = null;
-                            this.updateUI(false);
-                            this.cleanupListeners();
-                            
-                            // Ensure an anonymous user is signed in to allow Firestore access for checking user IDs
-                            if (isFirebaseInitialized && !auth.currentUser) {
-                                await signInAnonymously(auth);
-                                console.log("Signed in anonymously for initial checks.");
-                            }
-                        }
-                    });
-
-                    // Initial sign-in attempt (for persistence)
-                    if (initialAuthToken) {
-                        await signInWithCustomToken(auth, initialAuthToken);
-                        console.log("Attempted sign-in with custom token.");
-                    } else if (!auth.currentUser) {
-                        // Fallback to anonymous sign-in if no token and no user exists
-                        await signInAnonymously(auth);
-                        console.log("Signed in anonymously.");
-                    }
-                    
-                    this.updateLoadingState(false);
-
-                } catch (error) {
-                    console.error("Firebase Initialization Error:", error);
-                    let displayMessage = `Error initializing app. Check console for details.`;
-
-                    // Detect the specific error related to disabled providers
-                    if (error.code === 'auth/admin-restricted-operation') {
-                        displayMessage = `Firebase: Error (auth/admin-restricted-operation). Please enable 'Email/Password' and 'Anonymous' sign-in methods in your Firebase project console.`;
-                    }
-                    
-                    // Display a persistent error if initialization failed
-                    this.displayError(displayMessage, false, 0); 
-                    this.updateLoadingState(false);
-                    // Ensure the form is visible to show the error
-                    document.getElementById('auth-form').classList.remove('hidden');
-                }
-            }
-            
-            // --- CORE FIREBASE DATA HANDLING ---
-
-            /** Fetches the user's @user_id from Firestore. */
-            async fetchUserSquitId(uid) {
-                if (!uid) return;
-                try {
-                    const userDocRef = doc(db, this.collections.USERS, uid);
-                    const userDoc = await getDoc(userDocRef);
-                    if (userDoc.exists()) {
-                        this.currentUserSquitId = userDoc.data().userId;
-                        console.log("Loaded Squit ID:", this.currentUserSquitId);
-                    }
-                } catch(e) {
-                    console.error("Error fetching Squit ID:", e);
-                }
-            }
-
-            /** Checks if a @user_id is already taken. */
-            async isSquitIdAvailable(squitId) {
-                if (!squitId) return false;
-                if (!isFirebaseInitialized) return true; // Assume available if Firebase is dead
-                const usersRef = collection(db, this.collections.USERS);
-                const q = query(usersRef, where("userId", "==", squitId));
-                const snapshot = await getDocs(q);
-                return snapshot.empty;
-            }
-
-            // --- UI/AUTH LOGIC ---
-
-            /** Toggles between Login and Register views. */
-            toggleAuthMode() {
-                this.authState = this.authState === 'login' ? 'register' : 'login';
-                document.getElementById('auth-title').textContent = this.authState === 'login' ? 'LOG IN' : 'CREATE ACCOUNT';
-                document.getElementById('primary-auth-button').textContent = this.authState === 'login' ? 'Log In' : 'Register Account';
-                document.getElementById('toggle-auth-button').textContent = this.authState === 'login' ? 'Create an Account' : 'Already have an account? Log In';
-                document.getElementById('email-group').classList.toggle('hidden', this.authState === 'login');
-                document.getElementById('user_id').placeholder = this.authState === 'login' ? "Your @user_id" : "Choose a unique @user_id";
-                this.displayError('', true); // Clear error message
-            }
-            
-            /** Clears inputs and executes the appropriate auth action. */
-            async handleAuthAction() {
-                if (!isFirebaseInitialized) {
-                    return this.displayError("Cannot proceed: Firebase is not initialized. Check your configuration.");
-                }
-
-                const squitId = document.getElementById('user_id').value.trim();
-                const password = document.getElementById('password').value;
-                const email = document.getElementById('email').value.trim();
-
-                this.displayError('', true); // Clear errors
-
-                if (!squitId || !password) {
-                    return this.displayError("Please enter your @User ID and Password.");
-                }
-
-                if (this.authState === 'register') {
-                    if (!email) return this.displayError("Email is required for registration.");
-                    await this.registerUser(squitId, email, password);
-                } else {
-                    await this.loginUser(squitId, password);
-                }
-            }
-
-            /** Handles user registration. */
-            async registerUser(squitId, email, password) {
-                // Pre-check for password length and basic email format
-                if (password.length < 6) {
-                    return this.displayError("Password must be at least 6 characters long.");
-                }
-                if (!email.includes('@') || !email.includes('.')) {
-                    return this.displayError("Please enter a valid email address.");
-                }
-                
-                try {
-                    // Check availability first
-                    if (!(await this.isSquitIdAvailable(squitId))) {
-                        return this.displayError(`The @user_id ${squitId} is already taken.`);
-                    }
-
-                    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-                    const user = userCredential.user;
-                    
-                    // 1. Create the user's profile document in Firestore
-                    await setDoc(doc(db, this.collections.USERS, user.uid), {
-                        userId: squitId,
-                        email: email, 
-                        profile: { bio: 'New SQUIT UP! user.', status: 'Online' },
-                        createdAt: new Date()
-                    });
-                    console.log("Registration successful and user document created.");
-                    
-                    // Clear inputs after success
-                    document.getElementById('user_id').value = '';
-                    document.getElementById('password').value = '';
-                    document.getElementById('email').value = '';
-                    // Registration success triggers onAuthStateChanged, which will load the dashboard.
-
-                } catch (error) {
-                    console.error("Registration Error:", error);
-                    let msg = "Registration failed. Please check the console for details.";
-                    if (error.code === 'auth/email-already-in-use') msg = "Email already registered.";
-                    if (error.code === 'auth/weak-password') msg = "Password is too weak. Must be 6+ characters.";
-                    this.displayError(msg);
-                }
-            }
-
-            /** Handles user login using @user_id. */
-            async loginUser(squitId, password) {
-                try {
-                    // 1. Query Firestore to find the email associated with the SquitID
-                    const usersRef = collection(db, this.collections.USERS);
-                    const q = query(usersRef, where("userId", "==", squitId));
-                    const snapshot = await getDocs(q);
-
-                    if (snapshot.empty) {
-                        // Attempt to see if the user entered an email instead of Squit ID
-                        if (squitId.includes('@')) {
-                             // Try to sign in directly with email/password
-                            await signInWithEmailAndPassword(auth, squitId, password);
-                            console.log("Login successful with Email.");
-                            return;
-                        }
-                        
-                        return this.displayError(`No account found with @user_id: ${squitId}`);
-                    }
-                    
-                    const userDoc = snapshot.docs[0];
-                    const emailToLogin = userDoc.data().email;
-
-                    // 2. Use the retrieved email and password to sign in via Firebase Auth
-                    await signInWithEmailAndPassword(auth, emailToLogin, password);
-                    console.log("Login successful with Squit ID.");
-                    
-                    // Clear inputs after success
-                    document.getElementById('user_id').value = '';
-                    document.getElementById('password').value = '';
-                    // Login success triggers onAuthStateChanged, which will load the dashboard.
-
-                } catch (error) {
-                    console.error("Login Error:", error);
-                    let msg = "Login failed. Check your password or Squit ID.";
-                    if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') msg = "Incorrect password or Squit ID.";
-                    this.displayError(msg);
-                }
-            }
-            
-            /** Handles user logout. */
-            async handleLogout() {
-                try {
-                    // Sign out the current user, which will trigger onAuthStateChanged
-                    await signOut(auth);
-                    console.log("User logged out successfully.");
-                } catch (error) {
-                    console.error("Logout Error:", error);
-                    this.displayError("Failed to log out.");
-                }
-            }
-
-            // --- FIRESTORE LISTENERS (REAL-TIME DATA) ---
-            
-            /** Sets up all real-time listeners for friends and servers. */
-            setupFirestoreListeners() {
-                if (!this.currentUserId || !isFirebaseInitialized) return;
-
-                // 1. Listen for friendships (requests sent/received, accepted friends)
-                const friendshipsRef = collection(db, this.collections.FRIENDSHIPS);
-                // Listen for documents where the current user is EITHER the requester OR the recipient
-                const qFriends = query(friendshipsRef, 
-                    where('recipientId', 'in', [this.currentUserId]),
-                    // A proper implementation would use composite query index for:
-                    // where('requesterId', '==', this.currentUserId) OR where('recipientId', '==', this.currentUserId)
-                    // But we simplify to recipientId check here to avoid complex indexing for demo
-                ); 
-                
-                this.friendshipUnsubscribe = onSnapshot(qFriends, (snapshot) => {
-                    this.friends = [];
-                    this.friendRequests = [];
-                    snapshot.forEach(doc => {
-                        const data = doc.data();
-                        const isRequester = data.requesterId === this.currentUserId;
-                        const partnerId = isRequester ? data.recipientId : data.requesterId;
-
-                        if (data.status === 'accepted') {
-                            // Collect all friends (I am either requester or recipient)
-                            this.friends.push({ docId: doc.id, partnerId });
-                        } else if (data.status === 'pending' && data.recipientId === this.currentUserId) {
-                            // Only show pending requests where *I* am the recipient
-                            this.friendRequests.push({ docId: doc.id, requesterId: data.requesterId });
-                        }
-                    });
-                    this.renderFriendList();
-                }, (error) => console.error("Friendship Listener Error:", error));
-
-                // 2. Listen for servers the user is a member of
-                const serversRef = collection(db, this.collections.SERVERS);
-                const qServers = query(serversRef, where('members', 'array-contains', this.currentUserId));
-
-                this.serversUnsubscribe = onSnapshot(qServers, (snapshot) => {
-                    this.servers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    this.renderServerList();
-                }, (error) => console.error("Server Listener Error:", error));
-
-                // 3. Listen for all users to build the SquitID map
-                this.usersUnsubscribe = onSnapshot(collection(db, this.collections.USERS), (snapshot) => {
-                    snapshot.forEach(doc => {
-                        this.userMap[doc.id] = doc.data().userId;
-                    });
-                    // Re-render friends/servers if the map updates
-                    this.renderFriendList();
-                    this.renderServerList();
-                }, (error) => console.error("User Map Listener Error:", error));
-
-                console.log("Firestore listeners are active.");
-            }
-
-            /** Stops all real-time listeners. */
-            cleanupListeners() {
-                if (this.friendshipUnsubscribe) this.friendshipUnsubscribe();
-                if (this.serversUnsubscribe) this.serversUnsubscribe();
-                if (this.usersUnsubscribe) this.usersUnsubscribe();
-            }
-
-            // --- FRIEND SYSTEM ACTIONS ---
-
-            /** Send a friend request to a user by Squit ID. */
-            async sendFriendRequest(targetSquitId) {
-                if (!isFirebaseInitialized) {
-                    this.displayError("Cannot send request: Firebase is not initialized.", false, 5000, 'add_friend-error');
-                    return false;
-                }
-                try {
-                    // 1. Find the target UID from the Squit ID
-                    const targetUidDoc = await getDocs(query(collection(db, this.collections.USERS), where("userId", "==", targetSquitId)));
-                    if (targetUidDoc.empty || targetSquitId === this.currentUserSquitId) {
-                        this.displayError(`User @${targetSquitId} not found.`, false, 5000, 'add_friend-error');
-                        return false;
-                    }
-                    const targetUid = targetUidDoc.docs[0].id;
-                    
-                    // 2. Check if already friends/pending (simplified check)
-                    // Note: A full implementation would check both A->B and B->A directions for friendship docs
-                    const qCheck = query(collection(db, this.collections.FRIENDSHIPS), 
-                        where('requesterId', 'in', [this.currentUserId, targetUid]),
-                        where('recipientId', 'in', [this.currentUserId, targetUid]));
-                    const existing = await getDocs(qCheck);
-
-                    for (const doc of existing.docs) {
-                        if (doc.data().status === 'pending') {
-                            this.displayError(`Request already pending or you have a request from @${targetSquitId}.`, false, 5000, 'add_friend-error');
-                            return false;
-                        }
-                        if (doc.data().status === 'accepted') {
-                            this.displayError(`You are already friends with @${targetSquitId}.`, false, 5000, 'add_friend-error');
-                            return false;
-                        }
-                    }
-
-                    // 3. Send the request
-                    await addDoc(collection(db, this.collections.FRIENDSHIPS), {
-                        requesterId: this.currentUserId,
-                        recipientId: targetUid,
-                        status: 'pending',
-                        requestedAt: new Date()
-                    });
-                    this.displayError(`Friend request sent to @${targetSquitId}!`, false, 5000, 'add_friend-error', 'text-green-400 bg-green-900/30');
-                    return true;
-                } catch (e) {
-                    console.error("Error sending friend request:", e);
-                    this.displayError("Failed to send request due to a server error.", false, 5000, 'add_friend-error');
-                    return false;
-                }
-            }
-
-            /** Accepts a pending friend request. */
-            async acceptFriendRequest(docId) {
-                if (!isFirebaseInitialized) return;
-                try {
-                    await updateDoc(doc(db, this.collections.FRIENDSHIPS, docId), { status: 'accepted' });
-                    console.log(`Accepted friend request: ${docId}`);
-                } catch (e) {
-                    console.error("Error accepting friend request:", e);
-                }
-            }
-
-            // --- SERVER SYSTEM ACTIONS ---
-            
-            /** Creates a new server. */
-            async createServer(name, description) {
-                if (!isFirebaseInitialized) {
-                    this.displayError("Cannot create server: Firebase is not initialized.", false, 5000, 'create_server-error');
-                    return;
-                }
-                try {
-                    const newServerRef = await addDoc(collection(db, this.collections.SERVERS), {
-                        name: name,
-                        description: description,
-                        ownerId: this.currentUserId,
-                        members: [this.currentUserId],
-                        channels: ['#general', '#memes'],
-                        createdAt: new Date()
-                    });
-                    this.closeModal();
-                    this.setActiveServer(newServerRef.id);
-                    console.log("Server created with ID:", newServerRef.id);
-                } catch (e) {
-                    console.error("Error creating server:", e);
-                    this.displayError("Failed to create server.", false, 5000, 'create_server-error');
-                }
-            }
-            
-            /** Invites a friend to the active server. */
-            async inviteFriendToServer(server, friendUid) {
-                if (!isFirebaseInitialized) return;
-
-                if (server.members.includes(friendUid)) {
-                    // Could add a notification system here, but for now, just print to console.
-                    console.log(`User ${this.userMap[friendUid]} is already in server ${server.name}`);
-                    return;
-                }
-
-                try {
-                    // Simplification: directly add to the server's member list for immediate joining
-                    // A real app would use an 'invitations' collection
-                    const serverDocRef = doc(db, this.collections.SERVERS, server.id);
-                    await updateDoc(serverDocRef, {
-                        members: arrayUnion(friendUid)
-                    });
-                    console.log(`User ${this.userMap[friendUid]} joined server ${server.name}`);
-                    
-                    // Re-render the invite modal to show the update
-                    this.setModal('invite_friends'); 
-                } catch (e) {
-                    console.error("Error adding member to server:", e);
-                }
-            }
-
-            // --- UI RENDERING ---
-
-            /** Renders the full UI based on the user's logged-in status. */
-            updateUI(isLoggedIn) {
-                const dashboard = document.getElementById('dashboard-container');
-                const authView = document.getElementById('auth-view');
-                const body = document.body;
-
-                document.getElementById('auth-header').classList.toggle('hidden', isLoggedIn);
-                authView.classList.toggle('hidden', isLoggedIn);
-                dashboard.classList.toggle('hidden', !isLoggedIn);
-                
-                // CRITICAL FIX: Toggle the dashboard visibility
-                dashboard.style.visibility = isLoggedIn ? 'visible' : 'hidden';
-
-                if (isLoggedIn) {
-                    // Adjust styles for dashboard view
-                    body.style.overflowY = 'hidden';
-                    authView.style.marginTop = '0';
-                    authView.style.marginBottom = '0';
-                    lucide.createIcons(); // Load Lucide icons for dashboard
-                    
-                    // Set a default active server if the user has any
-                    if (this.servers.length > 0) {
-                         this.setActiveServer(this.servers[0].id);
-                    } else {
-                        // Reset chat header if no servers are joined
-                        const chatHeader = document.querySelector('#chat-area > div:first-child h3');
-                        if (chatHeader) chatHeader.textContent = "Welcome! Create a server.";
-                        document.getElementById('invite-server-btn').classList.add('hidden');
-                    }
-                } else {
-                    // Adjust styles for auth view
-                    body.style.overflowY = 'auto'; // Allow scrolling only on auth screen if needed
-                }
-            }
-
-            /** Updates the loading spinner visibility. */
-            updateLoadingState(isLoading) {
-                document.getElementById('loading-state').classList.toggle('hidden', !isLoading);
-                // We show the auth-form only when loading is done AND the user is not logged in.
-                const isLoggedIn = this.currentUser && this.currentUser.email;
-                document.getElementById('auth-form').classList.toggle('hidden', isLoading || isLoggedIn);
-            }
-
-            /** Displays an error message on the screen. */
-            displayError(message, clearOnly = false, duration = 5000, elementId = 'error-message', classes = 'text-red-400 bg-red-900 bg-opacity-30') {
-                const errorElement = document.getElementById(elementId);
-                
-                if (clearOnly || !message) {
-                    errorElement.textContent = '';
-                    errorElement.className = 'text-red-400 text-sm mb-4 hidden p-3 rounded-lg panel-shadow';
-                    return;
-                }
-
-                errorElement.textContent = message;
-                errorElement.className = `text-sm mb-4 p-3 rounded-lg panel-shadow ${classes}`;
-                errorElement.classList.remove('hidden');
-
-                if (duration > 0) {
-                    setTimeout(() => {
-                        if(errorElement.textContent === message) { // Only hide if the message hasn't changed
-                            errorElement.classList.add('hidden');
-                        }
-                    }, duration);
-                }
-            }
-
-            /** Renders the friends list in the sidebar. */
-            renderFriendList() {
-                const list = document.getElementById('friend-list');
-                if (!list) return;
-
-                let html = '';
-
-                // 1. Pending Requests (where I am the recipient)
-                if (this.friendRequests.length > 0) {
-                    html += '<p class="text-xs text-yellow-400 font-bold mt-3 mb-1">PENDING REQUESTS</p>';
-                    this.friendRequests.forEach(req => {
-                        const squitId = this.userMap[req.requesterId] || 'User Loading...';
-                        html += `
-                            <div class="flex justify-between items-center p-2 text-gray-300 hover:bg-gray-700 rounded transition">
-                                <span class="text-sm">@${squitId}</span>
-                                <button onclick="window.App.acceptFriendRequest('${req.docId}')" class="text-green-500 hover:text-green-400 text-xs py-1 px-2 rounded bg-green-900/50 btn-realistic shadow-none">
-                                    Accept
-                                </button>
-                            </div>
-                        `;
-                    });
-                }
-                
-                // 2. Accepted Friends
-                html += '<p class="text-xs text-gray-400 font-bold mt-3 mb-1">ACCEPTED FRIENDS</p>';
-                if (this.friends.length === 0 && this.friendRequests.length === 0) {
-                    html += '<p class="text-sm text-gray-500 italic p-2">No friends yet. Send a request!</p>';
-                } else {
-                    this.friends.forEach(friend => {
-                        const squitId = this.userMap[friend.partnerId] || 'User Loading...';
-                        html += `
-                            <div class="flex items-center p-2 text-gray-300 hover:bg-gray-700 rounded transition">
-                                <span class="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-                                <span class="text-sm">@${squitId}</span>
-                            </div>
-                        `;
-                    });
-                }
-
-                list.innerHTML = html;
-            }
-
-            /** Renders the server list in the far-left column. */
-            renderServerList() {
-                const list = document.getElementById('server-list');
-                if (!list) return;
-                
-                // Remove existing server buttons but keep the profile/create buttons
-                const existingButtons = list.querySelectorAll('.server-btn');
-                existingButtons.forEach(btn => btn.remove());
-
-                this.servers.forEach(server => {
-                    const button = document.createElement('button');
-                    button.classList.add('server-btn', 'w-12', 'h-12', 'bg-indigo-700', 'hover:bg-indigo-600', 'text-white', 'rounded-full', 'flex', 'items-center', 'justify-center', 'transition', 'btn-realistic');
-                    button.title = server.name;
-                    button.textContent = server.name.substring(0, 2).toUpperCase();
-                    button.onclick = () => this.setActiveServer(server.id);
-                    // Find the separator and insert before it
-                    const separator = list.querySelector('.w-8.h-px');
-                    list.insertBefore(button, separator.nextSibling); 
-                });
-            }
-
-            /** Sets the current active server/channel (placeholder for full logic) */
-            setActiveServer(serverId) {
-                console.log("Active Server ID set to:", serverId);
-                // In a full implementation, this would trigger loading channels and chat history
-                this.activeServer = this.servers.find(s => s.id === serverId);
-                const chatHeader = document.querySelector('#chat-area > div:first-child h3');
-                if (chatHeader) {
-                    chatHeader.textContent = `#general (${this.activeServer.name})`;
-                }
-                document.getElementById('invite-server-btn').classList.remove('hidden');
-            }
-
-
-            // --- MODAL MANAGEMENT ---
-
-            /** Renders a modal based on the view type. */
-            setModal(viewType) {
-                const modalContainer = document.getElementById('modal-container');
-                let content = '';
-                let title = '';
-
-                if (viewType === 'add_friend') {
-                    title = 'Send Friend Request';
-                    content = `
-                        <div class="p-6">
-                            <p class="text-gray-400 mb-4">Enter the @user_id of the friend you want to add.</p>
-                            <input type="text" id="add_friend_id" class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 text-white shadow-inner" placeholder="@user_id" required>
-                            <div id="add_friend-error" class="text-sm mt-3 p-3 bg-red-900/30 rounded-lg hidden"></div>
-                            <button onclick="window.App.handleSendFriendRequest()" class="w-full mt-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition btn-realistic">
-                                Send Request
-                            </button>
-                        </div>
-                    `;
-                } else if (viewType === 'create_server') {
-                    title = 'Create New Server';
-                    content = `
-                        <div class="p-6">
-                            <input type="text" id="server_name" class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 text-white shadow-inner mb-4" placeholder="Server Name (e.g., Chill Zone)" required>
-                            <textarea id="server_description" class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 text-white shadow-inner h-24 resize-none" placeholder="Description" required></textarea>
-                            <div id="create_server-error" class="text-sm mt-3 p-3 bg-red-900/30 rounded-lg hidden"></div>
-                            <button onclick="window.App.handleCreateServer()" class="w-full mt-6 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition btn-realistic">
-                                Create Server
-                            </button>
-                        </div>
-                    `;
-                } else if (viewType === 'invite_friends') {
-                    title = 'Invite Friends to Server';
-                    const activeServer = this.activeServer;
-
-                    let friendsHtml = '';
-                    if (!activeServer) {
-                        friendsHtml = '<p class="text-red-400 italic">Please create and select a server first.</p>';
-                    } else if (this.friends.length === 0) {
-                        friendsHtml = '<p class="text-gray-500 italic">You must have accepted friends to invite them.</p>';
-                    } else {
-                        friendsHtml += `<p class="text-gray-400 mb-2">Invite to: <span class="font-bold text-indigo-300">${activeServer.name}</span></p>`;
-                        this.friends.forEach(friend => {
-                            const squitId = this.userMap[friend.partnerId] || 'User Loading...';
-                            const isMember = activeServer.members.includes(friend.partnerId);
-                            
-                            friendsHtml += `
-                                <div class="flex justify-between items-center p-3 bg-gray-700 rounded-lg mb-2 panel-shadow shadow-sm">
-                                    <span class="text-white text-sm">@${squitId}</span>
-                                    ${isMember 
-                                        ? '<span class="text-green-500 text-xs">Joined</span>'
-                                        : `<button onclick="window.App.inviteFriendToServer(window.App.activeServer, '${friend.partnerId}')" class="text-indigo-400 hover:text-indigo-300 text-xs py-1 px-2 rounded bg-indigo-900/50 btn-realistic shadow-none">
-                                            Invite
-                                        </button>`
-                                    }
-                                </div>
-                            `;
-                        });
-                    }
-                    content = `<div class="p-6">${friendsHtml}</div>`;
-                } else if (viewType === 'profile') {
-                    title = 'Customize Profile';
-                    content = `<div class="p-6">
-                        <p class="text-sm text-gray-400">Current @User ID: <span class="text-indigo-400 font-mono">${this.currentUserSquitId || 'N/A'}</span></p>
-                        <p class="text-sm text-gray-400 mt-2">Firebase UID: <span class="text-xs text-gray-500 font-mono block break-all">${this.currentUserId || 'N/A'}</span></p>
-                        <p class="text-lg font-bold text-red-400 mt-6">Profile updates not yet implemented.</p>
-                        <p class="text-gray-500 text-sm">You can change your bio, avatar, and status here in a full implementation.</p>
-                    </div>`;
-                } else if (viewType === 'emoji_picker') {
-                    title = 'Select an Emoji';
-                    const emojiGrid = this.emojis.map(e => `
-                        <button onclick="window.App.insertEmoji('${e}')" class="p-1 text-3xl hover:bg-gray-700 rounded-lg transition">${e}</button>
-                    `).join('');
-                    content = `<div class="p-4 grid grid-cols-8 gap-1 overflow-y-auto max-h-96">${emojiGrid}</div>`;
-                }
-                
-                if (content) {
-                    modalContainer.innerHTML = `
-                        <div class="bg-gray-800 rounded-xl w-full max-w-sm panel-shadow" onclick="event.stopPropagation()">
-                            <div class="flex justify-between items-center p-4 border-b border-gray-700">
-                                <h3 class="text-xl font-bold text-white">${title}</h3>
-                                <button onclick="window.App.closeModal()" class="text-gray-400 hover:text-white transition">
-                                    <i data-lucide="x" class="w-6 h-6"></i>
-                                </button>
-                            </div>
-                            ${content}
-                        </div>
-                    `;
-                    modalContainer.classList.remove('hidden');
-                    modalContainer.classList.add('flex');
-                    lucide.createIcons();
-                }
-            }
-
-            /** Closes the active modal. */
-            closeModal() {
-                const modalContainer = document.getElementById('modal-container');
-                modalContainer.classList.add('hidden');
-                modalContainer.classList.remove('flex');
-            }
-
-            // --- INPUT HANDLERS (Called from HTML) ---
-            
-            async handleSendFriendRequest() {
-                const targetSquitId = document.getElementById('add_friend_id').value.trim();
-                const success = await this.sendFriendRequest(targetSquitId);
-                if (success) {
-                    document.getElementById('add_friend_id').value = '';
-                }
-            }
-
-            async handleCreateServer() {
-                const name = document.getElementById('server_name').value.trim();
-                const description = document.getElementById('server_description').value.trim();
-                if (!name || !description) {
-                    return this.displayError("Server name and description are required.", false, 5000, 'create_server-error');
-                }
-                await this.createServer(name, description);
-            }
-
-            insertEmoji(emoji) {
-                const chatInput = document.getElementById('chat-input');
-                chatInput.value += emoji;
-                this.closeModal();
-            }
-
-            sendMessage() {
-                const input = document.getElementById('chat-input');
-                const message = input.value.trim();
-                if (!message) return;
-                if (!this.activeServer) {
-                    // Simple message box instead of alert()
-                    this.displayError("Please create a server or join a chat before sending messages.", false, 3000, 'error-message', 'text-yellow-400 bg-yellow-900/30');
-                    return;
-                }
-
-                const messageContainer = document.getElementById('message-container');
-                const newMessage = document.createElement('div');
-                newMessage.classList.add('p-3', 'bg-gray-800', 'rounded-lg', 'panel-shadow');
-                newMessage.innerHTML = `
-                    <p class="font-bold text-indigo-400">@${this.currentUserSquitId}</p>
-                    <p class="text-gray-300 text-sm">${message}</p>
-                `;
-                messageContainer.appendChild(newMessage);
-                messageContainer.scrollTop = messageContainer.scrollHeight; // Scroll to bottom
-                input.value = ''; // Clear input
-
-                // In a real app, this is where you'd send the message to Firestore 
-                // within the specific server/channel document.
+        }
+        function hideMessageBox() {
+            const messageBox = document.getElementById('message-box');
+            if (messageBox) {
+                messageBox.classList.add('hidden');
+                messageBox.textContent = '';
             }
         }
 
-        // Initialize the app globally so HTML onclick functions can access it
-        window.App = new SquitApp();
-        
-        // Setup modal close on backdrop click
-        document.getElementById('modal-container').addEventListener('click', (e) => {
-            if (e.target.id === 'modal-container') {
-                window.App.closeModal();
-            }
-        });
+        // --- Core App State & Router ---
 
+        const appState = {
+            currentView: 'loading', // 'loading', 'auth', 'profile_setup', 'dashboard'
+            loadingMessage: 'Initializing Firebase...',
+            errorMessage: null,
+            activeChat: null,
+            isCheckingUserId: false,
+        };
+
+        const router = {
+            setView(viewName) {
+                appState.currentView = viewName;
+                renderApp();
+            },
+            setError(message) {
+                appState.errorMessage = message;
+                showMessageBox(message);
+                renderApp();
+            },
+            clearError() {
+                appState.errorMessage = null;
+                hideMessageBox();
+            }
+        };
+
+        // --- Firebase Initialization and Auth ---
+
+        async function initializeFirebase() {
+            router.clearError();
+            try {
+                // Access global Canvas variables
+                const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+                const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+                if (Object.keys(firebaseConfig).length === 0) {
+                    throw new Error("Firebase configuration is missing or empty.");
+                }
+
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                // Try to sign in using the custom token provided by the canvas environment
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    // Fallback: Sign in anonymously to allow reading public data (like checking unique user IDs)
+                    await signInAnonymously(auth);
+                }
+
+                // Listen for authentication state changes
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        if (user.isAnonymous) {
+                            // User is signed in anonymously, show the Google sign-in prompt
+                            router.setView('auth');
+                        } else {
+                            // User is signed in with Google, proceed to profile check
+                            await checkUserProfile(user.uid, user.displayName, user.email);
+                        }
+                    } else {
+                        // Not signed in, show the Google sign-in prompt
+                        userId = null;
+                        router.setView('auth');
+                    }
+                });
+
+            } catch (error) {
+                console.error("Firebase initialization failed:", error);
+                // Specifically detect the Firestore issue due to missing billing/rules
+                if (error.code === 'failed-precondition' || (error.message && (error.message.includes('permission-denied') || error.message.includes('NOT_FOUND')))) {
+                    router.setError("Database Error: Firestore is likely not enabled or security rules are too restrictive. Please enable Cloud Firestore in your Firebase console.");
+                } else {
+                    router.setError(`Initialization failed: ${error.message}`);
+                }
+            }
+        }
+        
+        // --- Profile Management ---
+
+        async function checkUserProfile(uid, displayName, email) {
+            router.clearError();
+            try {
+                const docRef = doc(db, `artifacts/${appId}/public/data/users`, uid);
+                const docSnap = await getDoc(docRef);
+
+                if (docSnap.exists()) {
+                    // User profile exists, go to dashboard
+                    userProfile = docSnap.data();
+                    router.setView('dashboard');
+                } else {
+                    // User profile does NOT exist, go to setup
+                    userProfile = {
+                        uid,
+                        displayName: displayName || 'New User',
+                        email: email || '',
+                        username: '', // Will be set in setup view
+                        createdAt: Timestamp.now(),
+                    };
+                    router.setView('profile_setup');
+                }
+            } catch (error) {
+                console.error("Error during user profile check:", error);
+                router.setError("Error checking profile: Could not connect to database. Please ensure Cloud Firestore is enabled and rules are public.");
+            }
+        }
+        
+        async function checkUserIdAvailability(userIdToCheck) {
+            if (!userIdToCheck) return false;
+            
+            appState.isCheckingUserId = true;
+            renderApp();
+            router.clearError();
+
+            const usersRef = collection(db, `artifacts/${appId}/public/data/users`);
+            const q = query(usersRef, where("username", "==", userIdToCheck.toLowerCase()));
+            
+            try {
+                const querySnapshot = await getDocs(q);
+                appState.isCheckingUserId = false;
+                renderApp();
+                return querySnapshot.empty; // Returns true if no matching documents are found
+            } catch (error) {
+                appState.isCheckingUserId = false;
+                renderApp();
+                console.error("Error checking user ID availability:", error);
+                router.setError("Database Error: Cannot check user ID uniqueness. Ensure Cloud Firestore is enabled.");
+                return false; // Assume not available on failure to prevent accidental creation
+            }
+        }
+        
+        async function completeProfileSetup() {
+            const usernameInput = document.getElementById('setup-username');
+            const username = usernameInput.value.trim().toLowerCase();
+            
+            if (!username || username.length < 3) {
+                showMessageBox("User ID must be at least 3 characters long.");
+                return;
+            }
+
+            if (!username.startsWith('@')) {
+                showMessageBox("User ID must start with '@'.");
+                return;
+            }
+            
+            const available = await checkUserIdAvailability(username);
+
+            if (appState.errorMessage) {
+                // If checkUserIdAvailability set an error (database failure), stop here
+                return;
+            }
+
+            if (!available) {
+                showMessageBox("That @User ID is already taken. Please choose another.");
+                return;
+            }
+
+            // User ID is unique and valid. Save the profile.
+            try {
+                userProfile.username = username;
+                
+                const docRef = doc(db, `artifacts/${appId}/public/data/users`, userId);
+                await setDoc(docRef, userProfile);
+                
+                router.setView('dashboard');
+                
+            } catch (error) {
+                console.error("Error saving user profile:", error);
+                router.setError("Database Write Error: Failed to save user profile. Ensure Firestore rules allow writing.");
+            }
+        }
+
+        // --- Google Sign-In Handler ---
+
+        window.handleGoogleSignIn = async function() {
+            router.clearError();
+            try {
+                await signInWithPopup(auth, provider);
+                // onAuthStateChanged will handle the rest (checkUserProfile)
+            } catch (error) {
+                console.error("Google Sign-In failed:", error);
+                router.setError(`Sign-In Error: ${error.message}`);
+            }
+        }
+
+        // --- Component Rendering ---
+
+        function renderAuthView() {
+            return `
+                <div class="auth-container">
+                    <h1 class="app-title">SQUIT UP!</h1>
+                    <p class="subtitle">chatting and chilling lounge friends</p>
+                    <h2 class="text-xl font-semibold mb-6 text-center text-white">CONNECT ACCOUNT</h2>
+                    
+                    <button onclick="handleGoogleSignIn()" class="btn-google w-full mb-4">
+                        <img src="https://img.icons8.com/color/24/000000/google-logo.png" alt="Google Logo" />
+                        Continue with Google
+                    </button>
+                    
+                    <div id="message-box" class="message-box hidden"></div>
+
+                    <p class="text-center text-sm mt-4 text-gray-400">
+                        Sign in to connect with friends and communities.
+                    </p>
+                </div>
+            `;
+        }
+        
+        function renderProfileSetupView() {
+            const isChecking = appState.isCheckingUserId;
+            return `
+                <div class="auth-container">
+                    <h1 class="app-title">SQUIT UP!</h1>
+                    <p class="subtitle">Final Step: Choose Your @User ID</p>
+                    <h2 class="text-lg font-semibold mb-4 text-center text-white">Your Profile Name</h2>
+
+                    <div class="mb-4">
+                        <label for="setup-username" class="block text-sm font-medium mb-1 text-gray-400">@User ID (Unique)</label>
+                        <input type="text" id="setup-username" placeholder="@yourname" class="input-field w-full px-4 py-2 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150" value="@">
+                    </div>
+                    
+                    <button onclick="completeProfileSetup()" ${isChecking ? 'disabled' : ''} 
+                        class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition duration-150 flex items-center justify-center ${isChecking ? 'opacity-50 cursor-not-allowed' : ''}">
+                        ${isChecking ? '<div class="loader w-5 h-5 border-2 mr-2"></div>' : ''}
+                        ${isChecking ? 'Checking...' : 'Complete Registration'}
+                    </button>
+                    
+                    <div id="message-box" class="message-box hidden mt-4"></div>
+
+                    <p class="text-center text-sm mt-4 text-gray-400">
+                        Your @User ID is how friends will find you.
+                    </p>
+                </div>
+            `;
+        }
+
+        function renderDashboardView() {
+            return `
+                <div class="dashboard-layout">
+                    <!-- Sidebar -->
+                    <div class="sidebar flex flex-col justify-between">
+                        <div>
+                            <h2 class="text-2xl font-bold text-white mb-6">SQUIT UP!</h2>
+                            <p class="text-gray-400 text-sm">Welcome, <span class="text-indigo-400 font-semibold">${userProfile.username || userProfile.displayName}</span>!</p>
+                            <div class="mt-6">
+                                <h3 class="text-xs font-semibold uppercase text-gray-500 mb-2">Friends</h3>
+                                <ul class="space-y-2">
+                                    <li class="text-gray-300 hover:text-indigo-400 cursor-pointer transition duration-150">Add Friend</li>
+                                    <li class="text-gray-300 hover:text-indigo-400 cursor-pointer transition duration-150">Friend Requests</li>
+                                    <li class="text-gray-300 hover:text-indigo-400 cursor-pointer transition duration-150">My Servers</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <button onclick="signOutUser()" class="py-2 px-4 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition duration-150">
+                            Logout
+                        </button>
+                    </div>
+
+                    <!-- Main Content -->
+                    <div class="main-content flex flex-col">
+                        <header class="h-16 flex items-center border-b border-gray-700 mb-4">
+                            <h2 class="text-xl font-bold text-white"># General Chat</h2>
+                        </header>
+                        <div class="chat-area flex-grow">
+                            <!-- Placeholder Messages -->
+                            <div class="message-system self-center">Welcome! This is where real-time chat messages will appear.</div>
+                            <div class="message-other">
+                                <span class="font-bold text-indigo-400">@System:</span> This chat is currently static until the database connection is fully established.
+                            </div>
+                            <div class="message-user self-end">
+                                <span class="font-bold">Me (${userProfile.username}):</span> I successfully logged in!
+                            </div>
+                        </div>
+                        <div class="message-input-area mt-4">
+                            <input type="text" placeholder="Type a message..." class="input-field flex-grow px-4 py-2 rounded-l-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                            <button class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 rounded-r-lg transition duration-150">
+                                Send
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderLoadingView() {
+            return `
+                <div class="auth-container flex flex-col items-center">
+                    <h1 class="app-title">SQUIT UP!</h1>
+                    <p class="subtitle mb-8">Loading...</p>
+                    <div class="loader w-10 h-10"></div>
+                    <p class="text-center text-sm mt-4 text-gray-400">${appState.loadingMessage}</p>
+                    <div id="message-box" class="message-box ${appState.errorMessage ? '' : 'hidden'} mt-4">
+                        ${appState.errorMessage || ''}
+                    </div>
+                </div>
+            `;
+        }
+        
+        function renderApp() {
+            const appContainer = document.getElementById('app-container');
+            let content = '';
+
+            // Handle global error display first
+            if (appState.errorMessage && appState.currentView !== 'loading') {
+                showMessageBox(appState.errorMessage);
+            } else if (appState.currentView !== 'loading') {
+                hideMessageBox();
+            }
+
+            switch (appState.currentView) {
+                case 'auth':
+                    content = renderAuthView();
+                    break;
+                case 'profile_setup':
+                    content = renderProfileSetupView();
+                    break;
+                case 'dashboard':
+                    content = renderDashboardView();
+                    break;
+                case 'loading':
+                default:
+                    content = renderLoadingView();
+                    break;
+            }
+            appContainer.innerHTML = content;
+        }
+        
+        window.signOutUser = function() {
+            router.clearError();
+            auth.signOut().then(() => {
+                userProfile = null;
+                router.setView('auth');
+            }).catch(error => {
+                console.error("Sign out error:", error);
+                router.setError("Could not sign out. Check console.");
+            });
+        }
+
+        // Initialize on load
+        window.onload = initializeFirebase;
     </script>
+</head>
+<body>
+    <div id="app-container">
+        <!-- Content will be rendered here by JavaScript -->
+    </div>
 </body>
 </html>
