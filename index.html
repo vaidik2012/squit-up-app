@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SQUIT UP!! - Chat & Onboarding</title>
+    <title>SQUIT UP!! - Chat & Dashboard</title>
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -23,6 +23,7 @@
             transition: all 0.5s ease;
         }
         
+        /* Bubble effect for interactive buttons */
         .bubble-button {
             transition: all 0.2s ease-in-out;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
@@ -32,16 +33,28 @@
             box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
         }
 
+        /* Styling for the chat area in the dashboard (matches image 3) */
         .dashboard-container {
-            background-image: url('https://placehold.co/1000x500/8d85e6/ffffff?text=Chat+Background+Pattern');
-            background-size: cover;
-            background-position: center;
-            height: 70vh;
+            /* Using a simple color/gradient for consistency, replace with a subtle pattern if needed */
+            background: linear-gradient(180deg, #e0f2fe 0%, #ffffff 100%);
+            height: 100%; /* Fill the inner card space */
             border-radius: 1rem;
-            box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.2);
+            box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.1);
             display: flex;
             flex-direction: column;
             overflow: hidden;
+        }
+
+        /* Ensure the main dashboard card handles its height responsively */
+        @media (min-width: 768px) {
+            .dashboard-card-height {
+                height: 70vh;
+            }
+        }
+        @media (max-width: 767px) {
+            .dashboard-card-height {
+                height: 90vh;
+            }
         }
     </style>
 </head>
@@ -97,29 +110,24 @@
         };
 
         // --- Firestore Path Helpers ---
+        // Public collection to store user profiles and map unique IDs to UIDs
         const USER_PROFILES_COLLECTION = `artifacts/${appId}/public/data/userProfiles`; 
         const USER_ID_MAP_COLLECTION = `artifacts/${appId}/public/data/userIdMap`;
 
-        // --- UI Element References ---
+        // --- UI Element References and Utilities ---
         const appContainer = document.getElementById('app-container');
         const statusMessageDiv = document.getElementById('status-message');
 
-        // --- Utility Functions ---
         function showStatus(message, type = 'success') {
             statusMessageDiv.textContent = message;
             statusMessageDiv.classList.remove('hidden', 'bg-red-500', 'bg-green-500', 'bg-yellow-500', 'opacity-0', 'pointer-events-none');
             statusMessageDiv.classList.add('opacity-100', 'pointer-events-auto');
 
-            if (type === 'error') {
-                statusMessageDiv.classList.add('bg-red-600');
-            } else if (type === 'warning') {
-                statusMessageDiv.classList.add('bg-yellow-600');
-            } else {
-                statusMessageDiv.classList.add('bg-green-600');
-            }
+            const colorClass = type === 'error' ? 'bg-red-600' : (type === 'warning' ? 'bg-yellow-600' : 'bg-green-600');
+            statusMessageDiv.classList.add(colorClass);
             
             setTimeout(() => {
-                statusMessageDiv.classList.remove('opacity-100', 'pointer-events-auto');
+                statusMessageDiv.classList.remove('opacity-100', 'pointer-events-auto', colorClass);
                 statusMessageDiv.classList.add('opacity-0');
                 setTimeout(() => statusMessageDiv.classList.add('hidden'), 300);
             }, 5000);
@@ -134,13 +142,14 @@
                 db = getFirestore(app);
                 auth = getAuth(app);
                 
-                // Sign in anonymously first, or use provided token
+                // Authenticate with custom token or anonymously
                 if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken).catch(e => console.warn("Custom token failed.", e));
+                    await signInWithCustomToken(auth, initialAuthToken).catch(e => console.warn("Custom token failed. Signing in anonymously.", e));
                 } else {
                     await signInAnonymously(auth);
                 }
 
+                // Listen for Auth state changes
                 onAuthStateChanged(auth, async (user) => {
                     appState.currentUser = user;
                     appState.authReady = true;
@@ -173,7 +182,7 @@
                     appState.view = 'DASHBOARD';
                     showStatus(`Welcome back, @${appState.profile.uniqueId}!`);
                 } else {
-                    // Profile is missing ID or is incomplete: force registration
+                    // Profile is missing ID or is incomplete: force registration (Image 2 screen)
                     appState.profile = { 
                         uid, 
                         displayName: appState.currentUser.displayName || 'New User',
@@ -222,10 +231,10 @@
             renderView();
         }
         
-        // --- 4. ID Registration Logic ---
+        // --- 4. ID Registration Logic (Fired by "Start Your Chat" button) ---
         window.registerUserId = async function() {
             const userIdInput = document.getElementById('user-id-input');
-            const newUserId = userIdInput.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, ''); // Sanitize
+            const newUserId = userIdInput.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, ''); // Sanitize ID
             const uid = appState.currentUser.uid;
             
             if (!newUserId || newUserId.length < 3) {
@@ -238,8 +247,8 @@
             userIdInput.disabled = true;
             const registerBtn = document.querySelector('#register-btn');
             registerBtn.disabled = true;
-            registerBtn.textContent = 'Checking and Saving...';
-            registerBtn.classList.remove('bg-red-500', 'hover:bg-red-400', 'bg-pink-500');
+            registerBtn.textContent = 'Checking and Starting...';
+            registerBtn.classList.remove('bg-pink-500', 'hover:bg-pink-400');
             registerBtn.classList.add('bg-gray-400');
 
 
@@ -259,7 +268,7 @@
                     const mapRef = doc(db, USER_ID_MAP_COLLECTION, newUserId);
                     transaction.set(mapRef, { uid: uid, uniqueId: newUserId, createdAt: serverTimestamp() });
 
-                    // 3. Register the ID in the user's private profile
+                    // 3. Register the ID in the user's public profile
                     const profileData = {
                         uid: uid,
                         uniqueId: newUserId,
@@ -278,7 +287,7 @@
                     displayName: appState.currentUser.displayName || newUserId,
                     photoURL: appState.currentUser.photoURL || 'https://placehold.co/64x64/f5576c/ffffff?text=U'
                 };
-                showStatus(`Success! Your ID @${newUserId} is registered.`);
+                showStatus(`Success! Your ID @${newUserId} is registered. Welcome!`);
                 appState.view = 'DASHBOARD';
                 renderView();
 
@@ -287,9 +296,10 @@
                 document.getElementById('id-error').textContent = e.message || "Failed to register ID. Please try again.";
                 showStatus("Registration failed.", 'error');
             } finally {
+                // Reset button state
                 userIdInput.disabled = false;
                 registerBtn.disabled = false;
-                registerBtn.textContent = 'Register My @ID';
+                registerBtn.textContent = 'Start Your Chat';
                 registerBtn.classList.remove('bg-gray-400');
                 registerBtn.classList.add('bg-pink-500', 'hover:bg-pink-400');
             }
@@ -306,10 +316,10 @@
                     htmlContent = renderLoginView();
                     break;
                 case 'REGISTER_ID':
-                    htmlContent = renderRegistrationView();
+                    htmlContent = renderRegistrationView(); // Image 2 style
                     break;
                 case 'DASHBOARD':
-                    htmlContent = renderDashboardView();
+                    htmlContent = renderDashboardView(); // Image 3 style
                     break;
                 case 'LOADING':
                 default:
@@ -330,6 +340,7 @@
         }
 
         function renderLoginView() {
+            // This screen matches the style requested in the previous turn (vibrant, shadowed card)
             return `
                 <div class="card w-full max-w-md text-center">
                     <h2 class="text-4xl font-extrabold text-[#f5576c] mb-2">SQUIT UP!!</h2>
@@ -350,18 +361,19 @@
             const userEmail = appState.profile.email;
             const defaultId = (appState.profile.displayName || '').toLowerCase().split(' ')[0] || '';
 
+            // This screen is designed to match the style of Image 2, with the required button text.
             return `
                 <div class="card w-full max-w-md text-center">
                     <h2 class="text-3xl font-bold text-[#f5576c] mb-2">Profile Setup</h2>
                     <p class="text-gray-600 mb-6">Create your unique @user_id to access the chat.</p>
                     
-                    <div class="p-4 bg-gray-100 rounded-lg mb-6">
+                    <div class="p-4 bg-gray-100 rounded-lg mb-6 shadow-inner">
                         <p class="text-sm text-gray-500">Logged in as:</p>
                         <p class="text-md font-semibold text-gray-800">${userEmail}</p>
                     </div>
 
                     <div class="flex flex-col space-y-2">
-                        <label for="user-id-input" class="text-left text-sm font-medium text-gray-600">Choose your unique @ID:</label>
+                        <label for="user-id-input" class="text-left text-sm font-medium text-gray-600">Choose your unique @ID (Required to chat):</label>
                         <div class="flex items-center bg-white rounded-xl border-2 border-pink-300 focus-within:border-pink-500 shadow-inner">
                             <span class="text-pink-500 pl-3 font-bold text-lg">@</span>
                             <input type="text" id="user-id-input" placeholder="e.g. ${defaultId}" value="${defaultId}"
@@ -370,9 +382,10 @@
                         </div>
                         <p id="id-error" class="text-sm text-red-500 text-left h-5"></p>
 
+                        <!-- UPDATED BUTTON TEXT AS REQUESTED -->
                         <button onclick="registerUserId()" id="register-btn"
                                 class="w-full bg-pink-500 hover:bg-pink-400 text-white font-extrabold py-3 rounded-xl transition duration-300 mt-4 bubble-button">
-                            Go to Dashboard (Register My @ID)
+                            Start Your Chat
                         </button>
                         <button onclick="handleLogout()" class="text-sm text-gray-500 hover:text-red-500 mt-4">Logout</button>
                     </div>
@@ -384,31 +397,34 @@
             if (!appState.profile) return renderLoadingView();
             const profile = appState.profile;
 
+            // This dashboard is styled to match Image 3 exactly.
             return `
                 <div class="card w-full max-w-4xl p-0">
                     <!-- Dashboard Header / Sidebar Structure -->
-                    <div class="flex flex-col md:flex-row h-full">
-                        <!-- Left Panel (Profile/Sidebar - matches style of image 3) -->
-                        <div class="md:w-1/4 w-full bg-gray-100 p-6 rounded-l-xl md:rounded-r-none rounded-t-xl md:rounded-t-none border-b md:border-b-0 md:border-r border-gray-200">
-                            <h3 class="text-2xl font-extrabold text-gray-800 mb-4 border-b pb-2 border-pink-200">User Profile</h3>
-                            <div class="flex flex-col items-center space-y-3">
-                                <img src="${profile.photoURL}" 
-                                     class="w-20 h-20 rounded-full object-cover border-4 border-pink-500 shadow-md" 
-                                     onerror="this.onerror=null;this.src='https://placehold.co/80x80/f5576c/ffffff?text=U';">
-                                <p class="text-xl font-bold text-gray-800">${profile.displayName}</p>
-                                <p class="text-md text-pink-500 font-mono">@${profile.uniqueId}</p>
-                                <p class="text-xs text-gray-500 break-all">UID: ${profile.uid}</p>
-                            </div>
+                    <div class="flex flex-col md:flex-row dashboard-card-height">
+                        <!-- Left Panel (Sidebar - matches image 3) -->
+                        <div class="md:w-1/4 w-full bg-gray-100 p-6 rounded-l-xl md:rounded-r-none rounded-t-xl md:rounded-t-none border-b md:border-b-0 md:border-r border-gray-200 flex flex-col justify-between">
+                            <div>
+                                <h3 class="text-2xl font-extrabold text-gray-800 mb-4 border-b pb-2 border-pink-200">User Profile</h3>
+                                <div class="flex flex-col items-center space-y-3">
+                                    <img src="${profile.photoURL}" 
+                                         class="w-20 h-20 rounded-full object-cover border-4 border-pink-500 shadow-md" 
+                                         onerror="this.onerror=null;this.src='https://placehold.co/80x80/f5576c/ffffff?text=U';">
+                                    <p class="text-xl font-bold text-gray-800">${profile.displayName}</p>
+                                    <p class="text-md text-pink-500 font-mono">@${profile.uniqueId}</p>
+                                    <p class="text-xs text-gray-500 break-all">UID: ${profile.uid}</p>
+                                </div>
 
-                            <div class="mt-6 space-y-2">
-                                <button class="w-full text-left py-2 px-3 rounded-lg bg-pink-100 text-pink-700 font-semibold shadow-inner">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V8m-7 0V5a2 2 0 00-2-2H4a2 2 0 00-2 2v10a2 2 0 002 2h2m4 0l-3 3"/></svg>
-                                    All Chats
-                                </button>
-                                <button class="w-full text-left py-2 px-3 rounded-lg hover:bg-gray-200 text-gray-700 font-medium">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6a2 2 0 002-2v-1a2 2 0 00-2-2h-6m-4-2h8m-8 4h8m-9-6h8"/></svg>
-                                    Friends
-                                </button>
+                                <div class="mt-6 space-y-2">
+                                    <button class="w-full text-left py-2 px-3 rounded-lg bg-pink-100 text-pink-700 font-semibold shadow-inner">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V8m-7 0V5a2 2 0 00-2-2H4a2 2 0 00-2 2v10a2 2 0 002 2h2m4 0l-3 3"/></svg>
+                                        All Chats
+                                    </button>
+                                    <button class="w-full text-left py-2 px-3 rounded-lg hover:bg-gray-200 text-gray-700 font-medium">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6a2 2 0 002-2v-1a2 2 0 00-2-2h-6m-4-2h8m-8 4h8m-9-6h8"/></svg>
+                                        Friends
+                                    </button>
+                                </div>
                             </div>
                             
                             <button onclick="handleLogout()" 
@@ -417,25 +433,26 @@
                             </button>
                         </div>
 
-                        <!-- Right Panel (Chat Window) -->
-                        <div class="md:w-3/4 w-full p-4 flex flex-col justify-between">
-                            <div class="h-full w-full dashboard-container p-4">
-                                <!-- Mock Chat History -->
-                                <div class="space-y-3 overflow-y-auto flex-grow">
+                        <!-- Right Panel (Chat Window - matches image 3) -->
+                        <div class="md:w-3/4 w-full p-4 flex flex-col">
+                            <div class="dashboard-container p-4">
+                                <div class="text-xl font-bold text-gray-700 mb-4 border-b pb-2">Chat with Friends</div>
+                                <!-- Mock Chat History (Placeholder) -->
+                                <div class="space-y-3 overflow-y-auto flex-grow h-full mb-4">
                                     <div class="flex justify-start">
                                         <div class="bg-purple-200 p-3 rounded-xl rounded-bl-sm max-w-xs shadow-md">
-                                            <p class="text-sm font-medium text-purple-800">Hello @${profile.uniqueId}! Welcome to SQUIT UP. Your dashboard is ready.</p>
+                                            <p class="text-sm font-medium text-purple-800">Hello @${profile.uniqueId}! Welcome to SQUIT UP. Your chat dashboard is ready.</p>
                                         </div>
                                     </div>
                                     <div class="flex justify-end">
                                         <div class="bg-pink-300 p-3 rounded-xl rounded-br-sm max-w-xs shadow-md">
-                                            <p class="text-sm font-medium text-pink-800">Thanks! I love the new look and my unique ID!</p>
+                                            <p class="text-sm font-medium text-pink-800">This is where we'll start finding new friends to chat with!</p>
                                         </div>
                                     </div>
                                 </div>
 
                                 <!-- Input Bar -->
-                                <div class="mt-4 flex items-center bg-white p-3 rounded-xl shadow-lg">
+                                <div class="flex items-center bg-white p-3 rounded-xl shadow-lg flex-shrink-0">
                                     <input type="text" placeholder="Type your message here..."
                                         class="flex-grow bg-transparent text-gray-700 focus:outline-none" />
                                     <button class="ml-3 bg-pink-500 hover:bg-pink-600 p-2 rounded-full text-white bubble-button">
