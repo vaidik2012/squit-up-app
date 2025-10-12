@@ -246,10 +246,11 @@
 
         // Global variables provided by the environment
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         
         let app, db, auth;
+        let isFirebaseInitialized = false; // New flag to track initialization success
 
         /**
          * The main application class to manage state and Firebase interactions.
@@ -272,7 +273,7 @@
                 };
 
                 this.emojis = [
-                    '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '🙃', '😉', '😊', '😇', '🥰', '😍', '🤩', '😘', '😗', '😚', '😙', '🥲', '😋', '😛', '😜', '🤪', '😝', '🤑', '🤗', '🤭', '🤫', ' thinking', '🤨', '😐', '😑', '😶', '😶‍🌫️', '🙄', '😏', '😒', '😔', '  ' , '😞', '😟', '😠', '😡', '🤬', ' 🤯', '😳', '🥵', '🥶', '😱', '😨', '😰', '😢', '😭', '😥', '😩', '😫', ' slug', '😵', '😵‍💫', '😮', '😱', '😲', '🥱', '😴', '🤤', '😪', ' zzz', '😮‍💨', ' 🤧', '🤒', '🤕', ' 🤑', '🤡', '🤠', '🥳', '😎', ' nerd', '😈', '👹', '👺', ' 💀', ' ghost', ' 👽', '🤖', ' 💩', ' 🌟', ' ✨', ' ⚡️', ' 🔥', ' 💯', ' 🌈', ' ☀️', ' 🌙', ' 🌍', ' 🚀', ' 💻', ' 📱', ' 🎮', ' ❤️', ' 💔', ' 👍', ' 👎'
+                    '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '🙃', '😉', '😊', '😇', '🥰', '😍', '🤩', '😘', '😗', '😚', '😙', '🥲', '😋', '😛', '😜', '🤪', '😝', '🤑', '🤗', '🤭', '🤫', '🤔', '🤨', '😐', '😑', '😶', '😶‍🌫️', '🙄', '😏', '😒', '😔', '😪', '😞', '😟', '😠', '😡', '🤬', ' 🤯', '😳', '🥵', '🥶', '😱', '😨', '😰', '😢', '😭', '😥', '😩', '😫', ' slug', '😵', '😵‍💫', '😮', '😱', '😲', '🥱', '😴', '🤤', '😪', ' zzz', '😮‍💨', ' 🤧', '🤒', '🤕', ' 🤑', '🤡', '🤠', '🥳', '😎', ' nerd', '😈', '👹', '👺', ' 💀', ' ghost', ' 👽', '🤖', ' 💩', ' 🌟', ' ✨', ' ⚡️', ' 🔥', ' 💯', ' 🌈', ' ☀️', ' 🌙', ' 🌍', ' 🚀', ' 💻', ' 📱', ' 🎮', ' ❤️', ' 💔', ' 👍', ' 👎'
                 ];
                 
                 this.initFirebase();
@@ -281,14 +282,17 @@
             // --- FIREBASE INITIALIZATION & AUTH ---
 
             async initFirebase() {
+                this.updateLoadingState(true);
+
                 try {
                     if (!firebaseConfig || Object.keys(firebaseConfig).length === 0) {
-                        throw new Error("Firebase configuration is missing or invalid.");
+                        throw new Error("Firebase configuration is missing. Authentication and data features are disabled.");
                     }
 
                     app = initializeApp(firebaseConfig);
                     auth = getAuth(app);
                     db = getFirestore(app);
+                    isFirebaseInitialized = true; // Set flag to true
 
                     // Set up persistent auth listener
                     onAuthStateChanged(auth, async (user) => {
@@ -309,7 +313,7 @@
                             this.cleanupListeners();
                             
                             // Ensure an anonymous user is signed in to allow Firestore access for checking user IDs
-                            if (!auth.currentUser) {
+                            if (isFirebaseInitialized && !auth.currentUser) {
                                 await signInAnonymously(auth);
                                 console.log("Signed in anonymously for initial checks.");
                             }
@@ -318,7 +322,6 @@
 
                     // Initial sign-in attempt (for persistence)
                     if (initialAuthToken) {
-                        // This token should only be for a proper user, but we'll let onAuthStateChanged handle the final state.
                         await signInWithCustomToken(auth, initialAuthToken);
                         console.log("Attempted sign-in with custom token.");
                     } else if (!auth.currentUser) {
@@ -326,11 +329,16 @@
                         await signInAnonymously(auth);
                         console.log("Signed in anonymously.");
                     }
+                    
+                    this.updateLoadingState(false);
 
                 } catch (error) {
                     console.error("Firebase Initialization Error:", error);
-                    this.displayError("Error initializing app. Check console for details.");
+                    // Display a persistent error if initialization failed
+                    this.displayError(`Error initializing app. ${error.message}`, false, 0); 
                     this.updateLoadingState(false);
+                    // Ensure the form is visible to show the error
+                    document.getElementById('auth-form').classList.remove('hidden');
                 }
             }
             
@@ -354,6 +362,7 @@
             /** Checks if a @user_id is already taken. */
             async isSquitIdAvailable(squitId) {
                 if (!squitId) return false;
+                if (!isFirebaseInitialized) return true; // Assume available if Firebase is dead
                 const usersRef = collection(db, this.collections.USERS);
                 const q = query(usersRef, where("userId", "==", squitId));
                 const snapshot = await getDocs(q);
@@ -375,6 +384,10 @@
             
             /** Clears inputs and executes the appropriate auth action. */
             async handleAuthAction() {
+                if (!isFirebaseInitialized) {
+                    return this.displayError("Cannot proceed: Firebase is not initialized. Check your configuration.");
+                }
+
                 const squitId = document.getElementById('user_id').value.trim();
                 const password = document.getElementById('password').value;
                 const email = document.getElementById('email').value.trim();
@@ -395,11 +408,20 @@
 
             /** Handles user registration. */
             async registerUser(squitId, email, password) {
-                if (!(await this.isSquitIdAvailable(squitId))) {
-                    return this.displayError(`The @user_id ${squitId} is already taken.`);
+                // Pre-check for password length and basic email format
+                if (password.length < 6) {
+                    return this.displayError("Password must be at least 6 characters long.");
+                }
+                if (!email.includes('@') || !email.includes('.')) {
+                    return this.displayError("Please enter a valid email address.");
                 }
                 
                 try {
+                    // Check availability first
+                    if (!(await this.isSquitIdAvailable(squitId))) {
+                        return this.displayError(`The @user_id ${squitId} is already taken.`);
+                    }
+
                     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
                     const user = userCredential.user;
                     
@@ -419,8 +441,9 @@
 
                 } catch (error) {
                     console.error("Registration Error:", error);
-                    let msg = "Registration failed. Password must be 6+ chars. ";
+                    let msg = "Registration failed. Please check the console for details.";
                     if (error.code === 'auth/email-already-in-use') msg = "Email already registered.";
+                    if (error.code === 'auth/weak-password') msg = "Password is too weak. Must be 6+ characters.";
                     this.displayError(msg);
                 }
             }
@@ -447,7 +470,6 @@
                     // Clear inputs after success
                     document.getElementById('user_id').value = '';
                     document.getElementById('password').value = '';
-                    document.getElementById('email').value = '';
 
                 } catch (error) {
                     console.error("Login Error:", error);
@@ -473,7 +495,7 @@
             
             /** Sets up all real-time listeners for friends and servers. */
             setupFirestoreListeners() {
-                if (!this.currentUserId) return;
+                if (!this.currentUserId || !isFirebaseInitialized) return;
 
                 // 1. Listen for friendships (requests sent/received, accepted friends)
                 const friendshipsRef = collection(db, this.collections.FRIENDSHIPS);
@@ -530,6 +552,10 @@
 
             /** Send a friend request to a user by Squit ID. */
             async sendFriendRequest(targetSquitId) {
+                if (!isFirebaseInitialized) {
+                    this.displayError("Cannot send request: Firebase is not initialized.", false, 5000, 'add_friend-error');
+                    return false;
+                }
                 try {
                     // 1. Find the target UID from the Squit ID
                     const targetUidDoc = await getDocs(query(collection(db, this.collections.USERS), where("userId", "==", targetSquitId)));
@@ -574,6 +600,7 @@
 
             /** Accepts a pending friend request. */
             async acceptFriendRequest(docId) {
+                if (!isFirebaseInitialized) return;
                 try {
                     await updateDoc(doc(db, this.collections.FRIENDSHIPS, docId), { status: 'accepted' });
                     console.log(`Accepted friend request: ${docId}`);
@@ -586,6 +613,10 @@
             
             /** Creates a new server. */
             async createServer(name, description) {
+                if (!isFirebaseInitialized) {
+                    this.displayError("Cannot create server: Firebase is not initialized.", false, 5000, 'create_server-error');
+                    return;
+                }
                 try {
                     const newServerRef = await addDoc(collection(db, this.collections.SERVERS), {
                         name: name,
@@ -606,6 +637,8 @@
             
             /** Invites a friend to the active server. */
             async inviteFriendToServer(server, friendUid) {
+                if (!isFirebaseInitialized) return;
+
                 if (server.members.includes(friendUid)) {
                     // Could add a notification system here, but for now, just print to console.
                     console.log(`User ${friendUid} is already in server ${server.name}`);
@@ -681,7 +714,11 @@
                 errorElement.classList.remove('hidden');
 
                 if (duration > 0) {
-                    setTimeout(() => errorElement.classList.add('hidden'), duration);
+                    setTimeout(() => {
+                        if(errorElement.textContent === message) { // Only hide if the message hasn't changed
+                            errorElement.classList.add('hidden');
+                        }
+                    }, duration);
                 }
             }
 
