@@ -595,12 +595,9 @@
                 </div>
                 
                 <div class="chat-messages" id="chatMessages">
-                    <div class="message">
-                        <div class="message-avatar">S</div>
-                        <div class="message-content">
-                            <div class="message-author">SQUIT Bot</div>
-                            <div class="message-text">Welcome to SQUIT up! 🎉 Start chatting with friends and join communities!</div>
-                        </div>
+                    <div style="text-align: center; color: #b9bbbe; padding: 40px;">
+                        Welcome to #general! 🎉<br>
+                        Start a conversation or add friends to begin chatting.
                     </div>
                 </div>
                 
@@ -662,15 +659,8 @@
                 <button class="close-btn" onclick="closeModal('friendRequestsModal')">&times;</button>
             </div>
             <div id="friendRequestsList">
-                <div class="friend-request">
-                    <div>
-                        <div style="font-weight: 600;">@john_doe</div>
-                        <div style="font-size: 12px; color: #b9bbbe;">Wants to be your friend</div>
-                    </div>
-                    <div>
-                        <button class="btn-small btn-accept" onclick="acceptFriendRequest('@john_doe')">Accept</button>
-                        <button class="btn-small btn-decline" onclick="declineFriendRequest('@john_doe')">Decline</button>
-                    </div>
+                <div style="text-align: center; color: #b9bbbe; padding: 20px;">
+                    No friend requests yet. Share your @user_id with friends to get started!
                 </div>
             </div>
         </div>
@@ -963,51 +953,100 @@
             // Get button reference properly
             const joinButton = document.querySelector('#setupModal .btn-primary');
             joinButton.disabled = true;
-            joinButton.textContent = 'Creating Account...';
+            joinButton.textContent = 'Checking availability...';
             joinButton.style.opacity = '0.7';
 
-            // Force immediate processing without delays
-            setTimeout(async () => {
-                try {
-                    console.log('Completing setup for user:', currentUser.uid, 'with userId:', userId);
-                    
-                    // Create user profile immediately
-                    const userProfile = {
-                        userId: userId,
-                        email: currentUser.email,
-                        displayName: currentUser.displayName || userId.substring(1), // Remove @ for display name
-                        bio: '',
-                        status: 'Online',
-                        avatar: currentUser.photoURL || '',
-                        banner: '',
-                        createdAt: new Date().toISOString()
-                    };
+            try {
+                console.log('Checking if userId is available:', userId);
+                
+                // Check if this @user_id is already taken by ANY user
+                const userIdQuery = await db.collection('users').where('userId', '==', userId).get();
+                if (!userIdQuery.empty) {
+                    // This @user_id is already taken
+                    joinButton.disabled = false;
+                    joinButton.textContent = 'Join SQUIT up';
+                    joinButton.style.opacity = '1';
+                    alert(`Sorry! The @user_id "${userId}" is already taken by another user.\n\nPlease choose a different @user_id and try again.`);
+                    return;
+                }
+                
+                joinButton.textContent = 'Creating Account...';
+                
+                // Force immediate processing without delays
+                setTimeout(async () => {
+                    try {
+                        console.log('Completing setup for user:', currentUser.uid, 'with userId:', userId);
+                        
+                        // Create user profile immediately
+                        const userProfile = {
+                            userId: userId,
+                            email: currentUser.email,
+                            displayName: currentUser.displayName || userId.substring(1), // Remove @ for display name
+                            bio: '',
+                            status: 'Online',
+                            avatar: currentUser.photoURL || '',
+                            banner: '',
+                            createdAt: new Date().toISOString()
+                        };
 
-                    // Update current user and proceed immediately
-                    currentUser = { ...userProfile, uid: currentUser.uid };
-                    
-                    // Save to localStorage immediately for persistence
-                    localStorage.setItem('squitup_user_' + currentUser.uid, JSON.stringify(userProfile));
-                    
-                    // Hide modal and show dashboard immediately
-                    document.getElementById('setupModal').style.display = 'none';
-                    showDashboard();
-                    console.log('Setup completed successfully for:', userId);
-                    
-                    // Try to save to Firestore in background (don't wait for it)
-                    db.collection('users').doc(currentUser.uid).set(userProfile).catch(error => {
-                        console.warn('Background save failed, but user is already logged in:', error);
-                    });
-                    
-                    // Show success message after dashboard loads
-                    setTimeout(() => {
-                        alert(`Welcome to SQUIT up, ${userId}! 🎉\n\nYour account has been created successfully. You can now start chatting and adding friends!`);
-                    }, 100);
-                    
-                } catch (error) {
-                    console.error('Error completing setup:', error);
-                    
-                    // Always proceed to dashboard even if there's an error
+                        // Update current user and proceed immediately
+                        currentUser = { ...userProfile, uid: currentUser.uid };
+                        
+                        // Save to localStorage immediately for persistence
+                        localStorage.setItem('squitup_user_' + currentUser.uid, JSON.stringify(userProfile));
+                        
+                        // Hide modal and show dashboard immediately
+                        document.getElementById('setupModal').style.display = 'none';
+                        showDashboard();
+                        console.log('Setup completed successfully for:', userId);
+                        
+                        // Try to save to Firestore in background (don't wait for it)
+                        db.collection('users').doc(currentUser.uid).set(userProfile).catch(error => {
+                            console.warn('Background save failed, but user is already logged in:', error);
+                        });
+                        
+                        // Show success message after dashboard loads
+                        setTimeout(() => {
+                            alert(`Welcome to SQUIT up, ${userId}! 🎉\n\nYour account has been created successfully. You can now start chatting and adding friends!`);
+                        }, 100);
+                        
+                    } catch (error) {
+                        console.error('Error completing setup:', error);
+                        
+                        // Always proceed to dashboard even if there's an error
+                        const userProfile = {
+                            userId: userId,
+                            email: currentUser.email,
+                            displayName: currentUser.displayName || userId.substring(1),
+                            bio: '',
+                            status: 'Online',
+                            avatar: currentUser.photoURL || '',
+                            banner: ''
+                        };
+                        
+                        currentUser = { ...userProfile, uid: currentUser.uid };
+                        
+                        // Save to localStorage for persistence
+                        localStorage.setItem('squitup_user_' + currentUser.uid, JSON.stringify(userProfile));
+                        
+                        document.getElementById('setupModal').style.display = 'none';
+                        showDashboard();
+                        
+                        console.log('Setup completed with fallback for:', userId);
+                        
+                        setTimeout(() => {
+                            alert(`Welcome to SQUIT up, ${userId}! 🎉\n\nYour account has been created successfully. You can now start chatting and adding friends!`);
+                        }, 100);
+                    }
+                }, 100); // Very short delay just to show the "Creating Account..." text briefly
+                
+            } catch (error) {
+                console.error('Error checking userId availability:', error);
+                
+                // If database check fails, proceed anyway but warn user
+                joinButton.textContent = 'Creating Account...';
+                
+                setTimeout(async () => {
                     const userProfile = {
                         userId: userId,
                         email: currentUser.email,
@@ -1019,20 +1058,16 @@
                     };
                     
                     currentUser = { ...userProfile, uid: currentUser.uid };
-                    
-                    // Save to localStorage for persistence
                     localStorage.setItem('squitup_user_' + currentUser.uid, JSON.stringify(userProfile));
                     
                     document.getElementById('setupModal').style.display = 'none';
                     showDashboard();
                     
-                    console.log('Setup completed with fallback for:', userId);
-                    
                     setTimeout(() => {
                         alert(`Welcome to SQUIT up, ${userId}! 🎉\n\nYour account has been created successfully. You can now start chatting and adding friends!`);
                     }, 100);
-                }
-            }, 100); // Very short delay just to show the "Creating Account..." text briefly
+                }, 100);
+            }
         }
 
 
@@ -1285,5 +1320,5 @@
         `;
         document.head.appendChild(style);
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'98cf96b7714c33a2',t:'MTc2MDE5ODYxOS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'98d42fdf977b8584',t:'MTc2MDI0NjgzNS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
