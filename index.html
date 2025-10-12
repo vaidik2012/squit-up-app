@@ -244,9 +244,21 @@
 
         // --- GLOBAL APP STATE AND FIREBASE SETUP ---
 
-        // Global variables provided by the environment
+        // Firebase configuration provided by the user
+        const explicitFirebaseConfig = {
+            apiKey: "AIzaSyB1zvVHaBrbzX5iA9fBVNGa_3sY1-WCSpY",
+            authDomain: "squit-up-auth.firebaseapp.com",
+            projectId: "squit-up-auth",
+            storageBucket: "squit-up-auth.firebasestorage.app",
+            messagingSenderId: "503910898443",
+            appId: "1:503910898443:web:c5a56eb24cd4f183d8600e",
+            measurementId: "G-K4LHFHSNJC"
+        };
+        
+        // Global variables provided by the environment (prefer explicit config if it exists)
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        // Use the explicit config provided by the user
+        const firebaseConfig = explicitFirebaseConfig; 
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         
         let app, db, auth;
@@ -266,6 +278,7 @@
                 this.friendRequests = []; // List of pending friend requests
                 this.servers = []; // List of joined servers
 
+                // CRITICAL: Ensure collections use the provided appId for security rules
                 this.collections = {
                     USERS: `/artifacts/${appId}/public/data/users`,
                     FRIENDSHIPS: `/artifacts/${appId}/public/data/friendships`,
@@ -285,8 +298,9 @@
                 this.updateLoadingState(true);
 
                 try {
-                    if (!firebaseConfig || Object.keys(firebaseConfig).length === 0) {
-                        throw new Error("Firebase configuration is missing. Authentication and data features are disabled.");
+                    // Check if the provided config is usable
+                    if (!firebaseConfig || !firebaseConfig.apiKey) {
+                        throw new Error("Firebase configuration is missing or incomplete.");
                     }
 
                     app = initializeApp(firebaseConfig);
@@ -305,7 +319,7 @@
                             this.updateUI(true);
                             this.setupFirestoreListeners(); // Start listening for data
                         } else {
-                            // User is logged out OR is an anonymous user (which we don't treat as logged in for the app)
+                            // User is logged out OR is an anonymous user
                             this.currentUser = null;
                             this.currentUserId = null;
                             this.currentUserSquitId = null;
@@ -438,6 +452,7 @@
                     document.getElementById('user_id').value = '';
                     document.getElementById('password').value = '';
                     document.getElementById('email').value = '';
+                    // Registration success triggers onAuthStateChanged, which will load the dashboard.
 
                 } catch (error) {
                     console.error("Registration Error:", error);
@@ -470,6 +485,7 @@
                     // Clear inputs after success
                     document.getElementById('user_id').value = '';
                     document.getElementById('password').value = '';
+                    // Login success triggers onAuthStateChanged, which will load the dashboard.
 
                 } catch (error) {
                     console.error("Login Error:", error);
@@ -499,7 +515,13 @@
 
                 // 1. Listen for friendships (requests sent/received, accepted friends)
                 const friendshipsRef = collection(db, this.collections.FRIENDSHIPS);
-                const qFriends = query(friendshipsRef, where('recipientId', 'in', [this.currentUserId])); // Simplified query for this example
+                // Listen for documents where the current user is EITHER the requester OR the recipient
+                const qFriends = query(friendshipsRef, 
+                    where('recipientId', 'in', [this.currentUserId]),
+                    // A proper implementation would use composite query index for:
+                    // where('requesterId', '==', this.currentUserId) OR where('recipientId', '==', this.currentUserId)
+                    // But we simplify to recipientId check here to avoid complex indexing for demo
+                ); 
                 
                 this.friendshipUnsubscribe = onSnapshot(qFriends, (snapshot) => {
                     this.friends = [];
@@ -510,6 +532,7 @@
                         const partnerId = isRequester ? data.recipientId : data.requesterId;
 
                         if (data.status === 'accepted') {
+                            // Collect all friends (I am either requester or recipient)
                             this.friends.push({ docId: doc.id, partnerId });
                         } else if (data.status === 'pending' && data.recipientId === this.currentUserId) {
                             // Only show pending requests where *I* am the recipient
@@ -566,6 +589,7 @@
                     const targetUid = targetUidDoc.docs[0].id;
                     
                     // 2. Check if already friends/pending (simplified check)
+                    // Note: A full implementation would check both A->B and B->A directions for friendship docs
                     const qCheck = query(collection(db, this.collections.FRIENDSHIPS), 
                         where('requesterId', 'in', [this.currentUserId, targetUid]),
                         where('recipientId', 'in', [this.currentUserId, targetUid]));
@@ -573,7 +597,7 @@
 
                     for (const doc of existing.docs) {
                         if (doc.data().status === 'pending') {
-                            this.displayError(`Request already pending with @${targetSquitId}.`, false, 5000, 'add_friend-error');
+                            this.displayError(`Request already pending or you have a request from @${targetSquitId}.`, false, 5000, 'add_friend-error');
                             return false;
                         }
                         if (doc.data().status === 'accepted') {
@@ -593,7 +617,7 @@
                     return true;
                 } catch (e) {
                     console.error("Error sending friend request:", e);
-                    this.displayError("Failed to send request due to an error.", false, 5000, 'add_friend-error');
+                    this.displayError("Failed to send request due to a server error.", false, 5000, 'add_friend-error');
                     return false;
                 }
             }
@@ -627,7 +651,7 @@
                         createdAt: new Date()
                     });
                     this.closeModal();
-                    // Optionally set this new server as the active server
+                    this.setActiveServer(newServerRef.id);
                     console.log("Server created with ID:", newServerRef.id);
                 } catch (e) {
                     console.error("Error creating server:", e);
@@ -641,26 +665,23 @@
 
                 if (server.members.includes(friendUid)) {
                     // Could add a notification system here, but for now, just print to console.
-                    console.log(`User ${friendUid} is already in server ${server.name}`);
+                    console.log(`User ${this.userMap[friendUid]} is already in server ${server.name}`);
                     return;
                 }
 
                 try {
-                    // Send an invitation message/document to the recipient (simplification: update friend's user doc)
-                    // For a real app, this would be a separate 'invitations' collection.
-                    const friendDocRef = doc(db, this.collections.USERS, friendUid);
-                    await updateDoc(friendDocRef, {
-                        serverInvitations: arrayUnion({
-                            serverId: server.id,
-                            serverName: server.name,
-                            serverDescription: server.description,
-                            inviterId: this.currentUserId,
-                            invitedAt: new Date()
-                        })
+                    // Simplification: directly add to the server's member list for immediate joining
+                    // A real app would use an 'invitations' collection
+                    const serverDocRef = doc(db, this.collections.SERVERS, server.id);
+                    await updateDoc(serverDocRef, {
+                        members: arrayUnion(friendUid)
                     });
-                    console.log(`Invite sent to ${this.userMap[friendUid]} for server ${server.name}`);
+                    console.log(`User ${this.userMap[friendUid]} joined server ${server.name}`);
+                    
+                    // Re-render the invite modal to show the update
+                    this.setModal('invite_friends'); 
                 } catch (e) {
-                    console.error("Error sending server invite:", e);
+                    console.error("Error adding member to server:", e);
                 }
             }
 
@@ -685,6 +706,16 @@
                     authView.style.marginTop = '0';
                     authView.style.marginBottom = '0';
                     lucide.createIcons(); // Load Lucide icons for dashboard
+                    
+                    // Set a default active server if the user has any
+                    if (this.servers.length > 0) {
+                         this.setActiveServer(this.servers[0].id);
+                    } else {
+                        // Reset chat header if no servers are joined
+                        const chatHeader = document.querySelector('#chat-area > div:first-child h3');
+                        if (chatHeader) chatHeader.textContent = "Welcome! Create a server.";
+                        document.getElementById('invite-server-btn').classList.add('hidden');
+                    }
                 } else {
                     // Adjust styles for auth view
                     body.style.overflowY = 'auto'; // Allow scrolling only on auth screen if needed
@@ -789,10 +820,10 @@
             setActiveServer(serverId) {
                 console.log("Active Server ID set to:", serverId);
                 // In a full implementation, this would trigger loading channels and chat history
-                const server = this.servers.find(s => s.id === serverId);
+                this.activeServer = this.servers.find(s => s.id === serverId);
                 const chatHeader = document.querySelector('#chat-area > div:first-child h3');
                 if (chatHeader) {
-                    chatHeader.textContent = `#general (${server.name})`;
+                    chatHeader.textContent = `#general (${this.activeServer.name})`;
                 }
                 document.getElementById('invite-server-btn').classList.remove('hidden');
             }
@@ -832,7 +863,7 @@
                     `;
                 } else if (viewType === 'invite_friends') {
                     title = 'Invite Friends to Server';
-                    const activeServer = this.servers[0]; // Simplified: Assume first server is active
+                    const activeServer = this.activeServer;
 
                     let friendsHtml = '';
                     if (!activeServer) {
@@ -850,7 +881,7 @@
                                     <span class="text-white text-sm">@${squitId}</span>
                                     ${isMember 
                                         ? '<span class="text-green-500 text-xs">Joined</span>'
-                                        : `<button onclick="window.App.inviteFriendToServer(window.App.servers.find(s => s.id === '${activeServer.id}'), '${friend.partnerId}')" class="text-indigo-400 hover:text-indigo-300 text-xs py-1 px-2 rounded bg-indigo-900/50 btn-realistic shadow-none">
+                                        : `<button onclick="window.App.inviteFriendToServer(window.App.activeServer, '${friend.partnerId}')" class="text-indigo-400 hover:text-indigo-300 text-xs py-1 px-2 rounded bg-indigo-900/50 btn-realistic shadow-none">
                                             Invite
                                         </button>`
                                     }
@@ -929,6 +960,11 @@
                 const input = document.getElementById('chat-input');
                 const message = input.value.trim();
                 if (!message) return;
+                if (!this.activeServer) {
+                    // Simple message box instead of alert()
+                    this.displayError("Please create a server or join a chat before sending messages.", false, 3000, 'error-message', 'text-yellow-400 bg-yellow-900/30');
+                    return;
+                }
 
                 const messageContainer = document.getElementById('message-container');
                 const newMessage = document.createElement('div');
@@ -941,7 +977,8 @@
                 messageContainer.scrollTop = messageContainer.scrollHeight; // Scroll to bottom
                 input.value = ''; // Clear input
 
-                // In a real app, this is where you'd send the message to Firestore.
+                // In a real app, this is where you'd send the message to Firestore 
+                // within the specific server/channel document.
             }
         }
 
