@@ -1,166 +1,286 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Image Generator (Download)</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        /* Custom styles for aesthetic enhancements */
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f7f9fb;
-        }
-        .container {
-            max-width: 90%;
-            margin: 0 auto;
-            padding: 1.5rem;
-        }
-        .gradient-button {
-            background-image: linear-gradient(to right, #4f46e5, #6366f1);
-            transition: transform 0.1s ease-in-out, box-shadow 0.1s ease-in-out;
-        }
-        .gradient-button:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 4px 10px rgba(79, 70, 229, 0.4);
-        }
-        .gradient-button:active {
-            transform: translateY(0);
-            box-shadow: 0 2px 5px rgba(79, 70, 229, 0.4);
-        }
-    </style>
-</head>
-<body class="min-h-screen flex items-center justify-center">
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut } from 'firebase/auth';
+import { getFirestore, collection, query, limit, onSnapshot, orderBy, doc, getDoc, setDoc, serverTimestamp, where, getDocs, updateDoc, arrayUnion } from 'firebase/firestore';
 
-    <div class="container bg-white shadow-2xl rounded-xl p-8 md:p-12 w-full lg:w-3/5">
-        <h1 class="text-3xl font-extrabold text-gray-900 mb-6 text-center">
-            AI Image Generator
-        </h1>
-        <p class="text-gray-600 mb-8 text-center">
-            Enter a detailed prompt and hit "Generate" to create and automatically download your image.
-        </p>
+// --- Global Variable Initialization (Mandatory for Canvas Environment) ---
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
-        <!-- Prompt Input -->
-        <div class="mb-6">
-            <label for="prompt" class="block text-sm font-medium text-gray-700 mb-2">Image Description</label>
-            <textarea id="prompt" rows="3" class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 transition duration-150" placeholder="A majestic purple dragon soaring over a bioluminescent forest, digital art, 4k"></textarea>
-        </div>
+// Initialize Firebase App and Services outside the component
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
 
-        <!-- System Message/Loading Indicator -->
-        <div id="messageContainer" class="text-center mb-6">
-            <div id="loadingIndicator" class="hidden flex items-center justify-center space-x-2 text-indigo-600 font-medium">
-                <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                <span>Generating image... This may take a moment.</span>
-            </div>
-            <p id="systemMessage" class="text-sm text-green-600 font-medium"></p>
-        </div>
-        
-        <!-- Generate Button -->
-        <button id="generateButton" class="gradient-button w-full text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50" onclick="generateImage()">
-            Generate Image
-        </button>
+// Helper function to get the current user ID (or a temporary one if unauthenticated)
+const getCurrentUserId = (user) => user?.uid || `anon-${crypto.randomUUID()}`;
 
-        <!-- Note about API Key -->
-        <p class="text-xs text-gray-400 mt-6 text-center">
-            Using the Imagen 3.0 API to generate images.
-        </p>
+// --- Firestore Security Rules Pathing ---
+// Public data for global users (e.g., list of registered user profiles)
+const getPublicUserCollectionRef = () => collection(db, 'artifacts', appId, 'public', 'data', 'users');
+
+// Private user data (e.g., user's personal chat list)
+const getUserChatListCollectionRef = (userId) => collection(db, 'artifacts', appId, 'users', userId, 'chats');
+
+// Chat Message Collection (Public for participants)
+const getChatMessagesCollectionRef = (chatId) => collection(db, 'artifacts', appId, 'public', 'data', 'messages', chatId, 'messages');
+
+// --- Components ---
+
+/**
+ * Visually engaging Splash Screen with a fixed 3-second display time.
+ */
+const SplashScreen = ({ onReady }) => {
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    // Start the progress bar animation immediately
+    const start = Date.now();
+    const duration = 3000; // 3 seconds fixed duration
+
+    const animateProgress = () => {
+      const elapsed = Date.now() - start;
+      const newProgress = Math.min(100, (elapsed / duration) * 100);
+      setProgress(newProgress);
+
+      if (newProgress < 100) {
+        requestAnimationFrame(animateProgress);
+      } else {
+        // Once progress is 100, call the callback to proceed to auth check
+        onReady();
+      }
+    };
+
+    requestAnimationFrame(animateProgress);
+
+    // Cleanup not strictly necessary since onReady handles the transition,
+    // but ensures no stray animations if component is unmounted early (unlikely here)
+    return () => setProgress(100); 
+  }, [onReady]);
+
+  return (
+    <div className="flex flex-col items-center justify-center h-full bg-gray-900 text-white p-8">
+      <div className="w-24 h-24 mb-6 rounded-full bg-indigo-500 flex items-center justify-center shadow-lg animate-pulse">
+        <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+        </svg>
+      </div>
+      <h1 className="text-4xl font-extrabold mb-3 tracking-tight">ChatWave</h1>
+      <p className="text-gray-400 mb-8 font-medium">Loading your chats and data...</p>
+
+      {/* Progress Bar */}
+      <div className="w-full max-w-sm bg-gray-700 rounded-full h-2.5 overflow-hidden">
+        <div 
+          className="bg-indigo-400 h-2.5 rounded-full transition-all duration-300 ease-linear" 
+          style={{ width: `${progress}%` }}
+        ></div>
+      </div>
     </div>
+  );
+};
 
-    <script type="module">
-        // Global variables provided by the Canvas environment
-        const apiKey = "" // Canvas environment will inject the key
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
 
-        // Utility function for setting messages and managing loading state
-        function setMessage(text, isError = false) {
-            const messageElement = document.getElementById('systemMessage');
-            messageElement.textContent = text;
-            messageElement.className = 'text-sm font-medium mt-4';
-            messageElement.classList.add(isError ? 'text-red-600' : 'text-green-600');
+/**
+ * Placeholder for the main Chat Dashboard.
+ */
+const Dashboard = ({ user, userId, setView }) => {
+    const handleLogout = async () => {
+        try {
+            await signOut(auth);
+            // onAuthStateChanged listener will handle the state change and setView('login')
+        } catch (error) {
+            console.error("Logout failed:", error);
         }
+    };
 
-        function setLoading(isLoading) {
-            document.getElementById('loadingIndicator').classList.toggle('hidden', !isLoading);
-            document.getElementById('generateButton').disabled = isLoading;
-            document.getElementById('systemMessage').textContent = '';
-        }
+    return (
+        <div className="flex flex-col h-full bg-white">
+            {/* Header */}
+            <header className="flex justify-between items-center p-4 bg-indigo-600 text-white shadow-md">
+                <h2 className="text-xl font-bold">Chat Dashboard</h2>
+                <div className="flex items-center space-x-4">
+                    <span className="text-sm font-medium">User ID: <code className="bg-indigo-700 p-1 rounded-md text-xs">{userId}</code></span>
+                    <button 
+                        onClick={handleLogout}
+                        className="bg-indigo-700 hover:bg-indigo-800 text-white text-sm font-semibold py-1.5 px-3 rounded-lg transition duration-150"
+                    >
+                        Logout
+                    </button>
+                </div>
+            </header>
 
-        // --- Core Image Generation Logic ---
-
-        // Function to make the API call with exponential backoff for retries
-        async function fetchWithRetry(url, options, retries = 3) {
-            for (let i = 0; i < retries; i++) {
-                try {
-                    const response = await fetch(url, options);
-                    if (!response.ok) {
-                        // Throw error to be caught and potentially retried
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    return response;
-                } catch (error) {
-                    if (i < retries - 1) {
-                        const delay = Math.pow(2, i) * 1000; // 1s, 2s, 4s delay
-                        await new Promise(resolve => setTimeout(resolve, delay));
-                    } else {
-                        throw error; // Re-throw the last error after max retries
-                    }
-                }
-            }
-        }
-
-        window.generateImage = async function() {
-            const prompt = document.getElementById('prompt').value.trim();
-            if (!prompt) {
-                setMessage('Please enter a prompt to generate an image.', true);
-                return;
-            }
-
-            setLoading(true);
-            setMessage('Starting generation process...');
-
-            try {
-                const payload = { 
-                    instances: [{ prompt: prompt }], 
-                    parameters: { "sampleCount": 1 } 
-                };
-
-                const response = await fetchWithRetry(apiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                
-                const result = await response.json();
-
-                if (result.predictions && result.predictions.length > 0 && result.predictions[0].bytesBase64Encoded) {
-                    const imageBase64 = result.predictions[0].bytesBase64Encoded;
-                    const imageUrl = `data:image/png;base64,${imageBase64}`;
-
-                    // --- REVERTED LOGIC: Create a temporary link element for automatic download ---
-                    const link = document.createElement('a');
-                    link.href = imageUrl;
-                    link.download = `generated_image_${Date.now()}.png`; // Suggested filename
+            {/* Main Content Area */}
+            <main className="flex-1 overflow-y-auto p-4 md:p-8">
+                <div className="max-w-4xl mx-auto">
+                    <h3 className="text-2xl font-semibold text-gray-800 mb-4">Welcome back, {user ? 'Authenticated User' : 'Anonymous User'}!</h3>
+                    <p className="text-gray-600 mb-8">This is where your chat list and friend search features will go. The splash screen successfully transitioned here after 3 seconds.</p>
                     
-                    // Append, click, and remove the element to trigger download
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
+                    {/* Placeholder for future "Friend Search" feature */}
+                    <div className="p-6 bg-gray-50 rounded-xl border border-gray-200">
+                        <h4 className="text-lg font-medium text-gray-700 mb-3">Next Step: Friend Search</h4>
+                        <p className="text-sm text-gray-500">We should implement the ability to search for other User IDs in the public user collection to start a new chat!</p>
+                    </div>
+                </div>
+            </main>
+        </div>
+    );
+};
 
-                    setMessage('Image successfully generated and downloaded!');
-                } else {
-                    setMessage('Image generation failed. Check the prompt or try again.', true);
+/**
+ * Placeholder for the Login/Signup page.
+ */
+const Login = ({ setView }) => {
+    return (
+        <div className="flex flex-col items-center justify-center h-full bg-gray-100 p-8">
+            <div className="bg-white p-10 rounded-xl shadow-2xl max-w-md w-full text-center">
+                <h1 className="text-3xl font-extrabold text-gray-800 mb-6">Welcome to ChatWave</h1>
+                <p className="text-gray-600 mb-8">Please log in or sign up to continue.</p>
+                
+                {/* Placeholder Login Form */}
+                <div className="space-y-4">
+                    <input 
+                        type="email" 
+                        placeholder="Email (Placeholder)" 
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                        disabled
+                    />
+                    <input 
+                        type="password" 
+                        placeholder="Password (Placeholder)" 
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                        disabled
+                    />
+                </div>
+                
+                <button 
+                    onClick={() => console.log('Login logic placeholder')}
+                    className="w-full mt-6 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-lg shadow-md transition duration-150 disabled:opacity-50"
+                    disabled
+                >
+                    Log In
+                </button>
+                
+                <p className="text-sm text-gray-500 mt-4">For now, we rely on the custom token or anonymous sign-in.</p>
+            </div>
+        </div>
+    );
+};
+
+
+/**
+ * Main Application Component (Router, Auth Handler).
+ */
+export default function App() {
+    const [user, setUser] = useState(null);
+    // View can be: 'splash' -> 'loading' -> 'login' or 'dashboard'
+    const [view, setView] = useState('splash');
+    const [error, setError] = useState(null);
+
+    // Memoize the userId for stable dependencies
+    const userId = useMemo(() => getCurrentUserId(user), [user]);
+
+    // Phase 1: Authentication Handler - Runs ONLY after the 3-second splash screen
+    const handleAuthentication = useCallback(async () => {
+        // Switch to the 'loading' state to hide the splash screen and wait for Firebase
+        setView('loading');
+        setError(null);
+
+        // 1. Set up Auth State Listener
+        const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+            if (currentUser) {
+                // User is signed in. Ensure their public profile exists.
+                setUser(currentUser);
+                setView('dashboard');
+                
+                // Check if public profile exists for this user
+                const userDocRef = doc(getPublicUserCollectionRef(), currentUser.uid);
+                const userDocSnap = await getDoc(userDocRef);
+
+                if (!userDocSnap.exists()) {
+                    // Create a minimal public profile
+                    await setDoc(userDocRef, {
+                        uid: currentUser.uid,
+                        createdAt: serverTimestamp(),
+                        // A mock display name for better UX
+                        displayName: `User_${currentUser.uid.substring(0, 8)}`, 
+                        // We will add more fields like status, profile image, etc., later
+                    });
                 }
 
-            } catch (error) {
-                console.error("API Call Error:", error);
-                setMessage('An error occurred during generation: ' + error.message, true);
-            } finally {
-                setLoading(false);
+            } else {
+                // User is signed out or initial state check complete
+                setUser(null);
+                setView('login');
             }
+        });
+
+        // 2. Perform initial sign-in attempt (custom token or anonymous)
+        try {
+            if (initialAuthToken) {
+                await signInWithCustomToken(auth, initialAuthToken);
+            } else {
+                await signInAnonymously(auth);
+            }
+        } catch (e) {
+            console.error("Firebase Sign-In Failed:", e);
+            setError(`Authentication failed: ${e.message}`);
+            setView('login'); // Fallback to login view on sign-in error
         }
-    </script>
-</body>
-</html>
+
+        // Return the unsubscribe function for cleanup
+        return unsubscribe;
+    }, []);
+
+    // Phase 0: Splash Screen Timer - Controls the flow start
+    useEffect(() => {
+        if (view === 'splash') {
+            // This function is passed to the SplashScreen and called after 3 seconds
+            const startAuthFlow = () => {
+                handleAuthentication().then(unsubscribe => {
+                    // Cleanup the listener when component unmounts
+                    return () => unsubscribe && unsubscribe();
+                });
+            };
+            
+            // Pass the callback to the SplashScreen component
+            // The SplashScreen component manages the 3s delay internally using requestAnimationFrame
+            // We just need to make sure handleAuthentication is called when SplashScreen is ready
+            // The actual effect of starting the auth flow happens via the onReady prop of SplashScreen.
+        }
+    }, [view, handleAuthentication]);
+
+
+    // Conditional Rendering based on View State
+    if (view === 'splash') {
+        return <SplashScreen onReady={() => setView('loading-auth')} />;
+    }
+
+    if (view === 'loading' || view === 'loading-auth') {
+        // Minimal loading screen while waiting for onAuthStateChanged to resolve
+        return (
+            <div className="flex items-center justify-center h-screen bg-gray-100">
+                <div className="flex items-center space-x-3 text-indigo-600 font-medium">
+                    <svg className="animate-spin h-5 w-5 text-indigo-600" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>{view === 'loading' ? 'Loading App...' : 'Authenticating...'}</span>
+                </div>
+                {error && <p className="text-red-500 mt-4 text-center">{error}</p>}
+            </div>
+        );
+    }
+    
+    // Once auth is ready, render the appropriate view
+    if (view === 'dashboard' && user) {
+        return <Dashboard user={user} userId={userId} setView={setView} />;
+    }
+
+    if (view === 'login') {
+        return <Login setView={setView} />;
+    }
+
+    // Default catch-all (should ideally not be reached)
+    return <div className="flex items-center justify-center h-screen bg-red-100 text-red-700">Application State Error.</div>;
+}
