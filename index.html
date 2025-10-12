@@ -1,571 +1,285 @@
-```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SQUIT UP! - Chatting and Chilling Lounge Friends</title>
+    <title>SQUIT: Chat Universe</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
     <style>
-        /* Enhanced Colorful Discord-like Scheme with Vibrant Colors and Heavy Shadows */
-        :root {
-            --background-primary: linear-gradient(135deg, #2c2f33, #23272a);
-            --background-secondary: linear-gradient(135deg, #36393f, #2f3136);
-            --background-tertiary: linear-gradient(135deg, #40444b, #36393f);
-            --background-modifier-hover: rgba(79, 84, 92, 0.3);
-            --channeltextarea-background: linear-gradient(135deg, #40444b, #36393f);
-            --text-normal: #ffffff;
-            --text-muted: #b9bbbe;
-            --interactive-normal: linear-gradient(135deg, #5865f2, #4752c4);
-            --interactive-hover: linear-gradient(135deg, #4752c4, #3730a3);
-            --success: linear-gradient(135deg, #57f287, #43b581);
-            --error: linear-gradient(135deg, #ed4245, #c72c3b);
-            --border: rgba(79, 84, 92, 0.6);
-            --shadow-light: 0 2px 8px rgba(0, 0, 0, 0.2), 0 1px 4px rgba(0, 0, 0, 0.1);
-            --shadow-medium: 0 8px 16px rgba(0, 0, 0, 0.3), 0 4px 8px rgba(0, 0, 0, 0.2);
-            --shadow-heavy: 0 16px 32px rgba(0, 0, 0, 0.4), 0 8px 16px rgba(0, 0, 0, 0.3);
-            --glow: 0 0 20px rgba(88, 101, 242, 0.5);
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
         body {
-            font-family: 'Whitney', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-            background: var(--background-primary);
-            color: var(--text-normal);
-            height: 100vh;
-            overflow: hidden;
-        }
-
-        /* Colorful Auth Screen - First Appearance: Login or Create Account */
-        #authScreen {
+            font-family: 'Inter', sans-serif;
+            background-color: #1f2937; /* Dark background */
             display: flex;
-            align-items: center;
             justify-content: center;
-            height: 100vh;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            position: relative;
-            animation: bgPulse 5s ease-in-out infinite alternate;
+            align-items: center;
+            min-height: 100vh;
+        }
+        /* Custom dynamic style for the exciting title */
+        .exciting-title {
+            text-shadow: 0 4px 10px rgba(134, 49, 255, 0.5);
+            animation: glow 1.5s ease-in-out infinite alternate;
         }
 
-        @keyframes bgPulse {
-            0% { filter: hue-rotate(0deg); }
-            100% { filter: hue-rotate(360deg); }
-        }
-
-        #authScreen::before {
-            content: 'S Q U I T   U P !';
-            position: absolute;
-            top: 50px;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 48px;
-            font-weight: bold;
-            background: linear-gradient(135deg, #ff6b6b, #4ecdc4, #45b7d1, #96ceb4, #feca57);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            text-shadow: var(--shadow-heavy);
-            z-index: 1;
-            animation: textGlow 2s ease-in-out infinite alternate;
-            letter-spacing: 5px;
-        }
-
-        @keyframes textGlow {
-            0% { text-shadow: var(--shadow-medium), var(--glow); }
-            100% { text-shadow: var(--shadow-heavy), 0 0 30px rgba(255, 255, 255, 0.5); }
+        @keyframes glow {
+            from {
+                text-shadow: 0 0 5px #facc15, 0 0 10px #facc15, 0 0 15px #8b5cf6;
+            }
+            to {
+                text-shadow: 0 0 10px #facc15, 0 0 20px #facc15, 0 0 30px #8b5cf6;
+            }
         }
 
         .auth-container {
-            background: var(--background-secondary);
-            padding: 50px;
-            border-radius: 20px;
-            box-shadow: var(--shadow-heavy);
-            width: 90%;
-            max-width: 450px;
-            text-align: center;
-            z-index: 2;
-            border: 2px solid transparent;
-            background-clip: padding-box;
-            position: relative;
+            z-index: 10; /* Ensure the form is on top of everything */
         }
-
-        .auth-container::before {
-            content: '';
-            position: absolute;
-            top: -2px;
-            left: -2px;
-            right: -2px;
-            bottom: -2px;
-            background: linear-gradient(135deg, #ff6b6b, #4ecdc4, #45b7d1);
-            border-radius: 22px;
-            z-index: -1;
-            animation: borderRotate 3s linear infinite;
-        }
-
-        @keyframes borderRotate {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .auth-title {
-            font-size: 28px;
-            margin-bottom: 10px;
-            color: var(--text-normal);
-            text-shadow: var(--shadow-medium);
-            background: linear-gradient(135deg, #ff6b6b, #4ecdc4);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-        .auth-subtitle {
-            font-size: 16px;
-            color: var(--text-muted);
-            margin-bottom: 30px;
-            text-shadow: var(--shadow-light);
-        }
-
-        .auth-tabs {
-            display: flex;
-            margin-bottom: 25px;
-            background: var(--background-tertiary);
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: var(--shadow-medium);
-        }
-
-        .auth-tab {
-            flex: 1;
-            padding: 15px 20px;
-            background: none;
-            border: none;
-            color: var(--text-muted);
-            cursor: pointer;
-            transition: all 0.3s;
-            font-weight: 600;
-            font-size: 16px;
-            position: relative;
-        }
-
-        .auth-tab:hover {
-            background: var(--background-modifier-hover);
-            color: var(--text-normal);
-        }
-
-        .auth-tab.active {
-            background: var(--interactive-normal);
-            color: white;
-            box-shadow: var(--glow);
-        }
-
-        .auth-form {
-            display: none;
-        }
-
-        .auth-form.active {
-            display: block;
-            animation: slideIn 0.4s ease-out;
-        }
-
-        @keyframes slideIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .auth-input {
-            width: 100%;
-            padding: 15px 20px;
-            margin-bottom: 20px;
-            background: var(--channeltextarea-background);
-            border: 2px solid var(--border);
-            border-radius: 10px;
-            color: var(--text-normal);
-            font-size: 16px;
-            box-shadow: var(--shadow-light) inset;
-            transition: all 0.3s;
-        }
-
-        .auth-input:focus {
-            outline: none;
-            border-color: transparent;
-            box-shadow: 0 0 0 3px rgba(88, 101, 242, 0.3), var(--shadow-medium);
-            transform: scale(1.02);
-        }
-
-        .auth-input::placeholder {
-            color: var(--text-muted);
-        }
-
-        .auth-button {
-            width: 100%;
-            padding: 15px 20px;
-            background: var(--interactive-normal);
-            color: white;
-            border: none;
-            border-radius: 10px;
-            cursor: pointer;
-            font-size: 16px;
-            font-weight: 600;
-            transition: all 0.3s;
-            box-shadow: var(--shadow-medium);
-            margin-bottom: 15px;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .auth-button::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-            transition: left 0.5s;
-        }
-
-        .auth-button:hover:not(:disabled) {
-            background: var(--interactive-hover);
-            box-shadow: var(--shadow-heavy), var(--glow);
+        
+        .button-pulse:hover {
             transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
         }
 
-        .auth-button:hover::before {
-            left: 100%;
+        .button-pulse:active {
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Main Authentication Container -->
+    <div id="auth-container" class="auth-container w-full max-w-sm p-8 bg-gray-800 rounded-xl shadow-2xl transition-all duration-500">
+
+        <!-- Updated Exciting Title -->
+        <h1 class="text-4xl font-extrabold text-yellow-400 mb-10 tracking-wider text-center exciting-title">
+            SQUIT: Your <span class="text-indigo-400">ULTIMATE</span> Chat Universe! 🚀
+        </h1>
+
+        <!-- Loading State (Initially shown while Firebase initializes) -->
+        <div id="loading-state" class="text-center text-gray-400">
+            <svg class="animate-spin h-5 w-5 mr-3 inline-block text-indigo-400" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            Loading SQUIT...
+        </div>
+
+        <!-- Authentication Form (Initially hidden) -->
+        <div id="auth-form" class="hidden">
+            <div class="mb-6">
+                <label for="email" class="block text-sm font-medium text-gray-300 mb-2">Email Address</label>
+                <input type="email" id="email" class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 text-white focus:ring-indigo-500 focus:border-indigo-500 transition duration-150" placeholder="Enter your email" required>
+            </div>
+            
+            <div class="mb-8">
+                <label for="password" class="block text-sm font-medium text-gray-300 mb-2">Password</label>
+                <input type="password" id="password" class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 text-white focus:ring-indigo-500 focus:border-indigo-500 transition duration-150" placeholder="Enter your password" required>
+            </div>
+
+            <!-- Error Message Display -->
+            <div id="error-message" class="text-red-400 text-sm mb-4 hidden p-2 bg-red-900 bg-opacity-30 rounded-lg"></div>
+
+            <!-- Action Buttons -->
+            <div class="flex flex-col space-y-4">
+                <button onclick="handleLogin()" id="login-button" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition duration-300 button-pulse">
+                    Log In
+                </button>
+                <button onclick="handleRegister()" id="register-button" class="w-full py-3 border border-indigo-600 text-indigo-400 font-semibold rounded-lg hover:bg-indigo-900 transition duration-300 button-pulse">
+                    Register New Account
+                </button>
+            </div>
+        </div>
+
+        <!-- Chat View (Simulated after successful login) -->
+        <div id="chat-view" class="hidden text-center p-6 bg-gray-900 rounded-lg">
+            <h2 class="text-2xl font-bold text-green-400 mb-4">Welcome to SQUIT!</h2>
+            <p id="user-info" class="text-gray-300 mb-6"></p>
+            <button onclick="handleLogout()" class="w-full py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition duration-300 button-pulse">
+                Log Out
+            </button>
+        </div>
+
+    </div>
+
+    <script type="module">
+        // Import Firebase modules
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // Use Debug level for better error visibility in console
+        setLogLevel('Debug');
+
+        // Global Firebase instances and user state
+        let app, db, auth;
+        let userId = null;
+        let isAuthReady = false;
+
+        // --- Utility Functions ---
+
+        /**
+         * Simple function to display error messages in the UI.
+         * @param {string} message - The error message to display.
+         */
+        function displayError(message) {
+            const errorElement = document.getElementById('error-message');
+            errorElement.textContent = message;
+            errorElement.classList.remove('hidden');
+            setTimeout(() => {
+                errorElement.classList.add('hidden');
+            }, 5000);
         }
 
-        .auth-button:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
+        /**
+         * Updates the UI based on the current user's state.
+         * @param {object | null} user - The Firebase User object or null.
+         */
+        function updateUI(user) {
+            const loadingState = document.getElementById('loading-state');
+            const authForm = document.getElementById('auth-form');
+            const chatView = document.getElementById('chat-view');
+            const userInfo = document.getElementById('user-info');
+            
+            loadingState.classList.add('hidden'); // Hide loading regardless
+
+            if (user) {
+                // Logged in
+                userId = user.uid;
+                authForm.classList.add('hidden');
+                chatView.classList.remove('hidden');
+                
+                const email = user.email || 'Anonymous User';
+                userInfo.innerHTML = `You are logged in as: <span class="font-mono text-sm block mt-2 text-yellow-400 break-all">${email}</span><br>Your User ID is: <span class="font-mono text-xs block mt-1 text-gray-400 break-all">${userId}</span>`;
+
+            } else {
+                // Logged out
+                userId = null;
+                authForm.classList.remove('hidden');
+                chatView.classList.add('hidden');
+            }
         }
 
-        .divider {
-            margin: 25px 0;
-            text-align: center;
-            color: var(--text-muted);
-            position: relative;
-            font-size: 14px;
+        // --- Authentication Handlers ---
+
+        /**
+         * Handles user registration with email and password.
+         */
+        window.handleRegister = async () => {
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+
+            if (!email || !password) {
+                displayError("Please enter both email and password.");
+                return;
+            }
+
+            try {
+                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                // User created and logged in automatically
+                console.log("Registration successful for user:", userCredential.user.uid);
+            } catch (error) {
+                console.error("Registration Error:", error.code, error.message);
+                
+                let friendlyMessage = "Registration failed. Please check your email format and ensure the password is at least 6 characters long.";
+                if (error.code === 'auth/email-already-in-use') {
+                    friendlyMessage = "This email is already registered. Try logging in.";
+                }
+                displayError(friendlyMessage);
+            }
+        };
+
+        /**
+         * Handles user login with email and password.
+         */
+        window.handleLogin = async () => {
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+
+            if (!email || !password) {
+                displayError("Please enter both email and password.");
+                return;
+            }
+
+            try {
+                const userCredential = await signInWithEmailAndPassword(auth, email, password);
+                // User logged in
+                console.log("Login successful for user:", userCredential.user.uid);
+            } catch (error) {
+                console.error("Login Error:", error.code, error.message);
+                
+                let friendlyMessage = "Login failed. Please check your email and password.";
+                if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+                    friendlyMessage = "Invalid email or password.";
+                }
+                displayError(friendlyMessage);
+            }
+        };
+
+        /**
+         * Handles user logout.
+         */
+        window.handleLogout = async () => {
+            try {
+                await signOut(auth);
+                console.log("User logged out successfully.");
+            } catch (error) {
+                console.error("Logout Error:", error);
+                displayError("Failed to log out.");
+            }
+        };
+
+        // --- Initialization ---
+
+        /**
+         * Main function to initialize Firebase and set up auth listener.
+         */
+        async function initializeAppAndAuth() {
+            try {
+                // Retrieve global variables
+                const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+                const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+                if (!firebaseConfig || Object.keys(firebaseConfig).length === 0) {
+                    throw new Error("Firebase configuration is missing or invalid.");
+                }
+
+                // Initialize services
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                // Set up real-time authentication listener
+                onAuthStateChanged(auth, (user) => {
+                    isAuthReady = true;
+                    updateUI(user);
+                });
+
+                // Authenticate with the custom token if available, otherwise sign in anonymously
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                    console.log("Signed in with custom token.");
+                } else {
+                    await signInAnonymously(auth);
+                    console.log("Signed in anonymously.");
+                }
+                
+                // Important: Update UI immediately after initial sign-in attempt
+                updateUI(auth.currentUser);
+
+            } catch (error) {
+                console.error("Firebase Initialization Error:", error);
+                // Display a permanent error if Firebase fails to initialize
+                const loadingState = document.getElementById('loading-state');
+                loadingState.innerHTML = `<p class="text-red-500">Error initializing the app: ${error.message}</p>`;
+            }
         }
 
-        .divider::before {
-            content: '';
-            position: absolute;
-            top: 50%;
-            left: 0;
-            right: 0;
-            height: 1px;
-            background: linear-gradient(90deg, transparent, var(--border), transparent);
-        }
+        // Start the application initialization
+        initializeAppAndAuth();
 
-        .divider span {
-            background: var(--background-secondary);
-            padding: 0 15px;
-            color: var(--text-normal);
-        }
-
-        .error-msg {
-            color: #ff6b6b;
-            font-size: 14px;
-            margin-top: 10px;
-            display: none;
-            background: rgba(237, 66, 69, 0.1);
-            padding: 10px;
-            border-radius: 6px;
-            border-left: 4px solid #ed4245;
-            text-shadow: none;
-        }
-
-        .success-msg {
-            color: #4ecdc4;
-            font-size: 14px;
-            margin-top: 10px;
-            display: none;
-            background: rgba(87, 242, 135, 0.1);
-            padding: 10px;
-            border-radius: 6px;
-            border-left: 4px solid #57f287;
-            text-shadow: none;
-        }
-
-        .user-info {
-            margin-top: 20px;
-            padding: 20px;
-            background: var(--background-tertiary);
-            border-radius: 10px;
-            box-shadow: var(--shadow-medium);
-            text-align: left;
-            display: none;
-            border: 1px solid var(--border);
-        }
-
-        .user-info strong {
-            color: var(--text-normal);
-            background: linear-gradient(135deg, #ff6b6b, #4ecdc4);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-        .logout-btn {
-            background: var(--error);
-            margin-top: 15px;
-        }
-
-        .logout-btn:hover {
-            box-shadow: var(--shadow-heavy), 0 0 20px rgba(237, 66, 69, 0.5);
-        }
-
-        /* Main Dashboard - Discord-like with Colors */
-        #mainApp {
-            display: none;
-            height: 100vh;
-            flex-direction: row;
-            background: var(--background-primary);
-        }
-
-        /* Left Sidebar: Servers - Colorful Icons */
-        .sidebar {
-            width: 72px;
-            background: var(--background-secondary);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 12px 0;
-            border-right: 1px solid var(--border);
-            position: relative;
-            box-shadow: var(--shadow-light);
-        }
-
-        .server-icon {
-            width: 48px;
-            height: 48px;
-            background: var(--background-tertiary);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 8px;
-            cursor: pointer;
-            transition: all 0.3s;
-            position: relative;
-            box-shadow: var(--shadow-medium);
-            font-size: 24px;
-            color: var(--text-muted);
-        }
-
-        .server-icon:hover {
-            background: var(--interactive-normal);
-            color: white;
-            box-shadow: var(--shadow-heavy), var(--glow);
-            transform: scale(1.1) rotate(5deg);
-        }
-
-        .server-icon.active {
-            border-radius: 16px;
-            background: var(--success);
-            color: white;
-            box-shadow: var(--shadow-heavy), 0 0 15px rgba(87, 242, 135, 0.5);
-        }
-
-        .server-icon::after {
-            content: '';
-            position: absolute;
-            bottom: -4px;
-            right: -4px;
-            width: 20px;
-            height: 20px;
-            background: var(--success);
-            border-radius: 50%;
-            opacity: 0;
-            transition: opacity 0.3s;
-            box-shadow: 0 0 10px rgba(87, 242, 135, 0.7);
-        }
-
-        .server-icon.active::after {
-            opacity: 1;
-        }
-
-        .add-server {
-            width: 48px;
-            height: 48px;
-            background: var(--background-tertiary);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            margin-top: auto;
-            margin-bottom: 12px;
-            transition: all 0.3s;
-            box-shadow: var(--shadow-medium);
-            font-size: 28px;
-            color: var(--text-muted);
-        }
-
-        .add-server:hover {
-            background: var(--interactive-normal);
-            color: white;
-            box-shadow: var(--shadow-heavy), var(--glow);
-            transform: scale(1.1);
-        }
-
-        /* Channel Sidebar - Enhanced */
-        .channels-sidebar {
-            width: 240px;
-            background: var(--background-secondary);
-            border-right: 1px solid var(--border);
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            box-shadow: var(--shadow-light);
-        }
-
-        .server-header, .friends-header {
-            padding: 15px 20px;
-            font-size: 18px;
-            font-weight: bold;
-            color: var(--text-normal);
-            border-bottom: 1px solid var(--border);
-            text-shadow: var(--shadow-light);
-            background: var(--background-tertiary);
-        }
-
-        .channel-category {
-            padding: 10px 20px;
-            font-size: 12px;
-            font-weight: 700;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            box-shadow: var(--shadow-light);
-            background: rgba(88, 101, 242, 0.1);
-        }
-
-        .channel-list, .friends-list {
-            list-style: none;
-            padding: 10px 0;
-        }
-
-        .channel-item, .friend-item {
-            padding: 10px 20px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            transition: all 0.3s;
-            border-radius: 8px;
-            margin: 5px 10px;
-            box-shadow: var(--shadow-light);
-            background: var(--background-tertiary);
-        }
-
-        .channel-item:hover, .friend-item:hover {
-            background: var(--background-modifier-hover);
-            box-shadow: var(--shadow-medium), var(--glow);
-            transform: translateX(5px);
-        }
-
-        .channel-item.active, .friend-item.active {
-            background: var(--interactive-normal);
-            color: white;
-            box-shadow: var(--shadow-heavy), var(--glow);
-        }
-
-        .channel-icon, .friend-icon {
-            width: 20px;
-            height: 20px;
-            margin-right: 15px;
-            color: var(--interactive-normal);
-            text-shadow: var(--shadow-light);
-            font-size: 16px;
-        }
-
-        .channel-name, .friend-name {
-            flex: 1;
-            font-size: 16px;
-            color: var(--text-normal);
-            text-shadow: var(--shadow-light);
-        }
-
-        .friend-action {
-            background: var(--success);
-            color: white;
-            border: none;
-            padding: 6px 12px;
-            border-radius: 6px;
-            font-size: 12px;
-            cursor: pointer;
-            box-shadow: var(--shadow-light);
-            transition: all 0.3s;
-        }
-
-        .friend-action:hover {
-            background: linear-gradient(135deg, #43b581, #57f287);
-            box-shadow: var(--shadow-medium), 0 0 10px rgba(87, 242, 135, 0.5);
-            transform: scale(1.05);
-        }
-
-        /* Profile Section */
-        .profile-section {
-            padding: 15px 20px;
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            cursor: pointer;
-            transition: all 0.3s;
-            box-shadow: var(--shadow-light);
-            background: var(--background-tertiary);
-            margin: 10px;
-            border-radius: 8px;
-        }
-
-        .profile-section:hover {
-            background: var(--background-modifier-hover);
-            box-shadow: var(--shadow-medium);
-        }
-
-        .profile-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            margin-right: 15px;
-            background: var(--interactive-normal);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: var(--shadow-medium);
-            color: white;
-            font-size: 16px;
-            font-weight: bold;
-        }
-
-        .profile-name {
-            font-size: 16px;
-            color: var(--text-normal);
-            text-shadow: var(--shadow-light);
-        }
-
-        /* Main Chat Area */
-        .main-chat {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            min-width: 0;
-            background: var(--background-primary);
-        }
-
-        .chat-header {
-            padding: 15px 20px;
-            background: var(--background-secondary);
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            box-shadow: var(--shadow-light);
-        }
-
-        .channel-title {
-           
+    </script>
+</body>
+</html>
