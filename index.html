@@ -3,158 +3,340 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Modern Single-File Web App</title>
-    <!-- Load Tailwind CSS via CDN -->
+    <title>SquidChat - Real-Time Chat</title>
+    <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Inter Font -->
     <style>
-        /* Custom font import for "Inter" */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
-        body {
-            font-family: 'Inter', sans-serif;
-            transition: background-color 0.3s ease;
+        body { font-family: 'Inter', sans-serif; }
+        /* Custom scrollbar for message area */
+        #messages-container::-webkit-scrollbar {
+            width: 8px;
         }
-        /* Style for the dark theme */
-        .dark-bg {
-            background-color: #1a1a2e; /* Deep purple/blue */
+        #messages-container::-webkit-scrollbar-thumb {
+            background-color: #4f46e5; /* Indigo-600 */
+            border-radius: 4px;
         }
-        .text-accent {
-            color: #ff6b6b; /* Vibrant coral red */
+        #messages-container::-webkit-scrollbar-track {
+            background-color: #e5e7eb; /* Gray-200 */
         }
     </style>
 </head>
-<body class="dark-bg min-h-screen text-gray-100">
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
 
-    <!-- Header and Navigation -->
-    <header class="p-4 md:p-6 shadow-xl sticky top-0 z-10 bg-opacity-95 bg-[#1a1a2e]">
-        <div class="max-w-7xl mx-auto flex justify-between items-center">
-            <!-- Logo/Site Title -->
-            <a href="#" class="text-2xl font-bold text-accent hover:opacity-80 transition duration-300">
-                Project|Gemini
-            </a>
+    <!-- Main Container -->
+    <div id="app-container" class="w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col md:flex-row h-[90vh] md:h-[800px]">
+        
+        <!-- Sidebar (User Info / Mobile Header) -->
+        <div id="sidebar" class="w-full md:w-1/4 bg-indigo-600 text-white p-4 flex flex-col justify-between transition-all duration-300">
+            <div class="flex items-center space-x-3 mb-6">
+                <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                <h1 class="text-2xl font-bold">SquidChat</h1>
+            </div>
 
-            <!-- Desktop Navigation Links -->
-            <nav class="hidden md:flex space-x-6 text-lg">
-                <a href="#features" class="hover:text-accent transition duration-300">Features</a>
-                <a href="#pricing" class="hover:text-accent transition duration-300">Pricing</a>
-                <a href="#contact" class="hover:text-accent transition duration-300">Contact</a>
-            </nav>
-
-            <!-- Mobile Menu Button (Icon will be added with JavaScript) -->
-            <button id="mobile-menu-button" class="md:hidden p-2 rounded-lg hover:bg-[#2c2c4b] transition duration-300">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-100" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
+            <div id="user-info" class="flex flex-col items-center space-y-3 text-center transition-opacity duration-500 opacity-0">
+                <!-- User data will be injected here -->
+            </div>
+            
+            <button id="logout-button" class="mt-4 bg-indigo-700 hover:bg-indigo-800 text-sm font-semibold py-2 px-4 rounded-xl shadow-md transition duration-300 hidden" onclick="handleLogout()">
+                Logout
             </button>
         </div>
-    </header>
 
-    <!-- Mobile Menu Dropdown (Hidden by default) -->
-    <div id="mobile-menu" class="hidden md:hidden bg-[#2c2c4b] p-4 shadow-lg">
-        <nav class="flex flex-col space-y-3 text-center">
-            <a href="#features" class="block p-2 rounded-lg hover:bg-[#3d3d66]">Features</a>
-            <a href="#pricing" class="block p-2 rounded-lg hover:bg-[#3d3d66]">Pricing</a>
-            <a href="#contact" class="block p-2 rounded-lg hover:bg-[#3d3d66]">Contact</a>
-        </nav>
+        <!-- Chat Area / Login Area -->
+        <div id="main-area" class="w-full md:w-3/4 flex flex-col justify-center items-center p-6">
+            
+            <!-- Login View -->
+            <div id="login-view" class="w-full max-w-sm text-center">
+                <h2 class="text-3xl font-extrabold text-gray-800 mb-6">Join the Chat</h2>
+                <p class="text-gray-500 mb-8">Sign in with your Google account to start squidding!</p>
+                <button id="google-signin-button" class="w-full flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-xl shadow-lg transition duration-300 transform hover:scale-[1.02]" onclick="signInWithGoogle()">
+                    <svg class="w-5 h-5 mr-3" fill="currentColor" viewBox="0 0 24 24"><path d="M22.5 12.583c0-.794-.067-1.579-.19-2.348H12v4.417h5.943a5.378 5.378 0 01-2.348 3.551v2.85h3.662c2.14-1.976 3.375-4.908 3.375-8.52z" fill="#4285f4"/><path d="M12 23c3.045 0 5.662-1.006 7.55-2.723l-3.662-2.85c-.99.66-2.277 1.056-3.888 1.056-2.997 0-5.54-2.016-6.444-4.717H1.96V15.72c2.188 4.304 6.643 7.28 10.04 7.28z" fill="#34a853"/><path d="M5.556 14.503c-.247-.66-.388-1.353-.388-2.06s.141-1.4.388-2.06V7.477H1.96A11.978 11.978 0 000 12c0 2.083.473 4.04 1.305 5.76L5.556 14.5z" fill="#fbbc05"/><path d="M12 4.195c1.642 0 3.12.56 4.288 1.662L19.12 3.03C17.02 1.14 14.653 0 12 0c-3.4 0-7.855 2.976-10.043 7.28l3.966 3.087C6.46 6.21 9.003 4.195 12 4.195z" fill="#ea4335"/></svg>
+                    Sign In with Google
+                </button>
+            </div>
+
+            <!-- Chat View (Initially hidden) -->
+            <div id="chat-view" class="hidden w-full h-full flex flex-col">
+                <div id="messages-container" class="flex-grow p-4 overflow-y-auto space-y-4 bg-gray-50 rounded-xl mb-4 shadow-inner">
+                    <!-- Messages will be injected here -->
+                    <div class="text-center text-gray-400 pt-10">Start chatting now!</div>
+                </div>
+
+                <!-- Message Input Form -->
+                <form id="message-form" class="flex space-x-2">
+                    <input type="text" id="message-input" placeholder="Type your message..."
+                           class="flex-grow p-3 border border-gray-300 rounded-xl focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 shadow-md" required />
+                    <button type="submit" id="send-button"
+                            class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition duration-300 transform hover:scale-[1.02] active:scale-95">
+                        Send
+                    </button>
+                </form>
+            </div>
+
+            <!-- Error/Loading Modal -->
+            <div id="status-message" class="fixed top-4 right-4 p-3 bg-yellow-100 border border-yellow-400 text-yellow-800 rounded-lg shadow-xl hidden transition-opacity duration-300 opacity-0" role="alert">
+                A status message will appear here.
+            </div>
+
+        </div>
     </div>
 
-    <!-- Main Content Area -->
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20">
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithCustomToken, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, collection, query, orderBy, onSnapshot, 
+            addDoc, serverTimestamp, doc, setDoc, getDoc 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        <!-- Hero Section -->
-        <section class="text-center mb-20">
-            <h1 class="text-4xl sm:text-6xl font-extrabold mb-4 leading-tight">
-                Build <span class="text-accent">Anything</span>. Launch <span class="text-accent">Faster</span>.
-            </h1>
-            <p class="text-xl text-gray-400 mb-8 max-w-3xl mx-auto">
-                The ultimate one-file solution for your next project. Minimal complexity, maximum impact.
-            </p>
-            <div class="flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-4">
-                <button class="bg-accent text-[#1a1a2e] font-bold py-3 px-8 rounded-xl shadow-lg hover:shadow-xl transition duration-300 transform hover:scale-105">
-                    Get Started Now
-                </button>
-                <button class="bg-transparent border border-gray-500 text-gray-100 font-bold py-3 px-8 rounded-xl hover:bg-[#2c2c4b] transition duration-300">
-                    Learn More
-                </button>
-            </div>
-        </section>
+        // --- GLOBAL VARIABLES (provided by the Canvas environment) ---
+        // Ensure these variables are defined globally in the scope of the script
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        // --- END GLOBAL VARIABLES ---
 
-        <!-- Features Section -->
-        <section id="features" class="pt-10 mb-20">
-            <h2 class="text-3xl font-bold text-center mb-12 text-gray-50">Core Features</h2>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+        // Firebase Initialization
+        let app;
+        let db;
+        let auth;
+        let currentUser = null;
+        const MESSAGES_COLLECTION_PATH = 'artifacts/' + appId + '/public/data/messages';
+        const USER_PROFILES_COLLECTION_PATH = 'artifacts/' + appId + '/public/data/userProfiles';
 
-                <!-- Feature Card 1 -->
-                <div class="bg-[#2c2c4b] p-6 rounded-2xl shadow-lg hover:shadow-2xl transition duration-500 transform hover:-translate-y-1">
-                    <div class="text-accent mb-4">
-                        <!-- Icon: Responsive Design -->
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1v-3.25m-7.25 0h12.5M12 15a4 4 0 01-4-4V5a4 4 0 018 0v6a4 4 0 01-4 4z" />
-                        </svg>
-                    </div>
-                    <h3 class="text-xl font-semibold mb-3">Fully Responsive</h3>
-                    <p class="text-gray-400">The layout adapts seamlessly to any screen size—mobile, tablet, and desktop—without extra effort.</p>
-                </div>
+        // UI Elements
+        const loginView = document.getElementById('login-view');
+        const chatView = document.getElementById('chat-view');
+        const userInfoDiv = document.getElementById('user-info');
+        const logoutButton = document.getElementById('logout-button');
+        const messageForm = document.getElementById('message-form');
+        const messageInput = document.getElementById('message-input');
+        const messagesContainer = document.getElementById('messages-container');
+        const statusMessageDiv = document.getElementById('status-message');
 
-                <!-- Feature Card 2 -->
-                <div class="bg-[#2c2c4b] p-6 rounded-2xl shadow-lg hover:shadow-2xl transition duration-500 transform hover:-translate-y-1">
-                    <div class="text-accent mb-4">
-                        <!-- Icon: Fast Deployment -->
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                        </svg>
-                    </div>
-                    <h3 class="text-xl font-semibold mb-3">Zero Dependencies</h3>
-                    <p class="text-gray-400">Everything is contained in this single file, making deployment instant and maintenance trivial.</p>
-                </div>
+        // State function to show status messages
+        function showStatus(message, isError = false) {
+            statusMessageDiv.textContent = message;
+            statusMessageDiv.classList.remove('hidden', 'bg-yellow-100', 'border-yellow-400', 'text-yellow-800', 'bg-red-100', 'border-red-400', 'text-red-800');
+            statusMessageDiv.classList.add(isError ? 'bg-red-100' : 'bg-yellow-100', isError ? 'border-red-400' : 'border-yellow-400', isError ? 'text-red-800' : 'text-yellow-800', 'opacity-100');
+            
+            setTimeout(() => {
+                statusMessageDiv.classList.remove('opacity-100');
+                statusMessageDiv.classList.add('opacity-0');
+                setTimeout(() => statusMessageDiv.classList.add('hidden'), 300);
+            }, 5000);
+        }
 
-                <!-- Feature Card 3 -->
-                <div class="bg-[#2c2c4b] p-6 rounded-2xl shadow-lg hover:shadow-2xl transition duration-500 transform hover:-translate-y-1">
-                    <div class="text-accent mb-4">
-                        <!-- Icon: Modern Styling -->
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343h2.571m-9 3.428h9m-9 3.429h5.143" />
-                        </svg>
-                    </div>
-                    <h3 class="text-xl font-semibold mb-3">Dark & Stylish Theme</h3>
-                    <p class="text-gray-400">A clean, dark color palette with vibrant accents to give your site a professional, modern look.</p>
-                </div>
+        // 1. Core Firebase Setup
+        async function initializeAppAndAuth() {
+            try {
+                if (Object.keys(firebaseConfig).length > 0) {
+                    app = initializeApp(firebaseConfig);
+                    db = getFirestore(app);
+                    auth = getAuth(app);
+                    // setLogLevel('Debug'); // Uncomment for debugging
 
-            </div>
-        </section>
-    </main>
-
-    <!-- Footer -->
-    <footer class="bg-[#1a1a2e] border-t border-[#2c2c4b] p-8 mt-12">
-        <div class="max-w-7xl mx-auto text-center text-gray-500 text-sm">
-            <p>&copy; 2025 Single File Template. All rights reserved.</p>
-            <p class="mt-2">Made with <span class="text-accent">&hearts;</span> and Tailwind CSS.</p>
-        </div>
-    </footer>
-
-    <!-- JavaScript for Mobile Menu Toggle -->
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const button = document.getElementById('mobile-menu-button');
-            const menu = document.getElementById('mobile-menu');
-            const links = menu.querySelectorAll('a');
-
-            // Function to toggle the menu visibility
-            const toggleMenu = () => {
-                menu.classList.toggle('hidden');
-            };
-
-            // Event listener for the button click
-            button.addEventListener('click', toggleMenu);
-
-            // Close menu when a link is clicked (for smoother navigation)
-            links.forEach(link => {
-                link.addEventListener('click', () => {
-                    if (!menu.classList.contains('hidden')) {
-                        toggleMenu();
+                    // Use custom token for persistent login
+                    if (initialAuthToken) {
+                        await signInWithCustomToken(auth, initialAuthToken).catch(e => {
+                            console.error("Custom token sign-in failed:", e);
+                            // If token fails, onAuthStateChanged will handle the unauthenticated state
+                        });
                     }
+                    
+                    // Auth state listener for persistence and UI changes
+                    onAuthStateChanged(auth, (user) => {
+                        currentUser = user;
+                        if (user) {
+                            handleUserSignedIn(user);
+                        } else {
+                            handleUserSignedOut();
+                        }
+                    });
+                } else {
+                    showStatus("Firebase configuration missing. Chat disabled.", true);
+                }
+            } catch (error) {
+                console.error("Initialization Error:", error);
+                showStatus("Failed to initialize app.", true);
+            }
+        }
+
+        // 2. Authentication Functions
+        window.signInWithGoogle = async function() {
+            const provider = new GoogleAuthProvider();
+            try {
+                const result = await signInWithPopup(auth, provider);
+                const user = result.user;
+                // Store/update user profile in Firestore
+                await setDoc(doc(db, USER_PROFILES_COLLECTION_PATH, user.uid), {
+                    uid: user.uid,
+                    displayName: user.displayName || 'Anonymous User',
+                    photoURL: user.photoURL || '',
+                    lastSeen: serverTimestamp()
+                }, { merge: true });
+                showStatus("Signed in successfully with Google!");
+            } catch (error) {
+                console.error("Google Sign-In Error:", error);
+                showStatus(`Sign-in failed: ${error.message}`, true);
+            }
+        }
+
+        window.handleLogout = async function() {
+            try {
+                await signOut(auth);
+                showStatus("Logged out successfully.");
+            } catch (error) {
+                console.error("Logout Error:", error);
+                showStatus("Logout failed. Please try again.", true);
+            }
+        }
+
+        // 3. UI State Handlers
+        function handleUserSignedIn(user) {
+            // Update UI for signed-in state
+            loginView.classList.add('hidden');
+            chatView.classList.remove('hidden');
+
+            // Set user info in sidebar
+            userInfoDiv.innerHTML = `
+                <img src="${user.photoURL || 'https://placehold.co/100x100/4f46e5/ffffff?text=User'}" 
+                     class="w-20 h-20 rounded-full border-4 border-white shadow-xl mb-2" 
+                     onerror="this.onerror=null;this.src='https://placehold.co/100x100/4f46e5/ffffff?text=User';">
+                <p class="text-lg font-bold">${user.displayName || 'Anonymous'}</p>
+                <p class="text-sm text-indigo-200 break-all">${user.email}</p>
+            `;
+            userInfoDiv.classList.remove('opacity-0');
+            userInfoDiv.classList.add('opacity-100');
+            logoutButton.classList.remove('hidden');
+
+            // Start loading messages
+            loadMessages();
+        }
+
+        function handleUserSignedOut() {
+            // Update UI for signed-out state
+            loginView.classList.remove('hidden');
+            chatView.classList.add('hidden');
+            
+            userInfoDiv.classList.add('opacity-0');
+            userInfoDiv.classList.remove('opacity-100');
+            userInfoDiv.innerHTML = '';
+            logoutButton.classList.add('hidden');
+
+            // Clear messages
+            messagesContainer.innerHTML = '<div class="text-center text-gray-400 pt-10">Start chatting now!</div>';
+        }
+
+        // 4. Message Display and Sending
+        function createMessageElement(msg) {
+            const isMine = currentUser && currentUser.uid === msg.uid;
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `flex ${isMine ? 'justify-end' : 'justify-start'}`;
+
+            // Format timestamp
+            const date = msg.timestamp ? new Date(msg.timestamp.seconds * 1000) : new Date();
+            const timeString = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            messageDiv.innerHTML = `
+                <div class="flex items-start max-w-xs sm:max-w-md ${isMine ? 'flex-row-reverse' : 'flex-row'} space-x-2 ${isMine ? 'sm:space-x-reverse' : ''}">
+                    <img src="${msg.photoURL || 'https://placehold.co/32x32/ccc/333?text=?'}" 
+                         class="w-8 h-8 rounded-full shadow-md"
+                         onerror="this.onerror=null;this.src='https://placehold.co/32x32/ccc/333?text=?';">
+                    
+                    <div class="p-3 rounded-xl shadow-md ${isMine ? 'bg-indigo-500 text-white rounded-tr-none' : 'bg-gray-200 text-gray-800 rounded-tl-none'}">
+                        <p class="text-xs font-semibold mb-1 ${isMine ? 'text-indigo-200' : 'text-indigo-600'}">${msg.displayName}</p>
+                        <p class="text-sm break-words">${msg.text}</p>
+                        <span class="text-[10px] block mt-1 ${isMine ? 'text-indigo-300' : 'text-gray-500'} text-right">${timeString}</span>
+                    </div>
+                </div>
+            `;
+            return messageDiv;
+        }
+
+        function loadMessages() {
+            // Query: Public messages collection, ordered by timestamp
+            const messagesQuery = query(
+                collection(db, MESSAGES_COLLECTION_PATH),
+                // Note: orderBy is commented out as it requires indexing and can fail in Canvas
+                // If you want sorted messages, fetch all and sort them in JS.
+                // orderBy('timestamp', 'asc')
+            );
+            
+            // Real-time listener
+            onSnapshot(messagesQuery, async (snapshot) => {
+                const messages = [];
+                snapshot.forEach((doc) => {
+                    messages.push({ id: doc.id, ...doc.data() });
                 });
+
+                // Sort messages manually by timestamp (client-side)
+                messages.sort((a, b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
+
+                messagesContainer.innerHTML = ''; // Clear existing
+                if (messages.length === 0) {
+                     messagesContainer.innerHTML = '<div class="text-center text-gray-400 pt-10">Start chatting now!</div>';
+                }
+
+                const fragment = document.createDocumentFragment();
+                messages.forEach(msg => {
+                    fragment.appendChild(createMessageElement(msg));
+                });
+                messagesContainer.appendChild(fragment);
+
+                // Scroll to the bottom
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+            }, (error) => {
+                console.error("Error fetching messages:", error);
+                showStatus("Failed to load messages in real-time.", true);
             });
-        });
+        }
+
+        async function sendMessage(event) {
+            event.preventDefault();
+            
+            if (!currentUser) {
+                showStatus("You must be signed in to send messages.", true);
+                return;
+            }
+
+            const text = messageInput.value.trim();
+            if (text === "") return;
+
+            messageInput.disabled = true;
+            document.getElementById('send-button').disabled = true;
+
+            try {
+                await addDoc(collection(db, MESSAGES_COLLECTION_PATH), {
+                    uid: currentUser.uid,
+                    displayName: currentUser.displayName || 'Anonymous',
+                    photoURL: currentUser.photoURL || '',
+                    text: text,
+                    timestamp: serverTimestamp()
+                });
+
+                messageInput.value = ''; // Clear input on success
+            } catch (error) {
+                console.error("Error sending message:", error);
+                showStatus("Failed to send message.", true);
+            } finally {
+                messageInput.disabled = false;
+                document.getElementById('send-button').disabled = false;
+                messageInput.focus();
+            }
+        }
+
+        // --- Event Listeners and Initial Load ---
+        messageForm.addEventListener('submit', sendMessage);
+
+        // Start the application setup
+        window.onload = initializeAppAndAuth;
+
     </script>
 </body>
 </html>
