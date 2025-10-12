@@ -249,6 +249,7 @@
             activeChat: null,
             isUserIdUnique: false, // New state for registration validation
             pendingUserId: '',      // New state for registration input
+            isSubmitting: false,    // State to prevent double-submits
         };
 
         const router = {
@@ -342,6 +343,7 @@
 
         /**
          * Real-time listener to check if the proposed @user_id is unique.
+         * Used for instant feedback while typing.
          */
         function checkUserIdUniqueness(newUserId) {
             // Cleanup existing listener if it exists
@@ -369,19 +371,25 @@
             profileUniquenessListener = onSnapshot(q, (snapshot) => {
                 // If the snapshot size is 0, the ID is unique.
                 const isUnique = snapshot.empty;
-                appState.isUserIdUnique = isUnique;
+                
+                // CRITICAL FIX: Only update the state if the ID being checked
+                // is still the one currently in the input field. This prevents
+                // race conditions where a very fast check completes after a slow one.
+                const inputElement = document.getElementById('user-id-input');
+                if (inputElement && inputElement.value.trim() === newUserId) {
+                    appState.isUserIdUnique = isUnique;
 
-                // Provide instant feedback to the user
-                if (!isUnique) {
-                    router.setError(`The ID ${newUserId} is already taken.`);
-                } else if (newUserId.length >= 3) {
-                    router.clearError(); // Clear error only if unique and valid length
+                    // Provide instant feedback to the user
+                    if (!isUnique) {
+                        router.setError(`The ID ${newUserId} is already taken.`);
+                    } else if (newUserId.length >= 3) {
+                        router.clearError(); // Clear error only if unique and valid length
+                    }
                 }
                 
                 renderApp();
             }, (error) => {
                 console.error("Error checking user ID uniqueness in real-time:", error);
-                // The most likely cause is still the database being offline/unreachable.
                 router.setError("Error checking ID uniqueness. Check console for database connectivity issues.");
                 appState.isUserIdUnique = false;
                 renderApp();
@@ -389,29 +397,63 @@
         }
         
         /**
+         * BLOCKING check for uniqueness used during the final registration attempt.
+         * Returns true if unique, false otherwise.
+         */
+        async function checkUserIdUniquenessBlocking(checkUserId) {
+             try {
+                const appId = explicitFirebaseConfig.projectId;
+                const profilesCollection = collection(db, `artifacts/${appId}/public/data/profiles`);
+                const q = query(profilesCollection, where("userId", "==", checkUserId));
+                
+                // Use getDocs instead of onSnapshot for a one-time check
+                const snapshot = await getDocs(q);
+                return snapshot.empty; 
+             } catch (error) {
+                 console.error("Error performing blocking uniqueness check:", error);
+                 router.setError("Critical error during final ID check. Please try again.");
+                 return false; // Assume non-unique/failed check to be safe
+             }
+        }
+        
+        /**
          * Saves the new user profile to Firestore and completes registration.
-         * NOTE: This is called by the form submit handler now.
          */
         window.handleProfileRegistration = async (event) => {
-            // This is the critical change: prevent the default form submission/refresh
             if (event) event.preventDefault(); 
             
+            if (appState.isSubmitting) return; // Prevent double submit
+
+            appState.isSubmitting = true;
             router.clearError();
+            renderApp(); // Redraw to show loading state if needed
+
             const inputElement = document.getElementById('user-id-input');
             const newUserId = inputElement.value.trim();
 
-            if (!newUserId || !newUserId.startsWith('@')) {
-                showCustomAlert("User ID must start with '@' and cannot be empty.");
+            if (!newUserId || !newUserId.startsWith('@') || newUserId.length < 3) {
+                showCustomAlert("User ID must start with '@' and be at least 3 characters long (excluding @).");
+                appState.isSubmitting = false;
+                renderApp();
                 return;
             }
-            if (!appState.isUserIdUnique) {
-                // If the button was clicked but the check is still pending or failed
-                showCustomAlert("Please choose a unique User ID. That one is already taken or still being checked.");
+
+            // CRITICAL FIX: Perform the blocking check
+            const isTrulyUnique = await checkUserIdUniquenessBlocking(newUserId);
+            
+            if (!isTrulyUnique) {
+                router.setError(`The ID ${newUserId} is already taken.`);
+                showCustomAlert("Please choose a unique User ID. That one is already taken.");
+                appState.isUserIdUnique = false; // Update state based on blocking check
+                appState.isSubmitting = false;
+                renderApp();
                 return;
             }
+            
             if (!appState.user || !appState.user.uid) {
                 showCustomAlert("Authentication error. Please try logging in again.");
                 router.setView('auth');
+                appState.isSubmitting = false;
                 return;
             }
 
@@ -433,12 +475,15 @@
                 await setDoc(profileRef, userProfile);
 
                 userDisplayName = newUserId;
-                router.setView('dashboard');
                 showCustomAlert(`Success! Welcome, ${newUserId}!`);
+                router.setView('dashboard'); // Route to dashboard only AFTER successful save
 
             } catch (error) {
                 console.error("Error saving profile to Firestore:", error);
                 router.setError(`Registration failed: ${error.message}. Check console for details.`);
+            } finally {
+                appState.isSubmitting = false;
+                renderApp();
             }
         };
 
@@ -475,7 +520,8 @@
 
         // Corrected input handler: Removed Enter key logic (now handled by form submit)
         window.handleUserIdInput = (event) => {
-            const input = event.target.value.trim();
+            const input = event.target.value; // Do not use .trim() here, use it inside the registration check.
+            
             // Basic sanitization/format enforcement
             let cleanId = input.toLowerCase().replace(/[^a-z0-9_@]/g, '');
             if (!cleanId.startsWith('@') && cleanId.length > 0) {
@@ -488,9 +534,19 @@
             if (cleanId.length > 21) {
                 cleanId = cleanId.substring(0, 21);
             }
+            
+            // Set the value back to the sanitized version
+            event.target.value = cleanId; 
 
-            event.target.value = cleanId; // Update the input field
-            checkUserIdUniqueness(cleanId);
+            // Only run the heavy check if the value is long enough
+            if (cleanId.length > 2) {
+                checkUserIdUniqueness(cleanId);
+            } else {
+                appState.isUserIdUnique = false;
+                router.clearError();
+                appState.pendingUserId = cleanId;
+                renderApp();
+            }
         };
         
         window.openProfileModal = () => {
@@ -530,7 +586,7 @@
         }
 
         function renderProfileSetupView() {
-            const isButtonEnabled = appState.isUserIdUnique && appState.pendingUserId.length > 2 && appState.pendingUserId.startsWith('@');
+            const isButtonEnabled = appState.isUserIdUnique && appState.pendingUserId.length > 2 && appState.pendingUserId.startsWith('@') && !appState.isSubmitting;
             const errorClass = appState.errorMessage ? 'border-red-500' : 'border-indigo-500';
             
             return `
@@ -551,6 +607,7 @@
                                 onkeyup="handleUserIdInput(event)"
                                 maxlength="21"
                                 required
+                                ${appState.isSubmitting ? 'disabled' : ''}
                             />
                             ${appState.errorMessage ? `<p class="text-red-400 text-sm mt-2">${appState.errorMessage}</p>` : ''}
                         </div>
@@ -564,7 +621,7 @@
                             ${isButtonEnabled ? '' : 'disabled'}"
                             ${isButtonEnabled ? '' : 'disabled'}
                         >
-                            Complete Registration
+                            ${appState.isSubmitting ? 'Registering...' : 'Complete Registration'}
                         </button>
                     </form>
 
