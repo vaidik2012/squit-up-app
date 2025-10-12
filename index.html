@@ -252,7 +252,8 @@
         import { 
             getFirestore, doc, getDoc, setDoc, updateDoc, 
             onSnapshot, collection, query, where, arrayUnion, 
-            arrayRemove, setLogLevel, writeBatch, getDocs, deleteDoc
+            arrayRemove, setLogLevel, writeBatch, getDocs, deleteDoc,
+            addDoc, serverTimestamp, or, orderBy
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
         setLogLevel('Debug');
@@ -262,7 +263,19 @@
         
         // Canvas environment variables (MUST be used)
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        
+        // Use the provided config if available, otherwise use your hardcoded one as fallback
+        const customFirebaseConfig = {
+             apiKey: "AIzaSyB1zvVHaBrbzX5iA9fBVNGa_3sY1-WCSpY",
+             authDomain: "squit-up-auth.firebaseapp.com",
+             projectId: "squit-up-auth",
+             storageBucket: "squit-up-auth.firebasestorage.app",
+             messagingSenderId: "503910898443",
+             appId: "1:503910898443:web:c5a56eb24cd4f183d8600e",
+             measurementId: "G-K4LHFHSNJC"
+        };
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : customFirebaseConfig;
+
 
         let appState = {
             userId: null,
@@ -273,7 +286,6 @@
             usersList: [],
             view: 'loading', // 'loading', 'auth', 'dashboard'
             activeChatId: null, // UID of the friend currently chatting with
-            // CRITICAL: This is the local, NON-PERSISTENT message storage!
             chatMessages: {}, // Keyed by friendId: [{sender: uid, text: "msg", timestamp: "ISO"}] 
             isAuthReady: false,
             isProfileModalOpen: false,
@@ -282,9 +294,19 @@
 
         // --- Firestore Paths ---
         const PUBLIC_COLLECTION = `artifacts/${appId}/public/data/users`;
-        
+        const CHAT_COLLECTION = `artifacts/${appId}/public/data/chats`;
+
         /** Gets the user document reference */
         const getUserDocRef = (uid) => doc(db, PUBLIC_COLLECTION, uid);
+        
+        /** Gets the chat collection reference for the two users.
+         * The document ID is always UIDA_UIDB where UIDA < UIDB lexicographically.
+         */
+        function getChatDocRef(uidA, uidB) {
+            const sortedUids = [uidA, uidB].sort();
+            const chatId = sortedUids.join('_');
+            return collection(db, CHAT_COLLECTION, chatId, 'messages');
+        }
 
         // --- Utility Functions ---
 
@@ -356,7 +378,7 @@
             if (appState.userId && !appState.userProfile) {
                 // Profile setup view
                 const tempProfile = {
-                    displayName: auth.currentUser?.email.split('@')[0] || '',
+                    displayName: auth.currentUser?.email ? auth.currentUser.email.split('@')[0] : 'New User',
                     email: auth.currentUser?.email || '',
                     bio: '', pronouns: '', status: 'online', pfpUrl: '', bannerUrl: ''
                 };
@@ -383,6 +405,9 @@
         }
 
         function renderProfileForm(profile, isSetup = false) {
+            // Default PFP URL if not provided
+            const defaultPfp = 'https://placehold.co/40x40/4f46e5/ffffff?text=U';
+
             return `
                 <div class="space-y-3 text-left">
                     <label class="block text-sm font-medium text-gray-300">Display Name</label>
@@ -408,7 +433,7 @@
                     </div>
 
                     <label class="block text-sm font-medium text-gray-300">PFP URL (PNG/JPG)</label>
-                    <input id="pfpUrlInput" type="text" value="${profile.pfpUrl || ''}" placeholder="Image URL for profile picture" class="w-full p-2 rounded-lg bg-gray-600 border border-gray-500 text-white focus:ring-indigo-500">
+                    <input id="pfpUrlInput" type="text" value="${profile.pfpUrl || ''}" placeholder="Image URL for profile picture (e.g., ${defaultPfp})" class="w-full p-2 rounded-lg bg-gray-600 border border-gray-500 text-white focus:ring-indigo-500">
                     
                     <label class="block text-sm font-medium text-gray-300">Banner URL (PNG/JPG)</label>
                     <input id="bannerUrlInput" type="text" value="${profile.bannerUrl || ''}" placeholder="Image URL for profile banner" class="w-full p-2 rounded-lg bg-gray-600 border border-gray-500 text-white focus:ring-indigo-500">
@@ -424,6 +449,8 @@
             
             const profile = appState.userProfile;
             const statusColor = profile.status === 'online' ? 'bg-green-500' : profile.status === 'idle' ? 'bg-yellow-500' : profile.status === 'dnd' ? 'bg-red-500' : 'bg-gray-500';
+            const defaultPfp = 'https://placehold.co/40x40/4f46e5/ffffff?text=U';
+
 
             sidebar.innerHTML = `
                 <div class="sidebar-header flex justify-between items-center">
@@ -462,7 +489,7 @@
                                 ${appState.activeChatId === friend.uid ? 'bg-indigo-700/50' : 'hover:bg-gray-700'}">
                                 
                                 <div class="relative">
-                                    <img src="${friend.pfpUrl || 'https://placehold.co/40x40/4f46e5/ffffff?text=U'}" alt="${friend.displayName}" class="w-10 h-10 rounded-full object-cover" onerror="this.onerror=null;this.src='https://placehold.co/40x40/4f46e5/ffffff?text=U';">
+                                    <img src="${friend.pfpUrl || defaultPfp}" alt="${friend.displayName}" class="w-10 h-10 rounded-full object-cover" onerror="this.onerror=null;this.src='${defaultPfp}';">
                                     <span class="absolute right-0 bottom-0 w-3 h-3 ${friend.status === 'online' ? 'bg-green-500' : 'bg-gray-500'} rounded-full border-2 border-[#1f2937]"></span>
                                 </div>
                                 <div class="ml-3">
@@ -478,7 +505,7 @@
                 <!-- Profile Card Footer -->
                 <div onclick="openModal('editProfile')" class="profile-card p-3 bg-gray-900 border-t border-gray-700 flex items-center transition duration-200">
                     <div class="relative">
-                        <img src="${profile.pfpUrl || 'https://placehold.co/40x40/4f46e5/ffffff?text=U'}" alt="PFP" class="w-10 h-10 rounded-full object-cover" onerror="this.onerror=null;this.src='https://placehold.co/40x40/4f46e5/ffffff?text=U';">
+                        <img src="${profile.pfpUrl || defaultPfp}" alt="PFP" class="w-10 h-10 rounded-full object-cover" onerror="this.onerror=null;this.src='${defaultPfp}';">
                         <span class="absolute right-0 bottom-0 w-3 h-3 ${statusColor} rounded-full border-2 border-gray-900"></span>
                     </div>
                     <div class="ml-3 overflow-hidden flex-grow">
@@ -519,14 +546,16 @@
                 bio: 'User data not found.'
             };
             
-            // Retrieve messages from the NON-PERSISTENT local state
+            // Retrieve messages from the PERSISTENT local state cache
             const messages = appState.chatMessages[friendUid] || [];
             const myUid = appState.userId;
+            const defaultPfp = 'https://placehold.co/40x40/4f46e5/ffffff?text=U';
+
 
             container.innerHTML = `
                 <!-- Chat Header -->
                 <div class="chat-header p-4 flex items-center bg-gray-800 border-b border-gray-700 shadow-md">
-                    <img src="${friend.pfpUrl}" alt="${friend.displayName}" class="w-10 h-10 rounded-full object-cover" onerror="this.onerror=null;this.src='https://placehold.co/40x40/374151/ffffff?text=U';">
+                    <img src="${friend.pfpUrl || defaultPfp}" alt="${friend.displayName}" class="w-10 h-10 rounded-full object-cover" onerror="this.onerror=null;this.src='${defaultPfp}';">
                     <div class="ml-3">
                         <p class="text-lg font-bold text-white">${friend.displayName}</p>
                         <p class="text-xs text-gray-400 truncate">${friend.bio || friend.status}</p>
@@ -535,11 +564,13 @@
 
                 <!-- Messages Container -->
                 <div id="messagesContainer" class="message-container flex-grow overflow-y-auto">
-                    ${messages.map(msg => `
+                    ${messages.length === 0 ? `<p class="text-center text-gray-500 pt-10">Start a new conversation!</p>` : messages.map(msg => `
                         <div class="flex ${msg.sender === myUid ? 'justify-end' : 'justify-start'}">
                             <div class="message-bubble ${msg.sender === myUid ? 'self-message' : 'friend-message'}">
                                 ${msg.text}
-                                <span class="block text-xs text-white/50 mt-1 text-right">${new Date(msg.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>
+                                <span class="block text-xs text-white/50 mt-1 text-right">
+                                    ${new Date(msg.timestamp?.toDate ? msg.timestamp.toDate() : msg.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                                </span>
                             </div>
                         </div>
                     `).join('')}
@@ -631,10 +662,8 @@
 
         // --- Action Handlers (Firebase integration) ---
 
-        /** * [CURRENT NON-PERSISTENT VERSION] Sends a message by updating local state and re-rendering.
-         * This function handles button click and Enter keypress events from the chat input.
-         */
-        window.sendMessage = function(event) {
+        /** Sends a message by saving it to Firestore and updating local state. */
+        window.sendMessage = async function(event) {
             // Check if triggered by Enter keypress
             if (event.type === 'keypress' && event.key !== 'Enter') return;
             if (event.key === 'Enter' || event.type === 'click') event.preventDefault(); 
@@ -645,28 +674,49 @@
 
             if (messageText === "" || !receiverUid) return;
 
-            // This is the NON-PERSISTENT part: storing the message locally in appState.
-            const newMessage = {
+            const messageData = {
                 sender: appState.userId,
                 text: messageText,
-                timestamp: new Date().toISOString()
+                timestamp: serverTimestamp() // Firestore timestamp
             };
+            
+            try {
+                const chatCollectionRef = getChatDocRef(appState.userId, receiverUid);
+                // Add the document to the chat collection
+                await addDoc(chatCollectionRef, messageData);
 
-            if (!appState.chatMessages[receiverUid]) {
-                appState.chatMessages[receiverUid] = [];
+                // Clear the input only after successful sending
+                input.value = "";
+                // The onSnapshot listener will handle the rendering of the new message
+            } catch (error) {
+                console.error("Error sending message:", error);
+                showCustomAlert("Failed to send message.", 'error');
             }
-            appState.chatMessages[receiverUid].push(newMessage);
-
-            // Clear the input and re-render the dashboard to update the chat window
-            input.value = "";
-            renderDashboardView(); 
         }
 
+        let chatUnsubscribe = null;
+
+        /** Sets the active chat and attaches the Firestore listener for messages. */
         window.setActiveChat = function(friendUid) {
+            // 1. Clean up previous listener if it exists
+            if (chatUnsubscribe) {
+                chatUnsubscribe();
+                chatUnsubscribe = null;
+            }
+            
+            // 2. Set the new active chat ID
             appState.activeChatId = friendUid;
+            
+            // 3. Setup the new chat listener
+            if (friendUid) {
+                chatUnsubscribe = setupChatListener(friendUid);
+            }
+            
+            // 4. Render the new chat view (which will initially show old messages or loading state)
             renderDashboardView(); 
         }
 
+        /** Utility to copy text to clipboard */
         window.copyToClipboard = function(elementId) {
             const element = document.getElementById(elementId);
             if (!element) return;
@@ -689,6 +739,8 @@
         window.signOut = async function(event) {
             if (event) event.stopPropagation(); // Prevent profile card click event
             try {
+                // Clean up chat listener before signing out
+                if (chatUnsubscribe) chatUnsubscribe();
                 await firebaseSignOut(auth);
                 // The onAuthStateChanged listener will handle state reset
             } catch (error) {
@@ -712,12 +764,12 @@
             
             const profileData = {
                 uid: appState.userId,
-                email: auth.currentUser.email,
+                email: auth.currentUser.email || 'N/A', // Anon users won't have an email
                 displayName: displayName,
                 bio: bio,
                 pronouns: pronouns,
                 status: status,
-                pfpUrl: pfpUrl,
+                pfpUrl: pfpUrl || 'https://placehold.co/40x40/4f46e5/ffffff?text=U',
                 bannerUrl: bannerUrl,
                 lastUpdated: new Date().toISOString()
             };
@@ -838,16 +890,45 @@
         
         // --- Listeners & Data Fetching ---
 
-        /** Fetches all public user profiles (excluding current user) for display/friend searching. */
+        /** Sets up real-time listener for messages between the two users. */
+        function setupChatListener(friendUid) {
+            if (!db || !appState.userId || !friendUid) return;
+
+            const messagesRef = getChatDocRef(appState.userId, friendUid);
+            
+            // Query for messages, sorted by timestamp ascending
+            // NOTE: Using .where() to restrict visibility based on security rules is handled implicitly
+            // by the chat ID structure (UIDA_UIDB).
+            const q = query(messagesRef, orderBy('timestamp'));
+
+            return onSnapshot(q, (snapshot) => {
+                const messages = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                
+                // Update the local state cache for the active chat
+                appState.chatMessages[friendUid] = messages;
+                
+                // Re-render the chat view if we are actively viewing this chat
+                if (appState.activeChatId === friendUid) {
+                    renderDashboardView();
+                }
+            }, (error) => {
+                console.error("Error listening to chat messages:", error);
+                showCustomAlert("Failed to load chat messages.", 'error');
+            });
+        }
+
+
+        /** Sets up real-time listener for all public user profiles (excluding current user). */
         function setupAllUsersListener() {
             if (!db) return;
             const q = query(collection(db, PUBLIC_COLLECTION), where("uid", "!=", appState.userId));
             
-            // NOTE: We don't use this list yet, but we will for a searchable user directory.
+            // We keep this listener simplified for now as the app doesn't rely heavily on this list yet.
             return onSnapshot(q, (snapshot) => {
-                const users = snapshot.docs.map(doc => doc.data());
-                // appState.usersList = users; 
-                // console.log("All other users fetched:", users.length);
+                // ...
             }, (error) => {
                 console.error("Error fetching all users:", error);
             });
@@ -875,6 +956,11 @@
                     // If we were on the auth view, transition to dashboard
                     if (appState.view === 'auth' || appState.view === 'loading') {
                         appState.view = 'dashboard';
+                    }
+                    
+                    // If the active chat is no longer a friend, clear it.
+                    if (appState.activeChatId && !appState.friends.some(f => f.uid === appState.activeChatId)) {
+                         setActiveChat(null); // Will clean up listener and clear chat view
                     }
                     
                 } else {
@@ -920,7 +1006,8 @@
                     auth = getAuth(app);
                 } catch (e) {
                     console.error("Firebase Initialization Failed:", e);
-                    document.getElementById('loadingOverlay').innerHTML = `<h3 class="text-xl text-red-400">Error: Failed to initialize Firebase. Check console.</h3>`;
+                    // Critical Error UI update
+                    document.getElementById('loadingOverlay').innerHTML = `<h3 class="text-xl text-red-400">Error: Failed to initialize Firebase. Check console for config error.</h3>`;
                     return;
                 }
             }
@@ -930,7 +1017,8 @@
                 // Clean up previous listeners
                 if (profileUnsubscribe) profileUnsubscribe();
                 if (usersUnsubscribe) usersUnsubscribe();
-                
+                if (chatUnsubscribe) chatUnsubscribe(); // Clean up chat listener
+
                 if (user) {
                     appState.userId = user.uid;
                     
