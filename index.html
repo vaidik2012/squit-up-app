@@ -106,6 +106,23 @@
         .btn-secondary:hover {
             background-color: #4b5563;
         }
+        
+        /* Google Button Style */
+        .btn-google {
+            background-color: #4285f4; /* Google Blue */
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.3s;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .btn-google:hover {
+            background-color: #357ae8;
+        }
 
         /* Chat Message Styling */
         .message-container {
@@ -248,12 +265,15 @@
     <script type="module">
         // --- Firebase Imports ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut as firebaseSignOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, 
+            signOut as firebaseSignOut, GoogleAuthProvider, signInWithPopup 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
             getFirestore, doc, getDoc, setDoc, updateDoc, 
             onSnapshot, collection, query, where, arrayUnion, 
-            arrayRemove, setLogLevel, writeBatch, getDocs, deleteDoc,
-            addDoc, serverTimestamp, or, orderBy
+            arrayRemove, setLogLevel, writeBatch,
+            addDoc, serverTimestamp, orderBy
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
         setLogLevel('Debug');
@@ -274,6 +294,7 @@
              appId: "1:503910898443:web:c5a56eb24cd4f183d8600e",
              measurementId: "G-K4LHFHSNJC"
         };
+        // CRITICAL FIX: Use the Canvas provided config if it exists
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : customFirebaseConfig;
 
 
@@ -374,34 +395,64 @@
 
         function renderAuthView() {
             const container = document.getElementById('auth-view-container');
-            // If user is authenticated but profile is missing, show setup form
-            if (appState.userId && !appState.userProfile) {
-                // Profile setup view
-                const tempProfile = {
-                    displayName: auth.currentUser?.email ? auth.currentUser.email.split('@')[0] : 'New User',
-                    email: auth.currentUser?.email || '',
-                    bio: '', pronouns: '', status: 'online', pfpUrl: '', bannerUrl: ''
-                };
-                container.innerHTML = `
-                    <div class="text-center">
-                        <h2 class="text-2xl font-bold mb-4 text-indigo-400">Welcome, ${tempProfile.displayName}!</h2>
-                        <p class="text-gray-300 mb-6">Please complete your profile.</p>
-                        <div class="bg-gray-700 p-6 rounded-lg space-y-4">
-                            ${renderProfileForm(tempProfile, true)}
-                            <button onclick="saveProfile(true)" class="btn-primary w-full">Save Profile and Enter SQUIT</button>
-                        </div>
-                        <button onclick="signOut()" class="text-gray-400 hover:text-red-400 mt-4 text-sm">Sign Out</button>
-                    </div>
-                `;
-            } else {
-                // Simple sign in/out view (Fallback/Error)
-                 container.innerHTML = `
-                    <div class="text-center">
-                        <h2 class="text-4xl font-extrabold text-yellow-400 mb-8 tracking-wider">SQUIT UP! 🚀</h2>
-                        <p class="text-gray-300 mb-6">Connecting...</p>
-                    </div>
-                `;
-            }
+            
+            container.innerHTML = `
+                <div class="text-center">
+                    <h2 class="text-4xl font-extrabold text-indigo-400 mb-8 tracking-wider">SQUIT UP! 🚀</h2>
+                    
+                    ${appState.userId && !appState.userProfile ? 
+                        // --- Profile Setup View ---
+                        (() => {
+                            const tempProfile = {
+                                displayName: auth.currentUser?.displayName || (auth.currentUser?.email ? auth.currentUser.email.split('@')[0] : 'New User'),
+                                email: auth.currentUser?.email || '',
+                                pfpUrl: auth.currentUser?.photoURL || '',
+                                bio: '', pronouns: '', status: 'online', bannerUrl: ''
+                            };
+                            return `
+                                <h3 class="text-2xl font-bold mb-4 text-white">Welcome, ${tempProfile.displayName}!</h3>
+                                <p class="text-gray-300 mb-6">First time? Complete your SQUIT profile.</p>
+                                <div class="bg-gray-700 p-6 rounded-lg space-y-4">
+                                    ${renderProfileForm(tempProfile, true)}
+                                    <button onclick="saveProfile(true)" class="btn-primary w-full">Save Profile and Enter SQUIT</button>
+                                </div>
+                                <button onclick="signOut()" class="text-gray-400 hover:text-red-400 mt-4 text-sm">Sign Out</button>
+                            `;
+                        })()
+                        : 
+                        // --- Login Options View ---
+                        `
+                            <p class="text-gray-300 mb-8">Sign in to start chatting with friends.</p>
+                            <div class="space-y-4">
+                                <!-- Google Sign-in Button -->
+                                <button onclick="signInWithGoogle()" class="btn-google w-full">
+                                    <svg class="w-5 h-5 mr-3" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M44.5 20H24V28.5H35.3C34.5 32.5 30.2 35.3 24 35.3C16.8 35.3 11 29.5 11 22.3C11 15.1 16.8 9.3 24 9.3C27.5 9.3 30.4 10.6 32.7 12.8L38.8 6.7C34.8 3.1 29.7 1 24 1C11.8 1 2 10.8 2 23C2 35.2 11.8 45 24 45C36.2 45 46 35.2 46 23C46 21.6 45.8 20.3 45.5 19H44.5Z" fill="#FFC107"/>
+                                        <path d="M11 22.3C11 15.1 16.8 9.3 24 9.3C27.5 9.3 30.4 10.6 32.7 12.8L38.8 6.7C34.8 3.1 29.7 1 24 1C11.8 1 2 10.8 2 23C2 35.2 11.8 45 24 45C29.7 45 34.8 42.9 38.8 39.3L32.7 33.2C30.4 35.4 27.5 36.7 24 36.7C16.8 36.7 11 30.9 11 23.7V22.3Z" fill="#34A853"/>
+                                        <path d="M44.5 20H24V28.5H35.3C34.5 32.5 30.2 35.3 24 35.3C16.8 35.3 11 29.5 11 22.3C11 15.1 16.8 9.3 24 9.3C27.5 9.3 30.4 10.6 32.7 12.8L38.8 6.7C34.8 3.1 29.7 1 24 1C11.8 1 2 10.8 2 23C2 35.2 11.8 45 24 45C36.2 45 46 35.2 46 23C46 21.6 45.8 20.3 45.5 19H44.5Z" fill="#4285F4"/>
+                                        <path d="M24 1H2C2 10.8 11.8 23 24 23V1Z" fill="#FBBC04"/>
+                                        <path d="M24 45H2C2 35.2 11.8 23 24 23V45Z" fill="#EA4335"/>
+                                    </svg>
+                                    Sign In with Google
+                                </button>
+
+                                <div class="flex items-center">
+                                    <hr class="flex-grow border-gray-600">
+                                    <span class="px-3 text-gray-500 text-sm">OR</span>
+                                    <hr class="flex-grow border-gray-600">
+                                </div>
+                                
+                                <!-- Anonymous Sign-in (Fallback) -->
+                                <button onclick="signInAnonymouslyManual()" class="btn-secondary w-full">
+                                    Try Anonymous (No data persistence)
+                                </button>
+                                
+                                <p class="text-xs text-gray-500 mt-4">Note: Your account will be tied to your Google profile for persistence.</p>
+                            </div>
+                        `
+                    }
+                </div>
+            `;
         }
 
         function renderProfileForm(profile, isSetup = false) {
@@ -662,6 +713,30 @@
 
         // --- Action Handlers (Firebase integration) ---
 
+        /** Signs in using Google OAuth. */
+        window.signInWithGoogle = async function() {
+            const provider = new GoogleAuthProvider();
+            try {
+                await signInWithPopup(auth, provider);
+                // The onAuthStateChanged listener will handle the rest
+            } catch (error) {
+                console.error("Google Sign-In Error:", error);
+                showCustomAlert("Google Sign-in failed. Please check your Firebase setup.", 'error');
+            }
+        }
+        
+        /** Fallback anonymous sign in. */
+        window.signInAnonymouslyManual = async function() {
+            try {
+                await signInAnonymously(auth);
+                // The onAuthStateChanged listener will handle the rest
+            } catch (error) {
+                console.error("Anonymous Sign-In Error:", error);
+                showCustomAlert("Failed to sign in anonymously.", 'error');
+            }
+        }
+
+
         /** Sends a message by saving it to Firestore and updating local state. */
         window.sendMessage = async function(event) {
             // Check if triggered by Enter keypress
@@ -762,15 +837,18 @@
                 return showCustomAlert("Display Name must be at least 3 characters.", 'error');
             }
             
+            // Determine email based on auth type
+            const userEmail = auth.currentUser?.isAnonymous ? 'Anonymous User' : auth.currentUser?.email || 'N/A';
+            
             const profileData = {
                 uid: appState.userId,
-                email: auth.currentUser.email || 'N/A', // Anon users won't have an email
+                email: userEmail, 
                 displayName: displayName,
                 bio: bio,
                 pronouns: pronouns,
                 status: status,
-                pfpUrl: pfpUrl || 'https://placehold.co/40x40/4f46e5/ffffff?text=U',
-                bannerUrl: bannerUrl,
+                pfpUrl: pfpUrl || auth.currentUser?.photoURL || 'https://placehold.co/40x40/4f46e5/ffffff?text=U',
+                bannerUrl: bannerUrl || '',
                 lastUpdated: new Date().toISOString()
             };
 
@@ -897,8 +975,6 @@
             const messagesRef = getChatDocRef(appState.userId, friendUid);
             
             // Query for messages, sorted by timestamp ascending
-            // NOTE: Using .where() to restrict visibility based on security rules is handled implicitly
-            // by the chat ID structure (UIDA_UIDB).
             const q = query(messagesRef, orderBy('timestamp'));
 
             return onSnapshot(q, (snapshot) => {
@@ -924,11 +1000,11 @@
         /** Sets up real-time listener for all public user profiles (excluding current user). */
         function setupAllUsersListener() {
             if (!db) return;
-            const q = query(collection(db, PUBLIC_COLLECTION), where("uid", "!=", appState.userId));
+            // The query is simple here, mainly for demonstration of the listener setup
+            const q = query(collection(db, PUBLIC_COLLECTION)); 
             
-            // We keep this listener simplified for now as the app doesn't rely heavily on this list yet.
             return onSnapshot(q, (snapshot) => {
-                // ...
+                // Not heavily used yet, but keeps data connections open
             }, (error) => {
                 console.error("Error fetching all users:", error);
             });
@@ -1018,9 +1094,21 @@
                 if (profileUnsubscribe) profileUnsubscribe();
                 if (usersUnsubscribe) usersUnsubscribe();
                 if (chatUnsubscribe) chatUnsubscribe(); // Clean up chat listener
+                
+                // Clear state on any auth change to prevent stale data
+                appState.userId = null;
+                appState.userProfile = null;
+                appState.friends = [];
+                appState.pendingRequests = [];
+                appState.sentRequests = [];
+                appState.activeChatId = null;
+                appState.chatMessages = {}; 
 
                 if (user) {
                     appState.userId = user.uid;
+                    
+                    // If the user signed in via Google, their basic profile data (display name, email, pfp)
+                    // will be pre-filled for the profile setup screen if they don't have a Firestore profile yet.
                     
                     // 1. Setup listeners for the authenticated user's profile and social data
                     profileUnsubscribe = setupUserProfileListener(user.uid);
@@ -1029,9 +1117,9 @@
                     // The listeners will trigger the first render
                     
                 } else {
-                    // User is signed out (or initially anonymous)
+                    // User is signed out (or initially anonymous/platform token user)
                     
-                    // Attempt to sign in with custom token if available
+                    // 2. Platform Token Handling (Automatically sign-in if token is provided)
                     const initialToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
                     
                     if (initialToken) {
@@ -1039,38 +1127,15 @@
                             await signInWithCustomToken(auth, initialToken);
                             // This will trigger the 'user' block above
                         } catch (error) {
-                            console.warn("Custom token sign-in failed. Falling back to anonymous:", error.message);
-                            try {
-                                // Fallback to anonymous sign-in
-                                await signInAnonymously(auth);
-                            } catch (anonError) {
-                                console.error("Anonymous Sign In Error:", anonError);
-                                showCustomAlert("Failed to sign in anonymously.", 'error');
-                                appState.view = 'auth';
-                                appState.isAuthReady = true;
-                                renderApp();
-                            }
-                        }
-                    } else {
-                        // Sign in anonymously if no custom token
-                        try {
-                            await signInAnonymously(auth);
-                        } catch (anonError) {
-                            console.error("Anonymous Sign In Error:", anonError);
-                            showCustomAlert("Failed to sign in anonymously.", 'error');
+                            console.warn("Custom token sign-in failed. Displaying manual sign-in options.", error.message);
                             appState.view = 'auth';
                             appState.isAuthReady = true;
                             renderApp();
                         }
-                    }
-                    
-                    // Reset non-auth state
-                    appState.userId = null;
-                    appState.userProfile = null;
-                    appState.activeChatId = null;
-                    appState.chatMessages = {}; // Clear local messages on sign out
-                    if (appState.isAuthReady) {
+                    } else {
+                        // 3. Show manual login options (Google/Anonymous)
                         appState.view = 'auth';
+                        appState.isAuthReady = true;
                         renderApp();
                     }
                 }
