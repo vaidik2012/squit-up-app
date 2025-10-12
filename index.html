@@ -16,6 +16,8 @@
             font-family: 'Inter', sans-serif;
             background-color: #111827; /* Darker background */
             min-height: 100vh;
+            /* CRITICAL FIX: Ensure body does not exceed viewport height initially */
+            overflow-y: hidden; 
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -57,6 +59,8 @@
             margin-top: 1vh;
             overflow: hidden;
             border-radius: 12px;
+            /* CRITICAL FIX: Hide the whole dashboard until logged in */
+            visibility: hidden; 
         }
 
         /* Mobile Layout */
@@ -77,12 +81,20 @@
                 padding: 0 1rem;
             }
         }
+        
+        /* Ensure auth view is centered when dashboard is hidden */
+        #auth-view {
+            transition: all 0.5s;
+            margin-top: auto; /* Push down to center */
+            margin-bottom: auto; /* Pull up to center */
+        }
     </style>
 </head>
 <body>
 
     <!-- Main Container -->
-    <div id="app-container" class="w-full h-full flex flex-col items-center">
+    <!-- The min-h-screen class is controlled by JS to handle switching between auth and dashboard -->
+    <div id="app-container" class="w-full h-full flex flex-col items-center min-h-screen">
 
         <!-- Header for Auth View -->
         <header id="auth-header" class="p-6 text-center w-full max-w-xl transition-all duration-500">
@@ -95,7 +107,7 @@
         </header>
 
         <!-- Initial Authentication Container -->
-        <div id="auth-view" class="w-full max-w-md p-8 bg-gray-800 rounded-xl panel-shadow transition-all duration-500 mt-6">
+        <div id="auth-view" class="w-full max-w-md p-8 bg-gray-800 rounded-xl panel-shadow">
 
             <!-- Loading State -->
             <div id="loading-state" class="text-center text-gray-400 p-8">
@@ -131,6 +143,7 @@
 
                 <!-- Action Buttons -->
                 <div class="flex flex-col space-y-4">
+                    <!-- This button triggers the login or register function based on this.authState -->
                     <button onclick="window.App.handleAuthAction()" id="primary-auth-button" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition duration-300 btn-realistic">
                         Log In
                     </button>
@@ -141,7 +154,7 @@
             </div>
         </div>
         
-        <!-- Dashboard View (Initially hidden) -->
+        <!-- Dashboard View (Hidden until logged in) -->
         <div id="dashboard-container" class="hidden">
             
             <!-- Server List (Left-most Column) -->
@@ -280,28 +293,38 @@
                     // Set up persistent auth listener
                     onAuthStateChanged(auth, async (user) => {
                         this.updateLoadingState(false);
-                        if (user) {
+                        if (user && user.email) { 
+                            // Only consider users with an email (real accounts) logged in
                             this.currentUser = user;
                             this.currentUserId = user.uid;
                             await this.fetchUserSquitId(user.uid);
                             this.updateUI(true);
                             this.setupFirestoreListeners(); // Start listening for data
                         } else {
+                            // User is logged out OR is an anonymous user (which we don't treat as logged in for the app)
                             this.currentUser = null;
                             this.currentUserId = null;
                             this.currentUserSquitId = null;
                             this.updateUI(false);
                             this.cleanupListeners();
+                            
+                            // Ensure an anonymous user is signed in to allow Firestore access for checking user IDs
+                            if (!auth.currentUser) {
+                                await signInAnonymously(auth);
+                                console.log("Signed in anonymously for initial checks.");
+                            }
                         }
                     });
 
                     // Initial sign-in attempt (for persistence)
                     if (initialAuthToken) {
+                        // This token should only be for a proper user, but we'll let onAuthStateChanged handle the final state.
                         await signInWithCustomToken(auth, initialAuthToken);
-                        console.log("Signed in with custom token.");
+                        console.log("Attempted sign-in with custom token.");
                     } else if (!auth.currentUser) {
+                        // Fallback to anonymous sign-in if no token and no user exists
                         await signInAnonymously(auth);
-                        console.log("Signed in anonymously. Waiting for proper login.");
+                        console.log("Signed in anonymously.");
                     }
 
                 } catch (error) {
@@ -368,11 +391,6 @@
                 } else {
                     await this.loginUser(squitId, password);
                 }
-                
-                // Clear inputs after attempt
-                document.getElementById('user_id').value = '';
-                document.getElementById('password').value = '';
-                document.getElementById('email').value = '';
             }
 
             /** Handles user registration. */
@@ -388,11 +406,16 @@
                     // 1. Create the user's profile document in Firestore
                     await setDoc(doc(db, this.collections.USERS, user.uid), {
                         userId: squitId,
-                        email: email, // Store email for management, but login uses SquitID
+                        email: email, 
                         profile: { bio: 'New SQUIT UP! user.', status: 'Online' },
                         createdAt: new Date()
                     });
                     console.log("Registration successful and user document created.");
+                    
+                    // Clear inputs after success
+                    document.getElementById('user_id').value = '';
+                    document.getElementById('password').value = '';
+                    document.getElementById('email').value = '';
 
                 } catch (error) {
                     console.error("Registration Error:", error);
@@ -420,11 +443,16 @@
                     // 2. Use the retrieved email and password to sign in via Firebase Auth
                     await signInWithEmailAndPassword(auth, emailToLogin, password);
                     console.log("Login successful with Squit ID.");
+                    
+                    // Clear inputs after success
+                    document.getElementById('user_id').value = '';
+                    document.getElementById('password').value = '';
+                    document.getElementById('email').value = '';
 
                 } catch (error) {
                     console.error("Login Error:", error);
                     let msg = "Login failed. Check your password or Squit ID.";
-                    if (error.code === 'auth/wrong-password') msg = "Incorrect password.";
+                    if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') msg = "Incorrect password or Squit ID.";
                     this.displayError(msg);
                 }
             }
@@ -432,8 +460,8 @@
             /** Handles user logout. */
             async handleLogout() {
                 try {
+                    // Sign out the current user, which will trigger onAuthStateChanged
                     await signOut(auth);
-                    this.updateUI(false);
                     console.log("User logged out successfully.");
                 } catch (error) {
                     console.error("Logout Error:", error);
@@ -607,25 +635,35 @@
 
             /** Renders the full UI based on the user's logged-in status. */
             updateUI(isLoggedIn) {
+                const dashboard = document.getElementById('dashboard-container');
+                const authView = document.getElementById('auth-view');
+                const body = document.body;
+
                 document.getElementById('auth-header').classList.toggle('hidden', isLoggedIn);
-                document.getElementById('auth-view').classList.toggle('hidden', isLoggedIn);
-                document.getElementById('dashboard-container').classList.toggle('hidden', !isLoggedIn);
-                document.getElementById('app-container').classList.toggle('min-h-screen', !isLoggedIn);
+                authView.classList.toggle('hidden', isLoggedIn);
+                dashboard.classList.toggle('hidden', !isLoggedIn);
                 
-                if (!isLoggedIn) {
-                    // Reset to login view
-                    this.authState = 'login';
-                    this.toggleAuthMode();
+                // CRITICAL FIX: Toggle the dashboard visibility
+                dashboard.style.visibility = isLoggedIn ? 'visible' : 'hidden';
+
+                if (isLoggedIn) {
+                    // Adjust styles for dashboard view
+                    body.style.overflowY = 'hidden';
+                    authView.style.marginTop = '0';
+                    authView.style.marginBottom = '0';
+                    lucide.createIcons(); // Load Lucide icons for dashboard
                 } else {
-                    // Load Lucide icons for dashboard
-                    lucide.createIcons(); 
+                    // Adjust styles for auth view
+                    body.style.overflowY = 'auto'; // Allow scrolling only on auth screen if needed
                 }
             }
 
             /** Updates the loading spinner visibility. */
             updateLoadingState(isLoading) {
                 document.getElementById('loading-state').classList.toggle('hidden', !isLoading);
-                document.getElementById('auth-form').classList.toggle('hidden', isLoading);
+                // We show the auth-form only when loading is done AND the user is not logged in.
+                const isLoggedIn = this.currentUser && this.currentUser.email;
+                document.getElementById('auth-form').classList.toggle('hidden', isLoading || isLoggedIn);
             }
 
             /** Displays an error message on the screen. */
@@ -694,6 +732,7 @@
                 const list = document.getElementById('server-list');
                 if (!list) return;
                 
+                // Remove existing server buttons but keep the profile/create buttons
                 const existingButtons = list.querySelectorAll('.server-btn');
                 existingButtons.forEach(btn => btn.remove());
 
@@ -703,9 +742,24 @@
                     button.title = server.name;
                     button.textContent = server.name.substring(0, 2).toUpperCase();
                     button.onclick = () => this.setActiveServer(server.id);
-                    list.appendChild(button);
+                    // Find the separator and insert before it
+                    const separator = list.querySelector('.w-8.h-px');
+                    list.insertBefore(button, separator.nextSibling); 
                 });
             }
+
+            /** Sets the current active server/channel (placeholder for full logic) */
+            setActiveServer(serverId) {
+                console.log("Active Server ID set to:", serverId);
+                // In a full implementation, this would trigger loading channels and chat history
+                const server = this.servers.find(s => s.id === serverId);
+                const chatHeader = document.querySelector('#chat-area > div:first-child h3');
+                if (chatHeader) {
+                    chatHeader.textContent = `#general (${server.name})`;
+                }
+                document.getElementById('invite-server-btn').classList.remove('hidden');
+            }
+
 
             // --- MODAL MANAGEMENT ---
 
@@ -740,21 +794,29 @@
                         </div>
                     `;
                 } else if (viewType === 'invite_friends') {
-                    title = 'Invite Friends to Server (WIP)';
-                    const currentServer = this.servers[0]; // Assuming the first server is the active one for this demo
+                    title = 'Invite Friends to Server';
+                    const activeServer = this.servers[0]; // Simplified: Assume first server is active
 
-                    let friendsHtml = '<p class="text-gray-400 mb-2">Select a friend to invite:</p>';
-                    if (this.friends.length === 0) {
+                    let friendsHtml = '';
+                    if (!activeServer) {
+                        friendsHtml = '<p class="text-red-400 italic">Please create and select a server first.</p>';
+                    } else if (this.friends.length === 0) {
                         friendsHtml = '<p class="text-gray-500 italic">You must have accepted friends to invite them.</p>';
                     } else {
+                        friendsHtml += `<p class="text-gray-400 mb-2">Invite to: <span class="font-bold text-indigo-300">${activeServer.name}</span></p>`;
                         this.friends.forEach(friend => {
                             const squitId = this.userMap[friend.partnerId] || 'User Loading...';
+                            const isMember = activeServer.members.includes(friend.partnerId);
+                            
                             friendsHtml += `
                                 <div class="flex justify-between items-center p-3 bg-gray-700 rounded-lg mb-2 panel-shadow shadow-sm">
                                     <span class="text-white text-sm">@${squitId}</span>
-                                    <button onclick="window.App.inviteFriendToServer(window.App.servers[0], '${friend.partnerId}')" class="text-indigo-400 hover:text-indigo-300 text-xs py-1 px-2 rounded bg-indigo-900/50 btn-realistic shadow-none">
-                                        Invite
-                                    </button>
+                                    ${isMember 
+                                        ? '<span class="text-green-500 text-xs">Joined</span>'
+                                        : `<button onclick="window.App.inviteFriendToServer(window.App.servers.find(s => s.id === '${activeServer.id}'), '${friend.partnerId}')" class="text-indigo-400 hover:text-indigo-300 text-xs py-1 px-2 rounded bg-indigo-900/50 btn-realistic shadow-none">
+                                            Invite
+                                        </button>`
+                                    }
                                 </div>
                             `;
                         });
