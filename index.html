@@ -1,1030 +1,761 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SQUIT up - Chat Platform</title>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-analytics-compat.js"></script>
-    <style>
-        body {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            height: 100%;
-            overflow-x: hidden;
-        }
-        
-        html, body {
-            height: 100%;
-        }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SQUIT up - Chat Platform</title>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-analytics-compat.js"></script>
+    <style>
+        /* CORE FIX: Ensure the entire page takes up 100% of the viewport height */
+        html {
+            height: 100%;
+        }
+        body {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            /* IMPORTANT: Set height to 100% of the html element */
+            height: 100%; 
+            overflow: hidden; /* Prevent body scroll, content will scroll inside dedicated containers */
+        }
+        
+        /* AUTH PAGE - Centers the login card */
+        #authPage {
+            height: 100%; /* Take full body height */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
 
-        .container {
-            min-height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-        }
+        .auth-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
 
-        .auth-card {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border-radius: 20px;
-            padding: 40px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-            width: 100%;
-            max-width: 400px;
-            text-align: center;
-        }
+        /* DASHBOARD FIX: Full screen layout using Flexbox */
+        #dashboard {
+            display: none; /* Controlled by JS */
+            height: 100vh; /* Take full viewport height */
+            background: #36393f;
+            color: white;
+            display: flex; /* Main Flex container */
+        }
 
-        .logo {
-            font-size: 2.5rem;
-            font-weight: bold;
-            color: #667eea;
-            margin-bottom: 10px;
-        }
+        .server-list {
+            width: 72px;
+            background: #202225;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 12px 0;
+            gap: 8px;
+            overflow-y: auto; /* Allow scrolling of servers if many */
+            flex-shrink: 0;
+        }
 
-        .subtitle {
-            color: #666;
-            margin-bottom: 30px;
-            font-size: 1.1rem;
-        }
+        .dashboard-content {
+            display: flex;
+            flex-grow: 1; /* Take all remaining width */
+            overflow: hidden; /* Prevents internal children from overflowing */
+        }
 
-        .form-group {
-            margin-bottom: 20px;
-            text-align: left;
-        }
+        .sidebar {
+            width: 240px;
+            background: #2f3136;
+            border-right: 1px solid #202225;
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+        }
 
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            color: #333;
-            font-weight: 500;
-        }
+        .sidebar-section {
+            padding: 15px;
+            border-bottom: 1px solid #202225;
+            /* Allow sections to grow if they need more space, or set fixed height/flex-basis */
+        }
+        
+        /* Fix the user profile section to be at the bottom of the sidebar */
+        .sidebar-footer {
+            margin-top: auto; /* Push to the bottom */
+            padding: 15px;
+            border-top: 1px solid #202225;
+            flex-shrink: 0;
+        }
+        
+        /* Allow the Direct Messages/Friends List area to scroll if content overflows */
+        .sidebar-scroll-area {
+            overflow-y: auto;
+            flex-grow: 1;
+        }
 
-        .form-group input {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #e1e5e9;
-            border-radius: 10px;
-            font-size: 16px;
-            transition: border-color 0.3s;
-            box-sizing: border-box;
-        }
+        .main-content {
+            flex: 1; /* Take all remaining space */
+            display: flex;
+            flex-direction: column;
+            overflow: hidden; /* Prevents overflow from chat messages */
+        }
 
-        .form-group input:focus {
-            outline: none;
-            border-color: #667eea;
-        }
+        .chat-messages {
+            flex: 1; /* Allows message area to grow and take up most space */
+            padding: 20px;
+            overflow-y: auto; /* ONLY the message area should scroll */
+            background: #36393f;
+        }
 
-        .btn {
-            width: 100%;
-            padding: 12px;
-            border: none;
-            border-radius: 10px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-            margin-bottom: 15px;
-        }
+        .chat-input {
+            flex-shrink: 0; /* Prevents input from shrinking */
+            padding: 20px;
+            background: #40444b;
+            border-top: 1px solid #202225;
+        }
 
-        .btn-google {
-            background: #fff;
-            color: #333;
-            border: 2px solid #e1e5e9;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-        }
+        /* Styles for Modals - Keep them full screen/centered */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            overflow-y: auto; /* Allow modal to scroll if content is too tall on small screens */
+        }
 
-        .btn-google:hover {
-            background: #f8f9fa;
-            transform: translateY(-2px);
-        }
+        .modal-content {
+            position: relative; /* Change from absolute to relative for scroll fix */
+            margin: 5% auto; /* Center with margin, allow for scroll */
+            background: #36393f;
+            border-radius: 10px;
+            padding: 30px;
+            width: 90%;
+            max-width: 500px;
+            color: white;
+            box-sizing: border-box;
+        }
 
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
+        /* Other styles provided in your original code remain the same... */
+        .logo { font-size: 2.5rem; font-weight: bold; color: #667eea; margin-bottom: 10px; }
+        .subtitle { color: #666; margin-bottom: 30px; font-size: 1.1rem; }
+        .form-group { margin-bottom: 20px; text-align: left; }
+        .form-group label { display: block; margin-bottom: 5px; color: #333; font-weight: 500; }
+        .form-group input { width: 100%; padding: 12px; border: 2px solid #e1e5e9; border-radius: 10px; font-size: 16px; transition: border-color 0.3s; box-sizing: border-box; }
+        .form-group input:focus { outline: none; border-color: #667eea; }
+        .btn { width: 100%; padding: 12px; border: none; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.3s; margin-bottom: 15px; }
+        .btn-google { background: #fff; color: #333; border: 2px solid #e1e5e9; display: flex; align-items: center; justify-content: center; gap: 10px; }
+        .btn-google:hover { background: #f8f9fa; transform: translateY(-2px); }
+        .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3); }
+        .dashboard-header { background: #2f3136; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #202225; }
+        .sidebar-title { font-size: 12px; font-weight: 600; color: #8e9297; text-transform: uppercase; margin-bottom: 10px; }
+        .sidebar-item { padding: 8px 12px; border-radius: 4px; cursor: pointer; margin-bottom: 2px; display: flex; align-items: center; gap: 10px; }
+        .sidebar-item:hover { background: #393c43; }
+        .sidebar-item.active { background: #5865f2; }
+        .message-author { font-weight: 600; margin-bottom: 5px; }
+        .message-text { color: #dcddde; }
+        .user-profile { display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 8px; border-radius: 4px; }
+        .user-profile:hover { background: #393c43; }
+        .user-avatar { width: 32px; height: 32px; border-radius: 50%; background: #5865f2; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; }
+        .status-indicator { width: 10px; height: 10px; border-radius: 50%; background: #3ba55c; position: absolute; bottom: 0; right: 0; border: 2px solid #2f3136; }
+        .profile-banner { height: 120px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px 10px 0 0; position: relative; cursor: pointer; }
+        .profile-avatar-large { width: 80px; height: 80px; border-radius: 50%; background: #5865f2; position: absolute; bottom: -40px; left: 20px; border: 6px solid #36393f; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 24px; cursor: pointer; }
+        .profile-info { padding: 50px 20px 20px; }
+        .profile-username { font-size: 20px; font-weight: bold; margin-bottom: 5px; }
+        .profile-bio { color: #b9bbbe; margin-bottom: 15px; }
+        .profile-status { background: #2f3136; padding: 10px; border-radius: 6px; font-size: 14px; }
 
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
-        }
+        .emoji-option {
+            cursor: pointer;
+            font-size: 24px;
+            text-align: center;
+            padding: 5px;
+            border-radius: 5px;
+        }
 
-        .toggle-link {
-            color: #667eea;
-            cursor: pointer;
-            text-decoration: underline;
-            margin-top: 15px;
-            display: inline-block;
-        }
+        .emoji-option:hover {
+            background: #40444b;
+        }
 
-        .dashboard {
-            display: none;
-            height: 100%;
-            background: #36393f;
-            color: white;
-        }
-
-        .dashboard-header {
-            background: #2f3136;
-            padding: 15px 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid #202225;
-        }
-
-        .dashboard-content {
-            display: flex;
-            height: calc(100% - 70px);
-        }
-
-        .sidebar {
-            width: 240px;
-            background: #2f3136;
-            border-right: 1px solid #202225;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .sidebar-section {
-            padding: 15px;
-            border-bottom: 1px solid #202225;
-        }
-
-        .sidebar-title {
-            font-size: 12px;
-            font-weight: 600;
-            color: #8e9297;
-            text-transform: uppercase;
-            margin-bottom: 10px;
-        }
-
-        .sidebar-item {
-            padding: 8px 12px;
-            border-radius: 4px;
-            cursor: pointer;
-            margin-bottom: 2px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .sidebar-item:hover {
-            background: #393c43;
-        }
-
-        .sidebar-item.active {
-            background: #5865f2;
-        }
-
-        .main-content {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .chat-header {
-            background: #36393f;
-            padding: 15px 20px;
-            border-bottom: 1px solid #202225;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .chat-messages {
-            flex: 1;
-            padding: 20px;
-            overflow-y: auto;
-            background: #36393f;
-        }
-
-        .message {
-            margin-bottom: 15px;
-            display: flex;
-            gap: 15px;
-        }
-
-        .message-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: #5865f2;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-        }
-
-        .message-content {
-            flex: 1;
-        }
-
-        .message-author {
-            font-weight: 600;
-            margin-bottom: 5px;
-        }
-
-        .message-text {
-            color: #dcddde;
-        }
-
-        .chat-input {
-            padding: 20px;
-            background: #40444b;
-            border-top: 1px solid #202225;
-        }
-
-        .input-container {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
-
-        .chat-input input {
-            flex: 1;
-            padding: 12px 15px;
-            border: none;
-            border-radius: 25px;
-            background: #36393f;
-            color: white;
-            font-size: 14px;
-        }
-
-        .chat-input input:focus {
-            outline: none;
-            background: #2f3136;
-        }
-
-        .emoji-btn, .gif-btn, .sticker-btn {
-            background: none;
-            border: none;
-            color: #b9bbbe;
-            font-size: 20px;
-            cursor: pointer;
-            padding: 8px;
-            border-radius: 4px;
-        }
-
-        .emoji-btn:hover, .gif-btn:hover, .sticker-btn:hover {
-            background: #36393f;
-        }
-
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.8);
-            z-index: 1000;
-        }
-
-        .modal-content {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: #36393f;
-            border-radius: 10px;
-            padding: 30px;
-            width: 90%;
-            max-width: 500px;
-            color: white;
-        }
-
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-
-        .close-btn {
-            background: none;
-            border: none;
-            color: #b9bbbe;
-            font-size: 24px;
-            cursor: pointer;
-        }
-
-        .user-profile {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            cursor: pointer;
-            padding: 8px;
-            border-radius: 4px;
-        }
-
-        .user-profile:hover {
-            background: #393c43;
-        }
-
-        .user-avatar {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            background: #5865f2;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            font-size: 14px;
-        }
-
-        .status-indicator {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: #3ba55c;
-            position: absolute;
-            bottom: 0;
-            right: 0;
-            border: 2px solid #2f3136;
-        }
-
-        .friend-request {
-            background: #2f3136;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 10px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .btn-small {
-            padding: 6px 12px;
-            font-size: 12px;
-            border-radius: 4px;
-            border: none;
-            cursor: pointer;
-            margin-left: 5px;
-        }
-
-        .btn-accept {
-            background: #3ba55c;
-            color: white;
-        }
-
-        .btn-decline {
-            background: #ed4245;
-            color: white;
-        }
-
-        .server-list {
-            width: 72px;
-            background: #202225;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 12px 0;
-            gap: 8px;
-        }
-
-        .server-icon {
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            background: #5865f2;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: border-radius 0.2s;
-            font-weight: bold;
-            color: white;
-        }
-
-        .server-icon:hover {
-            border-radius: 16px;
-        }
-
-        .server-icon.active {
-            border-radius: 16px;
-            background: #5865f2;
-        }
-
-        .add-server {
-            background: #36393f;
-            color: #3ba55c;
-            font-size: 24px;
-        }
-
-        .add-server:hover {
-            background: #3ba55c;
-            color: white;
-        }
-
-        @media (max-width: 768px) {
-            .dashboard-content {
-                flex-direction: column;
-            }
-            
-            .sidebar {
-                width: 100%;
-                height: auto;
-                order: 2;
-            }
-            
-            .server-list {
-                width: 100%;
-                flex-direction: row;
-                height: auto;
-                padding: 8px;
-                overflow-x: auto;
-            }
-        }
-
-        .hidden {
-            display: none !important;
-        }
-
-        .profile-banner {
-            height: 120px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 10px 10px 0 0;
-            position: relative;
-            cursor: pointer;
-        }
-
-        .profile-avatar-large {
-            width: 80px;
-            height: 80px;
-            border-radius: 50%;
-            background: #5865f2;
-            position: absolute;
-            bottom: -40px;
-            left: 20px;
-            border: 6px solid #36393f;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            font-size: 24px;
-            cursor: pointer;
-        }
-
-        .profile-info {
-            padding: 50px 20px 20px;
-        }
-
-        .profile-username {
-            font-size: 20px;
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
-
-        .profile-bio {
-            color: #b9bbbe;
-            margin-bottom: 15px;
-        }
-
-        .profile-status {
-            background: #2f3136;
-            padding: 10px;
-            border-radius: 6px;
-            font-size: 14px;
-        }
-    </style>
+    </style>
 </head>
 <body>
-        <div id="authPage" class="container">
-        <div class="auth-card">
-            <div class="logo">SQUIT up</div>
-            <div class="subtitle">Connect with friends and communities</div>
-            
-                        <div id="loginForm">
-                <button class="btn btn-google" onclick="signInWithGoogle()">
-                    <span>🔍</span> Continue with Google
-                </button>
-                <div style="margin-top: 20px; padding: 15px; background: rgba(102, 126, 234, 0.1); border-radius: 10px; font-size: 14px; color: #333;">
-                    <strong>How it works:</strong><br>
-                    • Sign in with your Google account<br>
-                    • If you're new, choose your unique @user_id<br>
-                    • If you have an account, you'll go straight to chat!
-                </div>
-            </div>
-        </div>
-    </div>
+    <div id="authPage" class="container">
+        <div class="auth-card">
+            <div class="logo">SQUIT up</div>
+            <div class="subtitle">Connect with friends and communities</div>
+            
+            <div id="loginForm">
+                <button class="btn btn-google" onclick="signInWithGoogle()">
+                    <span>🔍</span> Continue with Google
+                </button>
+                <div style="margin-top: 20px; padding: 15px; background: rgba(102, 126, 234, 0.1); border-radius: 10px; font-size: 14px; color: #333;">
+                    <strong>How it works:</strong><br>
+                    • Sign in with your Google account<br>
+                    • If you're new, choose your unique @user_id<br>
+                    • If you have an account, you'll go straight to chat!
+                </div>
+            </div>
+        </div>
+    </div>
 
-        <div id="setupModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Welcome to SQUIT up! 🎉</h3>
-            </div>
-            <div style="margin-bottom: 20px; color: #b9bbbe; text-align: center;">
-                Choose your unique @user_id so friends can find and add you!
-            </div>
-            <div class="form-group">
-                <label for="newUserId">Choose your @user_id</label>
-                <input type="text" id="newUserId" placeholder="Enter unique @user_id (e.g., @john_doe)">
-            </div>
-            <button class="btn btn-primary" onclick="completeSetup()">Join SQUIT up</button>
-        </div>
-    </div>
+    <div id="setupModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Welcome to SQUIT up! 🎉</h3>
+            </div>
+            <div style="margin-bottom: 20px; color: #b9bbbe; text-align: center;">
+                Choose your unique @user_id so friends can find and add you!
+            </div>
+            <div class="form-group">
+                <label for="newUserId">Choose your @user_id</label>
+                <input type="text" id="newUserId" placeholder="Enter unique @user_id (e.g., @john_doe)">
+            </div>
+            <button class="btn btn-primary" onclick="completeSetup()">Join SQUIT up</button>
+        </div>
+    </div>
 
-        <div id="dashboard" class="dashboard">
-                <div class="server-list">
-            <div class="server-icon active" onclick="selectServer('home')">H</div>
-            <div class="server-icon add-server" onclick="showCreateServerModal()">+</div>
-            <div id="serverList"></div>
-        </div>
+    <div id="dashboard" class="dashboard">
+        <div class="server-list">
+            <div class="server-icon active" onclick="selectServer('home')">H</div>
+            <div class="server-icon add-server" onclick="showModal('createServerModal')">+</div>
+            <div id="serverList"></div>
+        </div>
 
-                <div class="dashboard-content">
-                        <div class="sidebar">
-                <div class="sidebar-section">
-                    <div class="sidebar-title">Direct Messages</div>
-                    <div id="dmList">
-                        <div style="text-align: center; color: #8e9297; padding: 20px; font-size: 14px;">
-                            Add friends to start chatting!
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="sidebar-section">
-                    <div class="sidebar-title">Friends</div>
-                    <div class="sidebar-item" onclick="showAddFriendModal()">
-                        <span>+</span> Add Friend
-                    </div>
-                    <div class="sidebar-item" onclick="showFriendRequests()">
-                        <span>📬</span> Friend Requests
-                    </div>
-                    <div id="friendsList"></div>
-                </div>
+        <div class="dashboard-content">
+            <div class="sidebar">
+                <div class="sidebar-scroll-area">
+                    <div class="sidebar-section">
+                        <div class="sidebar-title">Direct Messages</div>
+                        <div id="dmList">
+                            <div style="text-align: center; color: #8e9297; padding: 20px; font-size: 14px;">
+                                Add friends to start chatting!
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="sidebar-section">
+                        <div class="sidebar-title">Friends</div>
+                        <div class="sidebar-item" onclick="showModal('addFriendModal')">
+                            <span>+</span> Add Friend
+                        </div>
+                        <div class="sidebar-item" onclick="showModal('friendRequestsModal')">
+                            <span>📬</span> Friend Requests
+                        </div>
+                        <div id="friendsList"></div>
+                    </div>
+                </div>
 
-                                <div style="margin-top: auto; padding: 15px; border-top: 1px solid #202225;">
-                    <div class="user-profile" onclick="showProfileModal()">
-                        <div style="position: relative;">
-                            <div class="user-avatar" id="userAvatar">U</div>
-                            <div class="status-indicator"></div>
-                        </div>
-                        <div>
-                            <div style="font-size: 14px; font-weight: 600;" id="userName">User</div>
-                            <div style="font-size: 12px; color: #b9bbbe;" id="userStatus">Online</div>
-                        </div>
-                        <button style="margin-left: auto; background: none; border: none; color: #b9bbbe; cursor: pointer; font-size: 18px; padding: 8px;" onclick="logout()" title="Sign Out">🚪</button>
-                    </div>
-                </div>
-            </div>
+                <div class="sidebar-footer">
+                    <div class="user-profile" onclick="showProfileModal()">
+                        <div style="position: relative;">
+                            <div class="user-avatar" id="userAvatar">U</div>
+                            <div class="status-indicator"></div>
+                        </div>
+                        <div>
+                            <div style="font-size: 14px; font-weight: 600;" id="userName">User</div>
+                            <div style="font-size: 12px; color: #b9bbbe;" id="userStatus">Online</div>
+                        </div>
+                        <button style="margin-left: auto; background: none; border: none; color: #b9bbbe; cursor: pointer; font-size: 18px; padding: 8px;" onclick="logout()" title="Sign Out">🚪</button>
+                    </div>
+                </div>
+            </div>
 
-                        <div class="main-content">
-                <div class="chat-header">
-                    <span id="currentChannelIcon">#</span>
-                    <span id="currentChannel">Select a friend to start chatting</span>
-                </div>
-                
-                <div class="chat-messages" id="chatMessages">
-                    <div style="text-align: center; color: #b9bbbe; padding: 40px;">
-                        Welcome to SQUIT up! 🎉<br>
-                        Add friends to start chatting with them directly.
-                    </div>
-                </div>
-                
-                <div class="chat-input">
-                    <div class="input-container">
-                        <button class="emoji-btn" onclick="showEmojiPicker()">😀</button>
-                        <button class="gif-btn" onclick="showGifPicker()">GIF</button>
-                        <button class="sticker-btn" onclick="showStickerPicker()">🎭</button>
-                        <input type="text" id="messageInput" placeholder="Select a friend to chat" onkeypress="handleMessageInput(event)" disabled>
-                        <button class="btn btn-primary" style="width: auto; margin: 0; padding: 8px 16px;" onclick="sendMessage()" disabled>Send</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+            <div class="main-content">
+                <div class="chat-header">
+                    <span id="currentChannelIcon">#</span>
+                    <span id="currentChannel">Select a friend to start chatting</span>
+                </div>
+                
+                <div class="chat-messages" id="chatMessages">
+                    <div style="text-align: center; color: #b9bbbe; padding: 40px;">
+                        Welcome to SQUIT up! 🎉<br>
+                        Add friends to start chatting with them directly.
+                    </div>
+                </div>
+                
+                <div class="chat-input">
+                    <div class="input-container">
+                        <button class="emoji-btn" onclick="showModal('emojiModal')">😀</button>
+                        <button class="gif-btn" disabled>GIF</button>
+                        <button class="sticker-btn" disabled>🎭</button>
+                        <input type="text" id="messageInput" placeholder="Select a friend to chat" onkeypress="handleMessageInput(event)" disabled>
+                        <button class="btn btn-primary" style="width: auto; margin: 0; padding: 8px 16px;" onclick="sendMessage()" disabled>Send</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-        <div id="createServerModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Create Your Server</h3>
-                <button class="close-btn" onclick="closeModal('createServerModal')">&times;</button>
-            </div>
-            <div class="form-group">
-                <label for="serverName">Server Name</label>
-                <input type="text" id="serverName" placeholder="Enter server name">
-            </div>
-            <div class="form-group">
-                <label>Server Type</label>
-                <select id="serverType" style="width: 100%; padding: 12px; border: 2px solid #e1e5e9; border-radius: 10px; background: white;">
-                    <option value="text">Text Channels Only</option>
-                    <option value="voice">Text + Voice Channels</option>
-                </select>
-            </div>
-            <button class="btn btn-primary" onclick="createServer()">Create Server</button>
-        </div>
-    </div>
+    <div id="createServerModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Create Your Server</h3>
+                <button class="close-btn" onclick="closeModal('createServerModal')">&times;</button>
+            </div>
+            <div class="form-group">
+                <label for="serverName">Server Name</label>
+                <input type="text" id="serverName" placeholder="Enter server name">
+            </div>
+            <div class="form-group">
+                <label>Server Type</label>
+                <select id="serverType" style="width: 100%; padding: 12px; border: 2px solid #e1e5e9; border-radius: 10px; background: white; color: #333;">
+                    <option value="text">Text Channels Only</option>
+                    <option value="voice">Text + Voice Channels</option>
+                </select>
+            </div>
+            <button class="btn btn-primary" onclick="createServer()">Create Server</button>
+        </div>
+    </div>
 
-        <div id="addFriendModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Add Friend</h3>
-                <button class="close-btn" onclick="closeModal('addFriendModal')">&times;</button>
-            </div>
-            <div class="form-group">
-                <label for="friendUserId">Friend's @user_id</label>
-                <input type="text" id="friendUserId" placeholder="Enter @user_id">
-            </div>
-            <button class="btn btn-primary" onclick="sendFriendRequest()">Send Friend Request</button>
-        </div>
-    </div>
+    <div id="addFriendModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Add Friend</h3>
+                <button class="close-btn" onclick="closeModal('addFriendModal')">&times;</button>
+            </div>
+            <div class="form-group">
+                <label for="friendUserId">Friend's @user_id</label>
+                <input type="text" id="friendUserId" placeholder="Enter @user_id">
+            </div>
+            <button class="btn btn-primary" onclick="sendFriendRequest()">Send Friend Request</button>
+        </div>
+    </div>
 
-        <div id="friendRequestsModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Friend Requests</h3>
-                <button class="close-btn" onclick="closeModal('friendRequestsModal')">&times;</button>
-            </div>
-            <div id="friendRequestsList">
-                <div style="text-align: center; color: #b9bbbe; padding: 20px;">
-                    No friend requests yet. Share your @user_id with friends to get started!
-                </div>
-            </div>
-        </div>
-    </div>
+    <div id="friendRequestsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Friend Requests</h3>
+                <button class="close-btn" onclick="closeModal('friendRequestsModal')">&times;</button>
+            </div>
+            <div id="friendRequestsList">
+                <div style="text-align: center; color: #b9bbbe; padding: 20px;">
+                    No friend requests yet. Share your @user_id with friends to get started!
+                </div>
+            </div>
+        </div>
+    </div>
 
-        <div id="profileModal" class="modal">
-        <div class="modal-content" style="max-width: 600px;">
-            <div class="modal-header">
-                <h3>User Profile</h3>
-                <button class="close-btn" onclick="closeModal('profileModal')">&times;</button>
-            </div>
-            <div class="profile-banner" onclick="changeBanner()">
-                <div class="profile-avatar-large" id="profileAvatarLarge" onclick="changeAvatar(event)">U</div>
-            </div>
-            <div class="profile-info">
-                <div class="profile-username" id="profileUsername">Username</div>
-                <div style="color: #8e9297; font-size: 16px; margin-bottom: 10px;" id="profileUserId">@user_id</div>
-                <div class="profile-bio" id="profileBio">Click to add a bio...</div>
-                <div class="profile-status" id="profileStatus">Online</div>
-                <button class="btn btn-primary" style="margin-top: 15px;" onclick="editProfile()">Edit Profile</button>
-            </div>
-        </div>
-    </div>
+    <div id="profileModal" class="modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3>User Profile</h3>
+                <button class="close-btn" onclick="closeModal('profileModal')">&times;</button>
+            </div>
+            <div class="profile-banner" onclick="changeBanner()">
+                <div class="profile-avatar-large" id="profileAvatarLarge" onclick="changeAvatar(event)">U</div>
+            </div>
+            <div class="profile-info">
+                <div class="profile-username" id="profileUsername">Username</div>
+                <div style="color: #8e9297; font-size: 16px; margin-bottom: 10px;" id="profileUserId">@user_id</div>
+                <div class="profile-bio" id="profileBio">Click to add a bio...</div>
+                <div class="profile-status" id="profileStatus">Online</div>
+                <button class="btn btn-primary" style="margin-top: 15px;" onclick="editProfile()">Edit Profile</button>
+            </div>
+        </div>
+    </div>
 
-        <div id="editProfileModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Edit Profile</h3>
-                <button class="close-btn" onclick="closeModal('editProfileModal')">&times;</button>
-            </div>
-            <div class="form-group">
-                <label for="editUserId">@user_id</label>
-                <input type="text" id="editUserId" placeholder="Enter new @user_id">
-            </div>
-            <div class="form-group">
-                <label for="editBio">Bio</label>
-                <textarea id="editBio" style="width: 100%; padding: 12px; border: 2px solid #e1e5e9; border-radius: 10px; min-height: 80px; resize: vertical; box-sizing: border-box;" placeholder="Tell us about yourself..."></textarea>
-            </div>
-            <div class="form-group">
-                <label for="editStatus">Status</label>
-                <input type="text" id="editStatus" placeholder="What's your status?">
-            </div>
-            <div class="form-group">
-                <label>Profile Picture (URL or GIF)</label>
-                <input type="url" id="editAvatar" placeholder="Enter image/GIF URL">
-            </div>
-            <div class="form-group">
-                <label>Banner (URL or GIF)</label>
-                <input type="url" id="editBanner" placeholder="Enter banner image/GIF URL">
-            </div>
-            <button class="btn btn-primary" onclick="saveProfile()">Save Changes</button>
-        </div>
-    </div>
+    <div id="editProfileModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Edit Profile</h3>
+                <button class="close-btn" onclick="closeModal('editProfileModal')">&times;</button>
+            </div>
+            <div class="form-group">
+                <label for="editUserId">@user_id</label>
+                <input type="text" id="editUserId" placeholder="Enter new @user_id" disabled style="background-color: #40444b; color: #b9bbbe;">
+                <small style="color: #b9bbbe; display: block; margin-top: 5px;">*Changing your user ID is disabled in this version for stability.</small>
+            </div>
+            <div class="form-group">
+                <label for="editBio">Bio</label>
+                <textarea id="editBio" style="width: 100%; padding: 12px; border: 2px solid #e1e5e9; border-radius: 10px; min-height: 80px; resize: vertical; box-sizing: border-box; background: #36393f; color: white;" placeholder="Tell us about yourself..."></textarea>
+            </div>
+            <div class="form-group">
+                <label for="editStatus">Status</label>
+                <input type="text" id="editStatus" placeholder="What's your status?" style="background: #36393f; color: white;">
+            </div>
+            <div class="form-group">
+                <label>Profile Picture (URL or GIF)</label>
+                <input type="url" id="editAvatar" placeholder="Enter image/GIF URL" style="background: #36393f; color: white;">
+            </div>
+            <div class="form-group">
+                <label>Banner (URL or GIF)</label>
+                <input type="url" id="editBanner" placeholder="Enter banner image/GIF URL" style="background: #36393f; color: white;">
+            </div>
+            <button class="btn btn-primary" onclick="saveProfile()">Save Changes</button>
+        </div>
+    </div>
 
-        <div id="emojiModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Choose Emoji</h3>
-                <button class="close-btn" onclick="closeModal('emojiModal')">&times;</button>
-            </div>
-            <div style="display: grid; grid-template-columns: repeat(8, 1fr); gap: 10px; max-height: 300px; overflow-y: auto;">
-                <span class="emoji-option" onclick="insertEmoji('😀')">😀</span>
-                <span class="emoji-option" onclick="insertEmoji('😂')">😂</span>
-                <span class="emoji-option" onclick="insertEmoji('😍')">😍</span>
-                <span class="emoji-option" onclick="insertEmoji('🤔')">🤔</span>
-                <span class="emoji-option" onclick="insertEmoji('😎')">😎</span>
-                <span class="emoji-option" onclick="insertEmoji('😭')">😭</span>
-                <span class="emoji-option" onclick="insertEmoji('😱')">😱</span>
-                <span class="emoji-option" onclick="insertEmoji('🔥')">🔥</span>
-                <span class="emoji-option" onclick="insertEmoji('💯')">💯</span>
-                <span class="emoji-option" onclick="insertEmoji('❤️')">❤️</span>
-                <span class="emoji-option" onclick="insertEmoji('👍')">👍</span>
-                <span class="emoji-option" onclick="insertEmoji('👎')">👎</span>
-                <span class="emoji-option" onclick="insertEmoji('🎉')">🎉</span>
-                <span class="emoji-option" onclick="insertEmoji('🚀')">🚀</span>
-                <span class="emoji-option" onclick="insertEmoji('⭐')">⭐</span>
-                <span class="emoji-option" onclick="insertEmoji('🌟')">🌟</span>
-            </div>
-        </div>
-    </div>
+    <div id="emojiModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Choose Emoji</h3>
+                <button class="close-btn" onclick="closeModal('emojiModal')">&times;</button>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(8, 1fr); gap: 10px; max-height: 300px; overflow-y: auto;">
+                <span class="emoji-option" onclick="insertEmoji('😀')">😀</span>
+                <span class="emoji-option" onclick="insertEmoji('😂')">😂</span>
+                <span class="emoji-option" onclick="insertEmoji('😍')">😍</span>
+                <span class="emoji-option" onclick="insertEmoji('🤔')">🤔</span>
+                <span class="emoji-option" onclick="insertEmoji('😎')">😎</span>
+                <span class="emoji-option" onclick="insertEmoji('😭')">😭</span>
+                <span class="emoji-option" onclick="insertEmoji('😱')">😱</span>
+                <span class="emoji-option" onclick="insertEmoji('🔥')">🔥</span>
+                <span class="emoji-option" onclick="insertEmoji('💯')">💯</span>
+                <span class="emoji-option" onclick="insertEmoji('❤️')">❤️</span>
+                <span class="emoji-option" onclick="insertEmoji('👍')">👍</span>
+                <span class="emoji-option" onclick="insertEmoji('👎')">👎</span>
+                <span class="emoji-option" onclick="insertEmoji('🎉')">🎉</span>
+                <span class="emoji-option" onclick="insertEmoji('🚀')">🚀</span>
+                <span class="emoji-option" onclick="insertEmoji('⭐')">⭐</span>
+                <span class="emoji-option" onclick="insertEmoji('🌟')">🌟</span>
+            </div>
+        </div>
+    </div>
 
-    <script>
-        // Firebase Configuration
-        const firebaseConfig = {
-            apiKey: "AIzaSyB1zvVHaBrbzX5iA9fBVNGa_3sY1-WCSpY",
-            authDomain: "squit-up-auth.firebaseapp.com",
-            projectId: "squit-up-auth",
-            storageBucket: "squit-up-auth.firebasestorage.app",
-            messagingSenderId: "503910898443",
-            appId: "1:503910898443:web:c5a56eb24cd4f183d8600e",
-            measurementId: "G-K4LHFHSNJC"
-        };
+    <script>
+        // Firebase Configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyB1zvVHaBrbzX5iA9fBVNGa_3sY1-WCSpY",
+            authDomain: "squit-up-auth.firebaseapp.com",
+            projectId: "squit-up-auth",
+            storageBucket: "squit-up-auth.firebasestorage.app",
+            messagingSenderId: "503910898443",
+            appId: "1:503910898443:web:c5a56eb24cd4f183d8600e",
+            measurementId: "G-K4LHFHSNJC"
+        };
 
-        // Initialize Firebase
-        firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
-        const db = firebase.firestore();
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
 
-        // Global variables
-        let currentUser = null;
-        let currentChannel = 'general';
-        let messages = [];
-        let friends = [];
-        let servers = [];
+        // Global variables
+        let currentUser = null;
+        let currentChatId = null; // Used for Direct Messages/Channels
+        let currentChannelName = null;
 
-        // Check if user is already logged in
-        auth.onAuthStateChanged((user) => {
-            if (user) {
-                checkUserProfile(user);
-            } else {
-                showAuthPage();
-            }
-        });
+        // --- CORE APPLICATION FLOW ---
 
-        function showAuthPage() {
-            document.getElementById('authPage').style.display = 'flex';
-            document.getElementById('dashboard').style.display = 'none';
-        }
+        // Check if user is already logged in
+        auth.onAuthStateChanged((user) => {
+            if (user) {
+                checkUserProfile(user);
+            } else {
+                showAuthPage();
+            }
+        });
 
-        function showDashboard() {
-            document.getElementById('authPage').style.display = 'none';
-            document.getElementById('dashboard').style.display = 'block';
-            loadUserData();
-        }
+        function showAuthPage() {
+            document.getElementById('authPage').style.display = 'flex';
+            document.getElementById('dashboard').style.display = 'none';
+        }
 
-        async function signInWithGoogle() {
-            const provider = new firebase.auth.GoogleAuthProvider();
-            try {
-                console.log('Starting Google sign in...');
-                const result = await auth.signInWithPopup(provider);
-                const user = result.user;
-                console.log('Google sign in successful:', user.email);
-                await checkUserProfile(user);
-            } catch (error) {
-                console.error('Google sign in error:', error);
-                
-                // Show user-friendly error message
-                let errorMessage = 'Unable to sign in with Google. ';
-                if (error.code === 'auth/popup-blocked') {
-                    errorMessage += 'Please allow popups for this site and try again.';
-                } else if (error.code === 'auth/popup-closed-by-user') {
-                    errorMessage += 'Sign-in was cancelled. Please try again.';
-                } else {
-                    errorMessage += 'Please check your internet connection and try again.';
-                }
-                
-                alert(errorMessage);
-            }
-        }
+        function showDashboard() {
+            document.getElementById('authPage').style.display = 'none';
+            document.getElementById('dashboard').style.display = 'flex'; // Changed to flex for the layout
+            loadUserData();
+        }
+        
+        // Modal functions
+        function showModal(id) {
+            document.getElementById(id).style.display = 'block';
+        }
+        
+        function closeModal(id) {
+            document.getElementById(id).style.display = 'none';
+        }
+        
+        // Custom Modal functions
+        function showCreateServerModal() { showModal('createServerModal'); }
+        function showAddFriendModal() { showModal('addFriendModal'); }
+        function showFriendRequests() { showModal('friendRequestsModal'); }
+        function showProfileModal() { 
+            if(currentUser) {
+                // Populate profile data before showing
+                document.getElementById('profileUsername').textContent = currentUser.displayName || 'User';
+                document.getElementById('profileUserId').textContent = currentUser.userId || '@user_id';
+                document.getElementById('profileBio').textContent = currentUser.bio || 'Click to add a bio...';
+                document.getElementById('profileStatus').textContent = currentUser.status || 'Online';
+                
+                const avatarEl = document.getElementById('profileAvatarLarge');
+                if (currentUser.avatarURL) {
+                    avatarEl.style.backgroundImage = `url(${currentUser.avatarURL})`;
+                    avatarEl.style.backgroundSize = 'cover';
+                    avatarEl.textContent = '';
+                } else {
+                    avatarEl.style.backgroundImage = 'none';
+                    avatarEl.textContent = (currentUser.displayName || 'U').charAt(0).toUpperCase();
+                }
 
-        async function checkUserProfile(user) {
-            // Only proceed if user is properly authenticated with Google
-            if (!user || !user.email || !user.uid) {
-                console.error('Invalid user object, redirecting to auth');
-                showAuthPage();
-                return;
-            }
+                showModal('profileModal');
+            }
+        }
+        
+        function editProfile() {
+            closeModal('profileModal');
+            
+            // Pre-fill edit modal fields
+            document.getElementById('editUserId').value = currentUser.userId || '';
+            document.getElementById('editBio').value = currentUser.bio || '';
+            document.getElementById('editStatus').value = currentUser.status || 'Online';
+            document.getElementById('editAvatar').value = currentUser.avatarURL || '';
+            document.getElementById('editBanner').value = currentUser.bannerURL || '';
+            
+            showModal('editProfileModal');
+        }
 
-            try {
-                console.log('Checking user profile for authenticated user:', user.uid, user.email);
-                
-                // First, try to find user by Firebase UID (most reliable)
-                const userDoc = await db.collection('users').doc(user.uid).get();
-                if (userDoc.exists) {
-                    currentUser = { ...userDoc.data(), uid: user.uid };
-                    console.log('Existing user found by UID, logging in:', currentUser);
-                    showDashboard();
-                    return;
-                }
-                
-                // Critical: Check if ANY account exists with this email (prevent duplicates)
-                const emailQuery = await db.collection('users').where('email', '==', user.email).get();
-                if (!emailQuery.empty) {
-                    // User exists with this email - log them into their existing account
-                    const userDoc = emailQuery.docs[0];
-                    const userData = userDoc.data();
-                    
-                    // Update the document with the correct UID if needed
-                    await db.collection('users').doc(user.uid).set(userData);
-                    // Delete the old document if it has a different ID
-                    if (userDoc.id !== user.uid) {
-                        await userDoc.ref.delete();
-                    }
-                    
-                    currentUser = { ...userData, uid: user.uid };
-                    console.log('Existing account found with this Gmail, logging in:', currentUser);
-                    showDashboard();
-                    
-                    // Show message about existing account
-                    setTimeout(() => {
-                        alert(`Welcome back! 🎉\n\nI found your existing account "${userData.userId}" linked to ${user.email}.\n\nYou've been logged into your previous account automatically!`);
-                    }, 500);
-                    return;
-                }
-                
-                // Check localStorage for previously created account (prevents re-creation after refresh)
-                const savedUserData = localStorage.getItem('squitup_user_' + user.uid);
-                if (savedUserData) {
-                    try {
-                        const userData = JSON.parse(savedUserData);
-                        currentUser = { ...userData, uid: user.uid };
-                        console.log('Found saved user data in localStorage, logging in:', currentUser);
-                        showDashboard();
-                        
-                        // Try to sync with database in background
-                        db.collection('users').doc(user.uid).set(userData).catch(error => {
-                            console.warn('Background sync failed:', error);
-                        });
-                        
-                        setTimeout(() => {
-                            alert(`Welcome back, ${userData.userId}! 🎉\n\nYou've been automatically logged into your account.`);
-                        }, 500);
-                        return;
-                    } catch (e) {
-                        console.warn('Invalid saved user data, proceeding with new setup');
-                        localStorage.removeItem('squitup_user_' + user.uid);
-                    }
-                }
-                
-                // New user - show setup modal (only after successful Google auth)
-                console.log('New authenticated user detected, showing setup modal');
-                currentUser = { 
-                    uid: user.uid, 
-                    email: user.email, 
-                    displayName: user.displayName,
-                    photoURL: user.photoURL
-                };
-                document.getElementById('authPage').style.display = 'none';
-                document.getElementById('setupModal').style.display = 'block';
-                
-            } catch (error) {
-                console.error('Error during user profile check:', error);
-                alert('An error occurred while checking your account. Please try logging in again.');
-                auth.signOut();
-                showAuthPage();
-            }
-        }
+        // --- AUTHENTICATION FUNCTIONS (UNCHANGED/COMPLETED FROM YOUR SNIPPET) ---
 
-        async function completeSetup() {
-            const newUserId = document.getElementById('newUserId').value.trim();
-            if (!newUserId) {
-                alert('Please choose an @user_id.');
-                return;
-            }
+        async function signInWithGoogle() {
+            const provider = new firebase.auth.GoogleAuthProvider();
+            try {
+                console.log('Starting Google sign in...');
+                const result = await auth.signInWithPopup(provider);
+                const user = result.user;
+                console.log('Google sign in successful:', user.email);
+                await checkUserProfile(user);
+            } catch (error) {
+                console.error('Google sign in error:', error);
+                let errorMessage = 'Unable to sign in with Google. ';
+                if (error.code === 'auth/popup-blocked') {
+                    errorMessage += 'Please allow popups for this site and try again.';
+                } else if (error.code === 'auth/popup-closed-by-user') {
+                    errorMessage += 'Sign-in was cancelled. Please try again.';
+                } else {
+                    errorMessage += 'Please check your internet connection and try again.';
+                }
+                alert(errorMessage);
+            }
+        }
 
-            const sanitizedUserId = newUserId.startsWith('@') ? newUserId : '@' + newUserId;
-            
-            try {
-                // Check if user ID already exists
-                const idQuery = await db.collection('users').where('userId', '==', sanitizedUserId).limit(1).get();
-                
-                if (!idQuery.empty) {
-                    alert('Error: This @user_id is already taken. Please try another one.');
-                    return;
-                }
+        async function checkUserProfile(user) {
+            if (!user || !user.email || !user.uid) {
+                console.error('Invalid user object, redirecting to auth');
+                showAuthPage();
+                return;
+            }
 
-                // Save user data
-                const userData = {
-                    uid: currentUser.uid,
-                    email: currentUser.email,
-                    userId: sanitizedUserId,
-                    displayName: currentUser.displayName || sanitizedUserId,
-                    avatar: currentUser.photoURL || '',
-                    bio: 'Hey there! I\'m new to SQUIT up!',
-                    status: 'Online',
-                    friends: [],
-                    friendRequests: []
-                };
-                
-                await db.collection('users').doc(currentUser.uid).set(userData);
-                localStorage.setItem('squitup_user_' + currentUser.uid, JSON.stringify(userData));
-                currentUser = userData;
-                
-                closeModal('setupModal');
-                showDashboard();
-                alert(`Success! Your SQUIT up account has been created with the ID ${sanitizedUserId}. Welcome!`);
-            } catch (error) {
-                console.error('Error completing setup:', error);
-                alert('An unexpected error occurred during setup. Please try again.');
-            }
-        }
+            try {
+                const userDoc = await db.collection('users').doc(user.uid).get();
+                if (userDoc.exists) {
+                    currentUser = { ...userDoc.data(), uid: user.uid };
+                    showDashboard();
+                    return;
+                }
+                
+                const emailQuery = await db.collection('users').where('email', '==', user.email).get();
+                if (!emailQuery.empty) {
+                    const userDoc = emailQuery.docs[0];
+                    const userData = userDoc.data();
+                    
+                    // Update the document to use the correct UID for future login
+                    await db.collection('users').doc(user.uid).set(userData);
+                    if (userDoc.id !== user.uid) {
+                        await userDoc.ref.delete();
+                    }
+                    
+                    currentUser = { ...userData, uid: user.uid };
+                    showDashboard();
+                    setTimeout(() => {
+                        alert(`Welcome back! 🎉\n\nI found your existing account "${userData.userId}" linked to ${user.email}.\n\nYou've been logged into your previous account automatically!`);
+                    }, 500);
+                    return;
+                }
+                
+                const savedUserData = localStorage.getItem('squitup_user_' + user.uid);
+                if (savedUserData) {
+                    try {
+                        const userData = JSON.parse(savedUserData);
+                        currentUser = { ...userData, uid: user.uid };
+                        showDashboard();
+                        
+                        db.collection('users').doc(user.uid).set(userData).catch(error => {
+                            console.warn('Background sync failed:', error);
+                        });
+                        
+                        setTimeout(() => {
+                            alert(`Welcome back, ${userData.userId}! 🎉\n\nYou've been automatically logged into your account.`);
+                        }, 500);
+                        return;
+                    } catch (e) {
+                        console.warn('Invalid saved user data, proceeding with new setup');
+                        localStorage.removeItem('squitup_user_' + user.uid);
+                    }
+                }
+                
+                // New user - show setup modal
+                currentUser = { 
+                    uid: user.uid, 
+                    email: user.email, 
+                    displayName: user.displayName,
+                    photoURL: user.photoURL
+                };
+                document.getElementById('authPage').style.display = 'none';
+                document.getElementById('setupModal').style.display = 'block';
+                
+            } catch (error) {
+                console.error('Error during user profile check:', error);
+                alert('An error occurred while checking your account. Please try logging in again.');
+                auth.signOut();
+                showAuthPage();
+            }
+        }
 
-        // --- START of User Requested Changes ---
+        // --- COMPLETED completeSetup FUNCTION ---
+        async function completeSetup() {
+            const newUserId = document.getElementById('newUserId').value.trim();
+            if (!newUserId) {
+                alert('Please choose an @user_id.');
+                return;
+            }
 
-        async function saveProfile() {
-            if (!currentUser) {
-                alert('You must be logged in to save your profile.');
-                return;
-            }
+            const sanitizedUserId = newUserId.startsWith('@') ? newUserId.toLowerCase() : '@' + newUserId.toLowerCase();
+            
+            try {
+                // Check if user ID already exists
+                const idQuery = await db.collection('users').where('userId', '==', sanitizedUserId).limit(1).get();
+                
+                if (!idQuery.empty) {
+                    alert('Error: This @user_id is already taken. Please try another one.');
+                    return;
+                }
 
-            const newUserId = document.getElementById('editUserId').value.trim();
-            const bio = document.getElementById('editBio').value.trim();
-            const status = document.getElementById('editStatus').value.trim();
-            const avatar = document.getElementById('editAvatar').value.trim();
-            const banner = document.getElementById('editBanner').value.trim();
+                // Create the final user object
+                const userData = {
+                    userId: sanitizedUserId,
+                    email: currentUser.email,
+                    displayName: currentUser.displayName || sanitizedUserId.substring(1),
+                    avatarURL: currentUser.photoURL || null,
+                    status: 'Online',
+                    bio: 'Hey there! I\'m new to SQUIT up.',
+                    friends: [],
+                    servers: [],
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                };
 
-            const sanitizedNewUserId = newUserId.startsWith('@') ? newUserId : '@' + newUserId;
-            const oldUserId = currentUser.userId;
-            
-            // 1. Check if user ID is being changed and if new ID is available
-            if (sanitizedNewUserId !== oldUserId) {
-                try {
-                    const idQuery = await db.collection('users').where('userId', '==', sanitizedNewUserId).limit(1).get();
-                    
-                    if (!idQuery.empty) {
-                        // Found an existing user with this ID
-                        const existingUserDoc = idQuery.docs[0];
-                        if (existingUserDoc.id !== currentUser.uid) { // Make sure it's not the current user's *other* ID if a glitch happened
-                            alert(`Error: The user ID **${sanitizedNewUserId}** already exists. Please choose a different one.`);
-                            return;
-                        }
-                    }
-                } catch (error) {
-                    console.error("Error checking new user ID:", error);
-                    alert('An error occurred while checking the new user ID. Please try again.');
-                    return;
-                }
-            }
+                // Save user data to Firestore
+                await db.collection('users').doc(currentUser.uid).set(userData);
 
-            // 2. Update the user data
-            const updatedData = {
-                userId: sanitizedNewUserId,
-                bio: bio,
-                status: status,
-                avatar: avatar,
-                banner: banner || ''
-            };
+                // Update currentUser and localStorage
+                currentUser = { ...userData, uid: currentUser.uid };
+                localStorage.setItem('squitup_user_' + currentUser.uid, JSON.stringify(userData));
 
-            try {
-                await db.collection('users').doc(currentUser.uid).update(updatedData);
-                currentUser = { ...currentUser, ...updatedData }; // Update local state
-                localStorage.setItem('squitup_user_' + currentUser.uid, JSON.stringify(currentUser));
-                loadUserData(); // Refresh dashboard data
+                alert(`Success! Your user ID is ${sanitizedUserId}. You can now join SQUIT up.`);
+                closeModal('setupModal');
+                showDashboard();
+                
+            } catch (error) {
+                console.error('Error completing setup:', error);
+                alert('An error occurred while creating your account. Please try again.');
+            }
+        }
 
-                closeModal('editProfileModal');
-                closeModal('profileModal');
-                showProfileModal(); // Show updated profile
+        // --- DASHBOARD FUNCTIONS (PLACEHOLDERS) ---
 
-                if (sanitizedNewUserId !== oldUserId) {
-                    alert(`🥳 Congrats! Your user ID has been successfully changed from **${oldUserId}** to **${sanitizedNewUserId}**! 🎉\n\nSay your friends now to send your request on **${sanitizedNewUserId}** not on **${oldUserId}** and make more friends now. Congrats!`);
-                } else {
-                    alert('Profile successfully updated!');
-                }
+        function logout() {
+            auth.signOut().then(() => {
+                currentUser = null;
+                localStorage.removeItem('squitup_user_' + auth.currentUser.uid); // Clear local data
+                showAuthPage();
+            }).catch((error) => {
+                console.error('Logout error:', error);
+                alert('Error logging out. Please try again.');
+            });
+        }
+        
+        // This is where you would load friends, DMs, etc.
+        function loadUserData() {
+            if (!currentUser) return;
 
-            } catch (error) {
-                console.error("Error saving profile:", error);
-                alert('An error occurred while saving your profile. Please check the console for details.');
-            }
-        }
+            // 1. Update the user display in the sidebar
+            updateUserProfileDisplay();
 
-        async function sendFriendRequest() {
-            if (!currentUser) {
-                alert('You must be logged in to send friend requests.');
-                return;
-            }
-            
-            const friendUserIdInput = document.getElementById('friendUserId');
-            const friendUserId = friendUserIdInput.value.trim();
+            // 2. Listen for real-time updates to the user's document
+            db.collection('users').doc(currentUser.uid).onSnapshot(doc => {
+                if (doc.exists) {
+                    currentUser = { ...doc.data(), uid: doc.id };
+                    updateUserProfileDisplay();
+                    // You would also call updateFriendsList(currentUser.friends), etc.
+                }
+            }, error => {
+                console.error('Error listening to user data:', error);
+            });
+            
+            // Set initial chat area state
+            document.getElementById('currentChannelIcon').textContent = '#';
+            document.getElementById('currentChannel').textContent = 'Welcome to SQUIT up!';
+        }
+        
+        function updateUserProfileDisplay() {
+            document.getElementById('userName').textContent = currentUser.displayName || currentUser.userId;
+            document.getElementById('userStatus').textContent = currentUser.status || 'Online';
+            
+            const avatarEl = document.getElementById('userAvatar');
+            if (currentUser.avatarURL) {
+                avatarEl.style.backgroundImage = `url(${currentUser.avatarURL})`;
+                avatarEl.style.backgroundSize = 'cover';
+                avatarEl.textContent = '';
+            } else {
+                avatarEl.style.backgroundImage = 'none';
+                avatarEl.textContent = (currentUser.displayName || 'U').charAt(0).toUpperCase();
+            }
+        }
+        
+        async function saveProfile() {
+            const userId = document.getElementById('editUserId').value.trim(); // Disabled, but kept for future
+            const bio = document.getElementById('editBio').value.trim();
+            const status = document.getElementById('editStatus').value.trim();
+            const avatarURL = document.getElementById('editAvatar').value.trim();
+            const bannerURL = document.getElementById('editBanner').value.trim();
+            
+            if (!currentUser) {
+                alert('Error: Not logged in.');
+                return;
+            }
 
-            if (!friendUserId) {
-                alert('Please enter your friend\'s @user_id.');
-                return;
-            }
+            try {
+                await db.collection('users').doc(currentUser.uid).update({
+                    // userId: userId, // User ID change requires complex update, disabled for now
+                    bio: bio,
+                    status: status,
+                    avatarURL: avatarURL || null,
+                    bannerURL: bannerURL || null,
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+                alert('Profile updated successfully!');
+                closeModal('editProfileModal');
+                // The onSnapshot listener in loadUserData will automatically update currentUser and the display
+            } catch (error) {
+                console.error('Error saving profile:', error);
+                alert('Failed to save profile changes. Check the console for details.');
+            }
+        }
+        
+        // Chat/Server placeholders
+        function selectServer(serverId) { console.log('Selected server:', serverId); }
+        function createServer() { console.log('Creating server with name:', document.getElementById('serverName').value); closeModal('createServerModal'); }
+        function sendFriendRequest() { console.log('Sending request to:', document.getElementById('friendUserId').value); closeModal('addFriendModal'); }
+        function sendMessage() { console.log('Sending message:', document.getElementById('messageInput').value); document.getElementById('messageInput').value = ''; }
+        function handleMessageInput(event) { if (event.key === 'Enter') { sendMessage(); } }
+        function insertEmoji(emoji) { document.getElementById('messageInput').value += emoji; closeModal('emojiModal'); }
+        
+        // Placeholder functions for clicks inside profile modal (optional)
+        function changeBanner() { console.log('Banner change initiated'); }
+        function changeAvatar(event) { event.stopPropagation(); console.log('Avatar change initiated'); }
 
-            const sanitizedFriendId = friendUserId.startsWith('@') ? friendUserId : '@' + friendUserId;
-
-            if (sanitizedFriendId === currentUser.userId) {
-                alert('You cannot send a friend request to yourself!');
-                return;
-            }
-
-            try {
-                // Search the 'users' collection for the friend's userId
-                const friendQuery = await db.collection('users').where('userId', '==', sanitizedFriendId).limit(1).get();
-                
-                if (friendQuery.empty) {
-                    // Error: ID not found
-                    alert(`Error: The user ID **${sanitizedFriend
+    </script>
+</body>
+</html>
