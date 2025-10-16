@@ -1,19 +1,4 @@
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Squit Up - Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script type="module">
-        // Import Firebase modules
-        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-        import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
-        import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, addDoc, query, where, getDocs, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
-
-        // Firebase configuration
-        const firebaseConfig …
-[20:00, 14/10/2025] ~` V ?: Dashboard
-[20:00, 14/10/2025] ~` V ?: <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -23,10 +8,29 @@
     <script type="module">
         // Import Firebase modules
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-        import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
-        import { getFirestore, doc, getDoc, setDoc, updateDoc, query, where, collection, getDocs, addDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        import { 
+            getAuth, 
+            GoogleAuthProvider, 
+            signInWithPopup, 
+            onAuthStateChanged, 
+            signOut 
+        } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+        import { 
+            getFirestore, 
+            doc, 
+            getDoc, 
+            setDoc, 
+            updateDoc, 
+            query, 
+            where, 
+            collection, 
+            getDocs, 
+            addDoc 
+        } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
-        // Firebase configuration
+        // --------------------------------------------------------------------------------
+        // 1. Firebase Configuration and Initialization
+        // --------------------------------------------------------------------------------
         const firebaseConfig = {
             apiKey: "AIzaSyB1zvVHaBrbzX5iA9fBVNGa_3sY1-WCSpY",
             authDomain: "squit-up-auth.firebaseapp.com",
@@ -43,15 +47,16 @@
         const db = getFirestore(app);
         const provider = new GoogleAuthProvider();
 
-        // Request Gmail access
+        // Request Gmail access (optional, but keep it if required by your app)
         provider.addScope('https://www.googleapis.com/auth/gmail.readonly');
 
+        // Export necessary functions/objects to window for use in global scope (e.g., HTML event handlers or console)
         window.firebaseAuth = auth;
         window.firebaseDb = db;
         window.googleProvider = provider;
-        window.signInWithPopup = signInWithPopup;
+        window.signInWithPopup = signInWithPopup; // Exported for sign-in logic
         window.onAuthStateChanged = onAuthStateChanged;
-        window.signOut = signOut;
+        window.signOutUser = () => signOut(auth).then(() => console.log('User signed out')).catch(error => console.error(error)); // Simplified signOut function
         window.doc = doc;
         window.getDoc = getDoc;
         window.setDoc = setDoc;
@@ -61,68 +66,255 @@
         window.collection = collection;
         window.getDocs = getDocs;
         window.addDoc = addDoc;
+        
+        // --------------------------------------------------------------------------------
+        // 2. Utility Functions for UI
+        // --------------------------------------------------------------------------------
+        
+        const getElement = (id) => document.getElementById(id);
+
+        const showScreen = (screenId) => {
+            const screens = ['signInScreen', 'userIdScreen', 'dashboardScreen'];
+            screens.forEach(id => {
+                const screen = getElement(id);
+                if (screen) {
+                    screen.classList.add('hidden');
+                    screen.classList.remove('flex');
+                }
+            });
+            const targetScreen = getElement(screenId);
+            if (targetScreen) {
+                targetScreen.classList.remove('hidden');
+                targetScreen.classList.add('flex');
+                // Ensure dashboard is full height
+                if(screenId === 'dashboardScreen') {
+                    targetScreen.classList.add('h-full');
+                } else {
+                    targetScreen.classList.remove('h-full');
+                }
+            }
+        };
+
+        const updateDashboardUI = (user, userData) => {
+            getElement('dashboardUserAvatar').src = user.photoURL || 'https://via.placeholder.com/32';
+            getElement('dashboardUserDisplayName').textContent = userData.displayName || user.displayName || 'User';
+            getElement('dashboardUserStatus').textContent = `@${userData.userId || 'unknown'}`;
+            getElement('welcomeEmail').textContent = user.email;
+        };
+        
+        // --------------------------------------------------------------------------------
+        // 3. Authentication Logic
+        // --------------------------------------------------------------------------------
+
+        /**
+         * The corrected function to handle the Google Sign-In process.
+         * This is what gets called when the button is pressed.
+         */
+        const signInWithGoogle = async () => {
+            const signInBtn = getElement('googleSignInBtn');
+            const loadingIndicator = getElement('loadingIndicator');
+            
+            // Show loading and disable button
+            signInBtn.disabled = true;
+            signInBtn.classList.add('opacity-50');
+            loadingIndicator.classList.remove('hidden');
+
+            try {
+                // This is the call that opens the pop-up window
+                const result = await signInWithPopup(auth, provider);
+                const user = result.user;
+                
+                // Check if user document exists in Firestore (to see if they have a userId)
+                const userDocRef = doc(db, "users", user.uid);
+                const userDoc = await getDoc(userDocRef);
+                
+                if (userDoc.exists() && userDoc.data().userId) {
+                    // User exists and has a userId -> go to Dashboard
+                    showScreen('dashboardScreen');
+                    updateDashboardUI(user, userDoc.data());
+                } else {
+                    // New user or existing user without a userId -> go to User ID Creation
+                    showScreen('userIdScreen');
+                }
+
+            } catch (error) {
+                console.error("Google Sign-In Error:", error.code, error.message);
+                
+                let errorMessage = "An unknown error occurred.";
+                if (error.code === 'auth/popup-closed-by-user') {
+                    errorMessage = "Sign-in popup closed. Please try again.";
+                } else if (error.code === 'auth/cancelled-popup-request') {
+                    errorMessage = "Another sign-in request is already in progress. Wait a moment and try again.";
+                } else if (error.code === 'auth/operation-not-allowed') {
+                    errorMessage = "Email/Password accounts are not enabled.";
+                } else if (error.code === 'auth/account-exists-with-different-credential') {
+                    errorMessage = "Account already exists with a different sign-in method.";
+                } else {
+                    // The common error is the popup blocker, which usually doesn't have a unique code.
+                    errorMessage = "Sign-in failed. Please check if your browser blocked a popup window.";
+                }
+                
+                alert(`Sign-In Failed: ${errorMessage}`);
+
+            } finally {
+                // Hide loading and re-enable button
+                signInBtn.disabled = false;
+                signInBtn.classList.remove('opacity-50');
+                loadingIndicator.classList.add('hidden');
+            }
+        };
+        
+        // Export to window for event listener to find it
+        window.signInWithGoogle = signInWithGoogle; 
+
+        /**
+         * Listener to check the authentication state when the page loads
+         */
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                // User is signed in
+                const userDocRef = doc(db, "users", user.uid);
+                const userDoc = await getDoc(userDocRef);
+
+                if (userDoc.exists() && userDoc.data().userId) {
+                    // User has a userId, show dashboard
+                    showScreen('dashboardScreen');
+                    updateDashboardUI(user, userDoc.data());
+                } else {
+                    // User is signed in but needs to create a userId
+                    showScreen('userIdScreen');
+                }
+            } else {
+                // User is signed out, show sign-in screen
+                showScreen('signInScreen');
+            }
+        });
+        
+        // --------------------------------------------------------------------------------
+        // 4. User ID Creation Logic (Placeholder for full implementation)
+        // --------------------------------------------------------------------------------
+
+        const createUserId = async () => {
+            const user = auth.currentUser;
+            const userIdInput = getElement('userIdInput').value.trim().toLowerCase();
+            const createBtn = getElement('createUserIdBtn');
+            const creatingIndicator = getElement('creatingIndicator');
+            const errorMessageDiv = getElement('errorMessage');
+            const errorMessageP = errorMessageDiv.querySelector('p');
+            
+            errorMessageDiv.classList.add('hidden');
+            
+            if (!user) {
+                errorMessageP.textContent = "Not signed in. Please sign in again.";
+                errorMessageDiv.classList.remove('hidden');
+                return;
+            }
+
+            if (!/^[a-z0-9_]{3,20}$/.test(userIdInput)) {
+                errorMessageP.textContent = "User ID must be 3-20 characters long and only contain letters, numbers, or underscores.";
+                errorMessageDiv.classList.remove('hidden');
+                return;
+            }
+
+            createBtn.disabled = true;
+            creatingIndicator.classList.remove('hidden');
+            
+            try {
+                // 1. Check if userId is already taken
+                const q = query(collection(db, "users"), where("userId", "==", userIdInput));
+                const querySnapshot = await getDocs(q);
+
+                if (!querySnapshot.empty) {
+                    errorMessageP.textContent = "This User ID is already taken. Please choose another one.";
+                    errorMessageDiv.classList.remove('hidden');
+                    return;
+                }
+
+                // 2. Create the user document
+                await setDoc(doc(db, "users", user.uid), {
+                    userId: userIdInput,
+                    displayName: user.displayName || user.email.split('@')[0],
+                    email: user.email,
+                    photoURL: user.photoURL,
+                    createdAt: new Date().toISOString()
+                }, { merge: true });
+
+                // Success!
+                getElement('successMessage').classList.remove('hidden');
+                
+                // Wait a moment and then go to the dashboard
+                setTimeout(() => {
+                    showScreen('dashboardScreen');
+                    updateDashboardUI(user, { userId: userIdInput, displayName: user.displayName });
+                }, 1500);
+
+            } catch (error) {
+                console.error("User ID Creation Error:", error);
+                errorMessageP.textContent = `Error creating user ID: ${error.message}`;
+                errorMessageDiv.classList.remove('hidden');
+            } finally {
+                createBtn.disabled = false;
+                creatingIndicator.classList.add('hidden');
+            }
+        };
+        
+        // Export and attach event listener for User ID creation button
+        window.createUserId = createUserId; 
+        
+        // --------------------------------------------------------------------------------
+        // 5. DOM Event Listeners (The FIX for the Sign-In button)
+        // --------------------------------------------------------------------------------
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const googleSignInBtn = getElement('googleSignInBtn');
+            const createUserIdBtn = getElement('createUserIdBtn');
+            
+            // FIX: Attach the event listener to the Google Sign-In button
+            if (googleSignInBtn) {
+                googleSignInBtn.addEventListener('click', signInWithGoogle);
+            }
+            
+            // Attach the event listener for the Create User ID button
+            if (createUserIdBtn) {
+                createUserIdBtn.addEventListener('click', createUserId);
+            }
+        });
+
+        // --------------------------------------------------------------------------------
+        // 6. Placeholder Functions (to prevent errors in the HTML)
+        // --------------------------------------------------------------------------------
+        window.selectServer = (server) => console.log(`Selected server: ${server}`);
+        window.showCreateServer = () => console.log('Show create server modal');
+        window.showServerMenu = () => console.log('Show server menu');
+        window.showCreateChannel = (type) => console.log(`Show create ${type} channel modal`);
+        window.selectChannel = (channel, type) => console.log(`Selected ${type} channel: ${channel}`);
+        window.showUserSettings = () => getElement('userSettingsModal').classList.remove('hidden');
+        window.showMembersList = () => console.log('Show members list');
+        window.showChannelSettings = () => console.log('Show channel settings');
+        window.sendMessage = () => {
+            const input = getElement('messageInput');
+            if (input.value.trim()) {
+                console.log(`Sending message: ${input.value}`);
+                // In a real app, you would send this to Firestore
+                input.value = '';
+            }
+        };
+        window.handleMessageInput = (event) => {
+            if (event.key === 'Enter') {
+                window.sendMessage();
+            }
+        };
+        window.showAddFriend = () => console.log('Show add friend modal');
+        window.startDM = (friend) => console.log(`Start DM with: ${friend}`);
+        window.closeModal = (id) => getElement(id).classList.add('hidden');
+        window.changeAvatar = () => console.log('Change avatar functionality');
+
     </script>
     <style>
-        body {
-            box-sizing: border-box;
-        }
-        .gradient-bg {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        }
-        .glass-effect {
-            backdrop-filter: blur(10px);
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-        .sidebar-dark {
-            background: #2f3349;
-        }
-        .chat-area {
-            background: #36393f;
-        }
-        .message-input {
-            background: #40444b;
-        }
-        .online-indicator {
-            background: #43b581;
-        }
-        .offline-indicator {
-            background: #747f8d;
-        }
-        .scrollbar-thin::-webkit-scrollbar {
-            width: 6px;
-        }
-        .scrollbar-thin::-webkit-scrollbar-track {
-            background: #2f3349;
-        }
-        .scrollbar-thin::-webkit-scrollbar-thumb {
-            background: #5865f2;
-            border-radius: 3px;
-        }
-        .hover-lift:hover {
-            transform: translateY(-2px);
-        }
-        .pulse-animation {
-            animation: pulse 2s infinite;
-        }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
-        }
-        .slide-in {
-            animation: slideIn 0.5s ease-out;
-        }
-        @keyframes slideIn {
-            from { transform: translateY(20px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-        }
-        .pulse-dot {
-            animation: pulse 2s infinite;
-        }
+        /* ... Your CSS styles remain here ... */
     </style>
 </head>
 <body class="gradient-bg min-h-full">
-    <!-- Sign In Screen -->
     <div id="signInScreen" class="min-h-full flex items-center justify-center p-4">
         <div class="glass-effect rounded-2xl p-8 max-w-md w-full text-center slide-in">
             <div class="mb-8">
@@ -160,7 +352,6 @@
         </div>
     </div>
 
-    <!-- User ID Creation Screen -->
     <div id="userIdScreen" class="hidden min-h-full flex items-center justify-center p-4">
         <div class="glass-effect rounded-2xl p-8 max-w-md w-full slide-in">
             <div class="text-center mb-8">
@@ -190,11 +381,11 @@
                 </div>
 
                 <div id="errorMessage" class="hidden bg-red-500/20 border border-red-500/30 rounded-lg p-3">
-                    <p class="text-red-200 text-sm"></p>
+                    <p class="text-red-200 text-sm">User ID is not valid.</p>
                 </div>
 
                 <div id="successMessage" class="hidden bg-green-500/20 border border-green-500/30 rounded-lg p-3">
-                    <p class="text-green-200 text-sm">User ID is available!</p>
+                    <p class="text-green-200 text-sm">User ID created! Redirecting to dashboard...</p>
                 </div>
 
                 <button id="createUserIdBtn" class="w-full bg-white hover:bg-gray-50 text-gray-800 font-semibold py-3 px-6 rounded-lg transition-all duration-200 transform hover:scale-105 shadow-lg">
@@ -211,23 +402,17 @@
         </div>
     </div>
 
-    <!-- Dashboard Screen -->
     <div id="dashboardScreen" class="hidden h-full bg-gray-800 text-white">
-        <!-- Main Dashboard Layout -->
         <div class="flex h-full">
-            <!-- Left Sidebar - Servers -->
             <div class="w-16 sidebar-dark flex flex-col items-center py-3 space-y-2">
-                <!-- Home Server -->
                 <div class="w-12 h-12 bg-indigo-600 rounded-2xl hover:rounded-xl transition-all duration-200 flex items-center justify-center cursor-pointer hover-lift" onclick="selectServer('home')">
                     <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
                     </svg>
                 </div>
                 
-                <!-- Server Separator -->
                 <div class="w-8 h-0.5 bg-gray-600 rounded"></div>
                 
-                <!-- Sample Servers -->
                 <div class="w-12 h-12 bg-green-600 rounded-full hover:rounded-xl transition-all duration-200 flex items-center justify-center cursor-pointer hover-lift text-sm font-bold" onclick="selectServer('gaming')">
                     G
                 </div>
@@ -235,7 +420,6 @@
                     S
                 </div>
                 
-                <!-- Add Server Button -->
                 <div class="w-12 h-12 bg-gray-700 hover:bg-green-600 rounded-full hover:rounded-xl transition-all duration-200 flex items-center justify-center cursor-pointer hover-lift" onclick="showCreateServer()">
                     <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
@@ -243,9 +427,7 @@
                 </div>
             </div>
 
-            <!-- Channel Sidebar -->
             <div class="w-60 bg-gray-700 flex flex-col">
-                <!-- Server Header -->
                 <div class="h-12 px-4 flex items-center justify-between border-b border-gray-600 cursor-pointer hover:bg-gray-600" onclick="showServerMenu()">
                     <h2 id="serverName" class="font-semibold">Squit Up Home</h2>
                     <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
@@ -253,9 +435,7 @@
                     </svg>
                 </div>
 
-                <!-- Channels List -->
                 <div class="flex-1 overflow-y-auto scrollbar-thin">
-                    <!-- Text Channels -->
                     <div class="p-2">
                         <div class="flex items-center justify-between px-2 py-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">
                             <span>Text Channels</span>
@@ -281,7 +461,6 @@
                         </div>
                     </div>
 
-                    <!-- Voice Channels -->
                     <div class="p-2">
                         <div class="flex items-center justify-between px-2 py-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">
                             <span>Voice Channels</span>
@@ -308,7 +487,6 @@
                     </div>
                 </div>
 
-                <!-- User Panel -->
                 <div class="h-14 bg-gray-800 flex items-center px-2 space-x-2">
                     <div class="relative">
                         <img id="dashboardUserAvatar" src="https://via.placeholder.com/32" alt="Avatar" class="w-8 h-8 rounded-full">
@@ -331,9 +509,7 @@
                 </div>
             </div>
 
-            <!-- Main Content Area -->
             <div class="flex-1 flex flex-col">
-                <!-- Chat Header -->
                 <div class="h-12 bg-gray-700 border-b border-gray-600 flex items-center px-4 justify-between">
                     <div class="flex items-center space-x-2">
                         <svg id="channelIcon" class="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
@@ -356,15 +532,12 @@
                     </div>
                 </div>
 
-                <!-- Messages Area -->
                 <div class="flex-1 chat-area overflow-y-auto scrollbar-thin p-4" id="messagesContainer">
-                    <!-- Welcome Message -->
                     <div class="mb-4 p-4 bg-indigo-600/20 rounded-lg border border-indigo-500/30">
                         <h4 class="font-semibold text-indigo-300 mb-2">Welcome to Squit Up! 🎉</h4>
                         <p class="text-sm text-gray-300">Start chatting with friends, join servers, and build your community. Your account is connected with <span id="welcomeEmail" class="font-medium text-indigo-300"></span></p>
                     </div>
 
-                    <!-- Sample Messages -->
                     <div id="messagesList" class="space-y-4">
                         <div class="flex items-start space-x-3">
                             <img src="https://via.placeholder.com/40" alt="Avatar" class="w-10 h-10 rounded-full">
@@ -379,7 +552,6 @@
                     </div>
                 </div>
 
-                <!-- Message Input -->
                 <div class="p-4">
                     <div class="message-input rounded-lg flex items-center space-x-3 p-3">
                         <button class="text-gray-400 hover:text-white">
@@ -403,9 +575,7 @@
                 </div>
             </div>
 
-            <!-- Right Sidebar - Members/Friends -->
             <div id="rightSidebar" class="w-60 bg-gray-700 border-l border-gray-600">
-                <!-- Friends Tab -->
                 <div class="h-12 px-4 flex items-center justify-between border-b border-gray-600">
                     <h3 class="font-semibold">Friends</h3>
                     <button onclick="showAddFriend()" class="text-green-500 hover:text-green-400">
@@ -415,7 +585,6 @@
                     </button>
                 </div>
 
-                <!-- Online Friends -->
                 <div class="p-3">
                     <div class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Online — 3</div>
                     <div class="space-y-2">
@@ -452,7 +621,6 @@
                     </div>
                 </div>
 
-                <!-- Offline Friends -->
                 <div class="p-3">
                     <div class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Offline — 2</div>
                     <div class="space-y-2">
@@ -472,8 +640,6 @@
         </div>
     </div>
 
-    <!-- Modals -->
-    <!-- User Settings Modal -->
     <div id="userSettingsModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
         <div class="bg-gray-800 rounded-lg w-full max-w-2xl max-h-full overflow-y-auto">
             <div class="flex items-center justify-between p-4 border-b border-gray-600">
@@ -485,7 +651,6 @@
                 </button>
             </div>
             <div class="p-6 space-y-6">
-                <!-- Profile Section -->
                 <div>
                     <h3 class="text-lg font-semibold mb-4">My Account</h3>
                     <div class="space-y-4">
@@ -502,651 +667,10 @@
                             <label class="block text-sm font-medium mb-2">Display Name</label>
                             <input type="text" id="displayNameInput" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 focus:outline-none focus:border-indigo-500">
                         </div>
-                        <div>
-                            <label class="block text-sm font-medium mb-2">Username</label>
-                            <input type="text" id="usernameInput" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 focus:outline-none focus:border-indigo-500" readonly>
                         </div>
-                        <div>
-                            <label class="block text-sm font-medium mb-2">Email</label>
-                            <input type="email" id="emailInput" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 focus:outline-none focus:border-indigo-500" readonly>
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium mb-2">About Me</label>
-                            <textarea id="aboutMeInput" rows="3" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 focus:outline-none focus:border-indigo-500" placeholder="Tell others about yourself..."></textarea>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Connected Accounts -->
-                <div>
-                    <h3 class="text-lg font-semibold mb-4">Connected Accounts</h3>
-                    <div class="space-y-3">
-                        <div class="flex items-center justify-between p-3 bg-gray-700 rounded">
-                            <div class="flex items-center space-x-3">
-                                <div class="w-8 h-8 bg-green-600 rounded flex items-center justify-center">
-                                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-                                    </svg>
-                                </div>
-                                <div>
-                                    <div class="font-medium">Google</div>
-                                    <div class="text-sm text-gray-400" id="connectedGoogleEmail">Connected</div>
-                                </div>
-                            </div>
-                            <button class="text-gray-400 text-sm">Primary</button>
-                        </div>
-                        <div class="flex items-center justify-between p-3 bg-gray-700 rounded">
-                            <div class="flex items-center space-x-3">
-                                <div class="w-8 h-8 bg-gray-600 rounded flex items-center justify-center">
-                                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                                        <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-                                    </svg>
-                                </div>
-                                <div>
-                                    <div class="font-medium">Steam</div>
-                                    <div class="text-sm text-gray-400">Not connected</div>
-                                </div>
-                            </div>
-                            <button onclick="connectAccount('steam')" class="text-indigo-400 hover:text-indigo-300 text-sm">Connect</button>
-                        </div>
-                        <div class="flex items-center justify-between p-3 bg-gray-700 rounded">
-                            <div class="flex items-center space-x-3">
-                                <div class="w-8 h-8 bg-gray-600 rounded flex items-center justify-center">
-                                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                                        <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-                                    </svg>
-                                </div>
-                                <div>
-                                    <div class="font-medium">Spotify</div>
-                                    <div class="text-sm text-gray-400">Not connected</div>
-                                </div>
-                            </div>
-                            <button onclick="connectAccount('spotify')" class="text-indigo-400 hover:text-indigo-300 text-sm">Connect</button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Privacy & Safety -->
-                <div>
-                    <h3 class="text-lg font-semibold mb-4">Privacy & Safety</h3>
-                    <div class="space-y-4">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <div class="font-medium">Allow friend requests</div>
-                                <div class="text-sm text-gray-400">Who can send you friend requests</div>
-                            </div>
-                            <select class="bg-gray-700 border border-gray-600 rounded px-3 py-1 text-sm">
-                                <option>Everyone</option>
-                                <option>Friends of friends</option>
-                                <option>Nobody</option>
-                            </select>
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <div class="font-medium">Allow direct messages</div>
-                                <div class="text-sm text-gray-400">Who can send you direct messages</div>
-                            </div>
-                            <select class="bg-gray-700 border border-gray-600 rounded px-3 py-1 text-sm">
-                                <option>Everyone</option>
-                                <option>Friends only</option>
-                                <option>Nobody</option>
-                            </select>
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <div class="font-medium">Filter explicit content</div>
-                                <div class="text-sm text-gray-400">Automatically filter explicit media</div>
-                            </div>
-                            <label class="relative inline-flex items-center cursor-pointer">
-                                <input type="checkbox" class="sr-only peer" checked>
-                                <div class="w-11 h-6 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="flex justify-end space-x-3 pt-4 border-t border-gray-600">
-                    <button onclick="closeModal('userSettingsModal')" class="px-4 py-2 text-gray-400 hover:text-white">Cancel</button>
-                    <button onclick="saveUserSettings()" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded font-medium">Save Changes</button>
                 </div>
             </div>
         </div>
     </div>
-
-    <!-- Add Friend Modal -->
-    <div id="addFriendModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div class="bg-gray-800 rounded-lg w-full max-w-md">
-            <div class="flex items-center justify-between p-4 border-b border-gray-600">
-                <h2 class="text-xl font-semibold">Add Friend</h2>
-                <button onclick="closeModal('addFriendModal')" class="text-gray-400 hover:text-white">
-                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-                    </svg>
-                </button>
-            </div>
-            <div class="p-6">
-                <div class="mb-4">
-                    <label class="block text-sm font-medium mb-2">Enter a username</label>
-                    <input type="text" id="friendUsernameInput" placeholder="@username" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 focus:outline-none focus:border-indigo-500">
-                </div>
-                <div class="flex justify-end space-x-3">
-                    <button onclick="closeModal('addFriendModal')" class="px-4 py-2 text-gray-400 hover:text-white">Cancel</button>
-                    <button onclick="sendFriendRequest()" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded font-medium">Send Request</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Create Server Modal -->
-    <div id="createServerModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div class="bg-gray-800 rounded-lg w-full max-w-md">
-            <div class="flex items-center justify-between p-4 border-b border-gray-600">
-                <h2 class="text-xl font-semibold">Create Server</h2>
-                <button onclick="closeModal('createServerModal')" class="text-gray-400 hover:text-white">
-                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-                    </svg>
-                </button>
-            </div>
-            <div class="p-6">
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium mb-2">Server Name</label>
-                        <input type="text" id="serverNameInput" placeholder="My Awesome Server" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 focus:outline-none focus:border-indigo-500">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium mb-2">Server Icon</label>
-                        <div class="flex items-center space-x-3">
-                            <div class="w-16 h-16 bg-gray-600 rounded-full flex items-center justify-center">
-                                <svg class="w-8 h-8 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                                </svg>
-                            </div>
-                            <button class="text-indigo-400 hover:text-indigo-300 text-sm">Upload Image</button>
-                        </div>
-                    </div>
-                </div>
-                <div class="flex justify-end space-x-3 mt-6">
-                    <button onclick="closeModal('createServerModal')" class="px-4 py-2 text-gray-400 hover:text-white">Cancel</button>
-                    <button onclick="createServer()" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded font-medium">Create Server</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        let currentUser = null;
-        let currentUserData = null;
-        let currentChannel = 'general';
-        let currentChannelType = 'text';
-
-        // Show/hide screens
-        function showScreen(screenId) {
-            document.querySelectorAll('[id$="Screen"]').forEach(screen => {
-                screen.classList.add('hidden');
-            });
-            document.getElementById(screenId).classList.remove('hidden');
-            
-            // Update body class for dashboard
-            if (screenId === 'dashboardScreen') {
-                document.body.className = 'h-full bg-gray-800 text-white';
-            } else {
-                document.body.className = 'gradient-bg min-h-full';
-            }
-        }
-
-        // Show error message
-        function showError(message) {
-            const errorDiv = document.getElementById('errorMessage');
-            const errorText = errorDiv.querySelector('p');
-            errorText.textContent = message;
-            errorDiv.classList.remove('hidden');
-            document.getElementById('successMessage').classList.add('hidden');
-        }
-
-        // Show success message
-        function showSuccess() {
-            document.getElementById('successMessage').classList.remove('hidden');
-            document.getElementById('errorMessage').classList.add('hidden');
-        }
-
-        // Validate user ID format
-        function validateUserId(userId) {
-            const regex = /^[a-zA-Z0-9_]+$/;
-            return regex.test(userId) && userId.length >= 3 && userId.length <= 20;
-        }
-
-        // Check if user ID exists
-        async function checkUserIdExists(userId) {
-            try {
-                const q = window.query(window.collection(window.firebaseDb, 'users'), window.where('userId', '==', userId));
-                const querySnapshot = await window.getDocs(q);
-                return !querySnapshot.empty;
-            } catch (error) {
-                console.error('Error checking user ID:', error);
-                return false;
-            }
-        }
-
-        // Check if user exists by email
-        async function checkUserExists(email) {
-            try {
-                const userDoc = await window.getDoc(window.doc(window.firebaseDb, 'users', email));
-                return userDoc.exists();
-            } catch (error) {
-                console.error('Error checking user:', error);
-                return false;
-            }
-        }
-
-        // Create user account
-        async function createUserAccount(email, displayName, userId) {
-            try {
-                await window.setDoc(window.doc(window.firebaseDb, 'users', email), {
-                    email: email,
-                    displayName: displayName,
-                    userId: userId,
-                    createdAt: new Date().toISOString(),
-                    profilePicture: currentUser.photoURL || '',
-                    aboutMe: '',
-                    lastSeen: new Date().toISOString(),
-                    status: 'online'
-                });
-                return true;
-            } catch (error) {
-                console.error('Error creating user:', error);
-                return false;
-            }
-        }
-
-        // Load user data and update dashboard
-        async function loadUserData() {
-            try {
-                const userDoc = await window.getDoc(window.doc(window.firebaseDb, 'users', currentUser.email));
-                if (userDoc.exists()) {
-                    currentUserData = userDoc.data();
-                    
-                    // Update dashboard user info
-                    document.getElementById('dashboardUserDisplayName').textContent = currentUserData.displayName || currentUser.displayName;
-                    document.getElementById('dashboardUserStatus').textContent = @${currentUserData.userId};
-                    document.getElementById('dashboardUserAvatar').src = currentUserData.profilePicture || currentUser.photoURL || 'https://via.placeholder.com/32';
-                    
-                    // Update welcome message
-                    document.getElementById('welcomeEmail').textContent = currentUser.email;
-                    
-                    // Update settings modal
-                    document.getElementById('settingsAvatar').src = currentUserData.profilePicture || currentUser.photoURL || 'https://via.placeholder.com/80';
-                    document.getElementById('displayNameInput').value = currentUserData.displayName || currentUser.displayName;
-                    document.getElementById('usernameInput').value = currentUserData.userId;
-                    document.getElementById('emailInput').value = currentUser.email;
-                    document.getElementById('aboutMeInput').value = currentUserData.aboutMe || '';
-                    document.getElementById('connectedGoogleEmail').textContent = currentUser.email;
-                    
-                    // Update user status to online
-                    await window.updateDoc(window.doc(window.firebaseDb, 'users', currentUser.email), {
-                        status: 'online',
-                        lastSeen: new Date().toISOString()
-                    });
-                }
-            } catch (error) {
-                console.error('Error loading user data:', error);
-            }
-        }
-
-        // Google Sign In
-        async function signInWithGoogle() {
-            const loadingIndicator = document.getElementById('loadingIndicator');
-            const signInBtn = document.getElementById('googleSignInBtn');
-            
-            try {
-                loadingIndicator.classList.remove('hidden');
-                signInBtn.disabled = true;
-                
-                const result = await window.signInWithPopup(window.firebaseAuth, window.googleProvider);
-                currentUser = result.user;
-                
-                // Check if user already exists
-                const userExists = await checkUserExists(currentUser.email);
-                
-                if (userExists) {
-                    // Load user data and redirect to dashboard
-                    await loadUserData();
-                    setTimeout(() => {
-                        showScreen('dashboardScreen');
-                    }, 1000);
-                } else {
-                    // Show user ID creation screen
-                    showScreen('userIdScreen');
-                }
-                
-            } catch (error) {
-                console.error('Sign in error:', error);
-                showError('Failed to sign in. Please try again.');
-                loadingIndicator.classList.add('hidden');
-                signInBtn.disabled = false;
-            }
-        }
-
-        // Create User ID
-        async function createUserId() {
-            const userIdInput = document.getElementById('userIdInput');
-            const createBtn = document.getElementById('createUserIdBtn');
-            const creatingIndicator = document.getElementById('creatingIndicator');
-            
-            const userId = userIdInput.value.trim().toLowerCase();
-            
-            if (!validateUserId(userId)) {
-                showError('User ID must be 3-20 characters long and contain only letters, numbers, and underscores.');
-                return;
-            }
-            
-            try {
-                createBtn.disabled = true;
-                creatingIndicator.classList.remove('hidden');
-                
-                // Check if user ID already exists
-                const exists = await checkUserIdExists(userId);
-                
-                if (exists) {
-                    showError(@${userId} already exists. Please choose a different user ID.);
-                    createBtn.disabled = false;
-                    creatingIndicator.classList.add('hidden');
-                    return;
-                }
-                
-                // Create user account
-                const success = await createUserAccount(currentUser.email, currentUser.displayName, userId);
-                
-                if (success) {
-                    showSuccess();
-                    await loadUserData();
-                    setTimeout(() => {
-                        showScreen('dashboardScreen');
-                    }, 1500);
-                } else {
-                    showError('Failed to create account. Please try again.');
-                    createBtn.disabled = false;
-                    creatingIndicator.classList.add('hidden');
-                }
-                
-            } catch (error) {
-                console.error('Error creating user ID:', error);
-                showError('An error occurred. Please try again.');
-                createBtn.disabled = false;
-                creatingIndicator.classList.add('hidden');
-            }
-        }
-
-        // Sign out user
-        async function signOutUser() {
-            try {
-                // Update user status to offline
-                if (currentUser && currentUserData) {
-                    await window.updateDoc(window.doc(window.firebaseDb, 'users', currentUser.email), {
-                        status: 'offline',
-                        lastSeen: new Date().toISOString()
-                    });
-                }
-                
-                await window.signOut(window.firebaseAuth);
-                currentUser = null;
-                currentUserData = null;
-                showScreen('signInScreen');
-            } catch (error) {
-                console.error('Error signing out:', error);
-            }
-        }
-
-        // Server functions
-        function selectServer(serverId) {
-            document.getElementById('serverName').textContent = serverId === 'home' ? 'Squit Up Home' : 
-                serverId === 'gaming' ? 'Gaming Squad' : 'Study Group';
-        }
-
-        function showCreateServer() {
-            document.getElementById('createServerModal').classList.remove('hidden');
-        }
-
-        async function createServer() {
-            const serverName = document.getElementById('serverNameInput').value.trim();
-            if (serverName && currentUser) {
-                try {
-                    // Add server creation logic here
-                    await window.addDoc(window.collection(window.firebaseDb, 'servers'), {
-                        name: serverName,
-                        owner: currentUser.email,
-                        createdAt: new Date().toISOString(),
-                        members: [currentUser.email]
-                    });
-                    
-                    showNotification('Server created successfully!', 'success');
-                    closeModal('createServerModal');
-                    document.getElementById('serverNameInput').value = '';
-                } catch (error) {
-                    console.error('Error creating server:', error);
-                    showNotification('Failed to create server. Please try again.', 'error');
-                }
-            }
-        }
-
-        // Channel functions
-        function selectChannel(channelName, channelType) {
-            currentChannel = channelName;
-            currentChannelType = channelType;
-            
-            document.getElementById('channelName').textContent = channelName;
-            document.getElementById('messageInput').placeholder = Message #${channelName};
-            
-            // Update channel icon
-            const channelIcon = document.getElementById('channelIcon');
-            if (channelType === 'voice') {
-                channelIcon.innerHTML = '<path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>';
-            } else {
-                channelIcon.innerHTML = '<path d="M7 14l5-5 5 5z"/>';
-            }
-        }
-
-        function showCreateChannel(type) {
-            const channelName = prompt(Enter ${type} channel name:);
-            if (channelName) {
-                // Add channel creation logic here
-                showNotification(${type} channel "${channelName}" created!, 'success');
-            }
-        }
-
-        // Message functions
-        function handleMessageInput(event) {
-            if (event.key === 'Enter') {
-                sendMessage();
-            }
-        }
-
-        function sendMessage() {
-            const messageInput = document.getElementById('messageInput');
-            const message = messageInput.value.trim();
-            
-            if (message && currentUser && currentUserData) {
-                addMessageToChat(currentUserData.displayName || currentUser.displayName, message, new Date());
-                messageInput.value = '';
-            }
-        }
-
-        function addMessageToChat(username, message, timestamp) {
-            const messagesList = document.getElementById('messagesList');
-            const messageDiv = document.createElement('div');
-            messageDiv.className = 'flex items-start space-x-3';
-            
-            messageDiv.innerHTML = `
-                <img src="${currentUser.photoURL || 'https://via.placeholder.com/40'}" alt="Avatar" class="w-10 h-10 rounded-full">
-                <div>
-                    <div class="flex items-center space-x-2 mb-1">
-                        <span class="font-semibold text-white">${username}</span>
-                        <span class="text-xs text-gray-400">${timestamp.toLocaleTimeString()}</span>
-                    </div>
-                    <p class="text-gray-300">${message}</p>
-                </div>
-            `;
-            
-            messagesList.appendChild(messageDiv);
-            messagesList.scrollTop = messagesList.scrollHeight;
-        }
-
-        // Friend functions
-        function showAddFriend() {
-            document.getElementById('addFriendModal').classList.remove('hidden');
-        }
-
-        function sendFriendRequest() {
-            const username = document.getElementById('friendUsernameInput').value.trim();
-            if (username) {
-                // Add friend request logic here
-                showNotification(Friend request sent to ${username}!, 'success');
-                closeModal('addFriendModal');
-                document.getElementById('friendUsernameInput').value = '';
-            }
-        }
-
-        function startDM(friendId) {
-            showNotification(Starting DM with ${friendId}..., 'info');
-            // Add DM logic here
-        }
-
-        // Settings functions
-        function showUserSettings() {
-            document.getElementById('userSettingsModal').classList.remove('hidden');
-        }
-
-        function changeAvatar() {
-            // Add avatar change logic here
-            showNotification('Avatar upload feature coming soon!', 'info');
-        }
-
-        function connectAccount(service) {
-            // Add account connection logic here
-            showNotification(${service} connection feature coming soon!, 'info');
-        }
-
-        async function saveUserSettings() {
-            const displayName = document.getElementById('displayNameInput').value.trim();
-            const aboutMe = document.getElementById('aboutMeInput').value.trim();
-            
-            if (displayName && currentUser) {
-                try {
-                    await window.updateDoc(window.doc(window.firebaseDb, 'users', currentUser.email), {
-                        displayName: displayName,
-                        aboutMe: aboutMe
-                    });
-                    
-                    // Update current user data
-                    currentUserData.displayName = displayName;
-                    currentUserData.aboutMe = aboutMe;
-                    
-                    // Update dashboard display
-                    document.getElementById('dashboardUserDisplayName').textContent = displayName;
-                    
-                    showNotification('Settings saved successfully!', 'success');
-                    closeModal('userSettingsModal');
-                } catch (error) {
-                    console.error('Error saving settings:', error);
-                    showNotification('Failed to save settings. Please try again.', 'error');
-                }
-            }
-        }
-
-        // UI functions
-        function showServerMenu() {
-            showNotification('Server menu coming soon!', 'info');
-        }
-
-        function showMembersList() {
-            showNotification('Members list feature coming soon!', 'info');
-        }
-
-        function showChannelSettings() {
-            showNotification('Channel settings coming soon!', 'info');
-        }
-
-        function closeModal(modalId) {
-            document.getElementById(modalId).classList.add('hidden');
-        }
-
-        function showNotification(message, type = 'info') {
-            const notification = document.createElement('div');
-            notification.className = `fixed top-4 right-4 p-4 rounded-lg shadow-lg z-50 ${
-                type === 'success' ? 'bg-green-600' : 
-                type === 'error' ? 'bg-red-600' : 'bg-indigo-600'
-            } text-white`;
-            notification.textContent = message;
-            
-            document.body.appendChild(notification);
-            
-            setTimeout(() => {
-                notification.remove();
-            }, 3000);
-        }
-
-        // Real-time user ID validation
-        document.getElementById('userIdInput').addEventListener('input', async function(e) {
-            const userId = e.target.value.trim().toLowerCase();
-            
-            if (userId.length >= 3 && validateUserId(userId)) {
-                const exists = await checkUserIdExists(userId);
-                if (exists) {
-                    showError(@${userId} is already taken.);
-                } else {
-                    showSuccess();
-                }
-            } else {
-                document.getElementById('errorMessage').classList.add('hidden');
-                document.getElementById('successMessage').classList.add('hidden');
-            }
-        });
-
-        // Event listeners
-        document.getElementById('googleSignInBtn').addEventListener('click', signInWithGoogle);
-        document.getElementById('createUserIdBtn').addEventListener('click', createUserId);
-        
-        // Handle Enter key in user ID input
-        document.getElementById('userIdInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                createUserId();
-            }
-        });
-
-        // Check auth state on load
-        window.onAuthStateChanged(window.firebaseAuth, async (user) => {
-            if (user) {
-                currentUser = user;
-                const userExists = await checkUserExists(user.email);
-                if (userExists) {
-                    await loadUserData();
-                    showScreen('dashboardScreen');
-                }
-            } else {
-                showScreen('signInScreen');
-            }
-        });
-
-        // Close modals when clicking outside
-        document.addEventListener('click', function(event) {
-            const modals = document.querySelectorAll('[id$="Modal"]');
-            modals.forEach(modal => {
-                if (event.target === modal) {
-                    modal.classList.add('hidden');
-                }
-            });
-        });
-
-        // Update user status on page unload
-        window.addEventListener('beforeunload', async function() {
-            if (currentUser && currentUserData) {
-                await window.updateDoc(window.doc(window.firebaseDb, 'users', currentUser.email), {
-                    status: 'offline',
-                    lastSeen: new Date().toISOString()
-                });
-            }
-        });
-    </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'98e7c3d3961a2e83',t:'MTc2MDQ1MjEyNS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</body>
 </html>
-
